@@ -1,0 +1,6 @@
+@PPS.LicenseManager.API_HostAddress = http://localhost:5221
+
+GET {{PPS.LicenseManager.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
