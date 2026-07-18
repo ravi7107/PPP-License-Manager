@@ -1,0 +1,11 @@
+Applied migrations:
+1784352941_create_core_schema at 2026-07-18T05:36:21.070Z
+1784353194_extend_assets_table at 2026-07-18T05:46:23.293Z
+1784353927_extend_software_inventory at 2026-07-18T05:55:29.214Z
+1784354656_license_client_and_seed_departments at 2026-07-18T06:11:30.429Z
+1784355900_create_availability_module at 2026-07-18T06:26:58.565Z
+1784356230_extend_requests_approval_workflow at 2026-07-18T06:36:25.939Z
+1784356300_add_performance_indexes at 2026-07-18T07:06:53.663Z
+1784359600_import_pps_ec_ptech_roster at 2026-07-18T07:29:03.161Z
+1784363100_enhance_hardware_requests_workflow at 2026-07-18T08:36:02.887Z
+1784364600_create_role_module_access at 2026-07-18T08:52:11.007Z

@@ -1,0 +1,4 @@
+vibeAppConnectedDatasources:
+  - License Management DB
+  - PPS License Asset DB
+vibeAppPrimaryHostedDatasourceId: PPS License Asset DB
