@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PPS.LicenseManager.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8407a2f4c80c72c39c730dd60788cd557a3df20d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b2fa4b47a90caf08fb93bf95d93539b8451b96bb")]
 [assembly: System.Reflection.AssemblyProductAttribute("PPS.LicenseManager.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PPS.LicenseManager.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

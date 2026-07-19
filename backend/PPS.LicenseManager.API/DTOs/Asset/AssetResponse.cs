@@ -1,0 +1,38 @@
+namespace PPS.LicenseManager.API.DTOs.Asset;
+
+public class AssetResponse
+{
+    public int Id { get; set; }
+
+    public string AssetTag { get; set; } = string.Empty;
+
+    public string AssetName { get; set; } = string.Empty;
+
+    public string AssetType { get; set; } = string.Empty;
+
+    public string? Manufacturer { get; set; }
+
+    public string? Model { get; set; }
+
+    public string? HostName { get; set; }
+
+    public string? Processor { get; set; }
+
+    public int? RamGb { get; set; }
+
+    public int? StorageGb { get; set; }
+
+    public string? GraphicsCard { get; set; }
+
+    public string? OperatingSystem { get; set; }
+
+    public string DepartmentName { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+
+    public bool IsReadyForAssignment { get; set; }
+
+    public DateTime? WarrantyExpiry { get; set; }
+
+    public bool IsActive { get; set; }
+}
