@@ -33,5 +33,8 @@ public class Software
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
     public ICollection<AssetSoftware> AssetSoftwares { get; set; } = new List<AssetSoftware>();
+
+    public ICollection<License> Licenses { get; set; } = new List<License>();
 }

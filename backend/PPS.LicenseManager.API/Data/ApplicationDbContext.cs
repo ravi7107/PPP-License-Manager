@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Models;
 
+
 namespace PPS.LicenseManager.API.Data;
 
 public class ApplicationDbContext : DbContext
@@ -13,16 +14,30 @@ public class ApplicationDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<License> Licenses => Set<License>();
+   
     public DbSet<Software> Software => Set<Software>();
+    public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<LicensePurchase> LicensePurchases => Set<LicensePurchase>();
     public DbSet<Asset> Assets => Set<Asset>();
-
+    public DbSet<Company> Companies { get; set; }
     // NEW
     public DbSet<AssetSoftware> AssetSoftwares => Set<AssetSoftware>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+	
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+	modelBuilder.Entity<Department>()
+        .HasOne(d => d.Company)
+        .WithMany(c => c.Departments)
+        .HasForeignKey(d => d.CompanyId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+      modelBuilder.Entity<Vendor>()
+    .HasIndex(v => v.VendorCode)
+    .IsUnique();
 
         modelBuilder.Entity<Role>().HasData(
             new Role

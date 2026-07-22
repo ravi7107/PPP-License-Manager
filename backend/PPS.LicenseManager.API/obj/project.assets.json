@@ -2,31 +2,6 @@
   "version": 3,
   "targets": {
     "net10.0": {
-      "AutoMapper/12.0.1": {
-        "type": "package",
-        "compile": {
-          "lib/netstandard2.1/AutoMapper.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.1/AutoMapper.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "AutoMapper.Extensions.Microsoft.DependencyInjection/12.0.1": {
-        "type": "package",
-        "dependencies": {
-          "AutoMapper": "[12.0.1]"
-        },
-        "compile": {
-          "lib/netstandard2.1/AutoMapper.Extensions.Microsoft.DependencyInjection.dll": {}
-        },
-        "runtime": {
-          "lib/netstandard2.1/AutoMapper.Extensions.Microsoft.DependencyInjection.dll": {}
-        }
-      },
       "BCrypt.Net-Next/4.2.0": {
         "type": "package",
         "compile": {
@@ -67,28 +42,6 @@
         "frameworkReferences": [
           "Microsoft.AspNetCore.App"
         ]
-      },
-      "Microsoft.AspNetCore.OpenApi/10.0.10": {
-        "type": "package",
-        "dependencies": {
-          "Microsoft.OpenApi": "2.0.0"
-        },
-        "compile": {
-          "lib/net10.0/Microsoft.AspNetCore.OpenApi.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net10.0/Microsoft.AspNetCore.OpenApi.dll": {
-            "related": ".xml"
-          }
-        },
-        "frameworkReferences": [
-          "Microsoft.AspNetCore.App"
-        ],
-        "build": {
-          "build/Microsoft.AspNetCore.OpenApi.targets": {}
-        }
       },
       "Microsoft.Bcl.Cryptography/10.0.2": {
         "type": "package",
@@ -1085,35 +1038,6 @@
     }
   },
   "libraries": {
-    "AutoMapper/12.0.1": {
-      "sha512": "hvV62vl6Hp/WfQ24yzo3Co9+OPl8wH8hApwVtgWpiAynVJkUcs7xvehnSftawL8Pe8FrPffBRM3hwzLQqWDNjA==",
-      "type": "package",
-      "path": "automapper/12.0.1",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "automapper.12.0.1.nupkg.sha512",
-        "automapper.nuspec",
-        "icon.png",
-        "lib/netstandard2.1/AutoMapper.dll",
-        "lib/netstandard2.1/AutoMapper.xml"
-      ]
-    },
-    "AutoMapper.Extensions.Microsoft.DependencyInjection/12.0.1": {
-      "sha512": "+g/K+Vpe3gGMKGzjslMOdqNlkikScDjWfVvmWTayrDHaG/n2pPmFBMa+jKX1r/h6BDGFdkyRjAuhFE3ykW+r1g==",
-      "type": "package",
-      "path": "automapper.extensions.microsoft.dependencyinjection/12.0.1",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "automapper.extensions.microsoft.dependencyinjection.12.0.1.nupkg.sha512",
-        "automapper.extensions.microsoft.dependencyinjection.nuspec",
-        "icon.png",
-        "lib/netstandard2.1/AutoMapper.Extensions.Microsoft.DependencyInjection.dll"
-      ]
-    },
     "BCrypt.Net-Next/4.2.0": {
       "sha512": "gwLD2KfCuwQesP17aVh4h6lpiMPEVt5Lbpndo0ej903hNUUTtyxt3ARdDjmuydBRTAUICc7OVKVbaOvc6SQYXA==",
       "type": "package",
@@ -1171,24 +1095,6 @@
         "lib/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.xml",
         "microsoft.aspnetcore.authentication.jwtbearer.10.0.10.nupkg.sha512",
         "microsoft.aspnetcore.authentication.jwtbearer.nuspec"
-      ]
-    },
-    "Microsoft.AspNetCore.OpenApi/10.0.10": {
-      "sha512": "d4Atx9IHq7JgX0F/h7Db+m9zAUzC+cKdI9k+OWnnyQIOUQtfvjIEuhvbjPigVMkAmPUgCbJ8Yp6M9ghUqHtJSQ==",
-      "type": "package",
-      "path": "microsoft.aspnetcore.openapi/10.0.10",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "Icon.png",
-        "PACKAGE.md",
-        "THIRD-PARTY-NOTICES.TXT",
-        "analyzers/dotnet/cs/Microsoft.AspNetCore.OpenApi.SourceGenerators.dll",
-        "build/Microsoft.AspNetCore.OpenApi.targets",
-        "lib/net10.0/Microsoft.AspNetCore.OpenApi.dll",
-        "lib/net10.0/Microsoft.AspNetCore.OpenApi.xml",
-        "microsoft.aspnetcore.openapi.10.0.10.nupkg.sha512",
-        "microsoft.aspnetcore.openapi.nuspec"
       ]
     },
     "Microsoft.Bcl.Cryptography/10.0.2": {
@@ -3451,10 +3357,8 @@
   },
   "projectFileDependencyGroups": {
     "net10.0": [
-      "AutoMapper.Extensions.Microsoft.DependencyInjection >= 12.0.1",
       "BCrypt.Net-Next >= 4.2.0",
       "Microsoft.AspNetCore.Authentication.JwtBearer >= 10.0.10",
-      "Microsoft.AspNetCore.OpenApi >= 10.0.10",
       "Microsoft.EntityFrameworkCore.Design >= 10.0.10",
       "Npgsql.EntityFrameworkCore.PostgreSQL >= 10.0.3",
       "Serilog.AspNetCore >= 10.0.0",
@@ -3506,19 +3410,11 @@
       "net10.0": {
         "targetAlias": "net10.0",
         "dependencies": {
-          "AutoMapper.Extensions.Microsoft.DependencyInjection": {
-            "target": "Package",
-            "version": "[12.0.1, )"
-          },
           "BCrypt.Net-Next": {
             "target": "Package",
             "version": "[4.2.0, )"
           },
           "Microsoft.AspNetCore.Authentication.JwtBearer": {
-            "target": "Package",
-            "version": "[10.0.10, )"
-          },
-          "Microsoft.AspNetCore.OpenApi": {
             "target": "Package",
             "version": "[10.0.10, )"
           },
@@ -3981,17 +3877,5 @@
         }
       }
     }
-  },
-  "logs": [
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'AutoMapper' 12.0.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-rvv3-g6hj-g44x",
-      "libraryId": "AutoMapper",
-      "targetGraphs": [
-        "net10.0"
-      ]
-    }
-  ]
+  }
 }

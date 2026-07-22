@@ -5,7 +5,9 @@ namespace PPS.LicenseManager.API.Models;
 public class Department
 {
     public int Id { get; set; }
+    public int CompanyId { get; set; }
 
+    public Company? Company { get; set; }
     [Required]
     [MaxLength(20)]
     public string DepartmentCode { get; set; } = string.Empty;

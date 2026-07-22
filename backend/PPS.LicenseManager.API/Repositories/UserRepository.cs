@@ -28,6 +28,36 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
+
+public async Task<(List<User> Users, int TotalRecords)> SearchAsync(
+    string? search,
+    int page,
+    int pageSize)
+{
+    var query = _context.Users
+        .Include(u => u.Role)
+        .AsQueryable();
+
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        search = search.Trim();
+
+        query = query.Where(u =>
+            u.FullName.Contains(search) ||
+            u.Email.Contains(search) ||
+            u.EmployeeCode.Contains(search));
+    }
+
+    var totalRecords = await query.CountAsync();
+
+    var users = await query
+        .OrderBy(u => u.FullName)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
+
+    return (users, totalRecords);
+}
     public async Task AddAsync(User user)
     {
         await _context.Users.AddAsync(user);
@@ -37,4 +67,26 @@ public class UserRepository : IUserRepository
     {
         await _context.SaveChangesAsync();
     }
+public async Task<List<User>> GetAllAsync()
+{
+    return await _context.Users
+        .Include(u => u.Role)
+        .OrderBy(u => u.FullName)
+        .ToListAsync();
+}
+
+public async Task<User?> GetByEmployeeCodeAsync(string employeeCode)
+{
+    return await _context.Users
+        .Include(u => u.Role)
+        .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode);
+}
+
+public Task UpdateAsync(User user)
+{
+    _context.Users.Update(user);
+    return Task.CompletedTask;
+}
+
+
 }

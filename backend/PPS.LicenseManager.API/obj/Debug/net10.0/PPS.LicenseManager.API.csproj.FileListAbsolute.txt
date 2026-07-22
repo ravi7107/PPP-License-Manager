@@ -6,11 +6,9 @@
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.runtimeconfig.json
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.pdb
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/AutoMapper.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/AutoMapper.Extensions.Microsoft.DependencyInjection.dll
+/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/BCrypt-Net-Next.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Humanizer.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Microsoft.AspNetCore.OpenApi.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Microsoft.Bcl.Cryptography.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Microsoft.Build.Framework.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Microsoft.CodeAnalysis.dll
@@ -45,6 +43,9 @@
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Serilog.Sinks.Console.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Serilog.Sinks.Debug.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Serilog.Sinks.File.dll
+/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.Swagger.dll
+/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.SwaggerGen.dll
+/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.SwaggerUI.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/System.CodeDom.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/System.Composition.AttributedModel.dll
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/System.Composition.Convention.dll
@@ -141,7 +142,3 @@
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/PPS.LicenseManager.API.pdb
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/PPS.LicenseManager.API.genruntimeconfig.cache
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/ref/PPS.LicenseManager.API.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/BCrypt-Net-Next.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.Swagger.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.SwaggerGen.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/Swashbuckle.AspNetCore.SwaggerUI.dll

@@ -180,6 +180,50 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("AssetSoftwares");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Company", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPerson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GSTNumber")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Companies");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -187,6 +231,9 @@ namespace PPS.LicenseManager.API.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -210,7 +257,75 @@ namespace PPS.LicenseManager.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId");
+
                     b.ToTable("Departments");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.License", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AliasCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<bool>("AllowTemporaryCheckout")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LicensedEmail")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("MaxCheckoutDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PurchaseCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("PurchaseDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("SoftwareId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("SubscriptionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AliasCode")
+                        .IsUnique();
+
+                    b.HasIndex("SoftwareId");
+
+                    b.ToTable("Licenses");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.LicensePurchase", b =>
@@ -472,6 +587,57 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Vendor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ContactPerson")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VendorCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("VendorName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VendorCode")
+                        .IsUnique();
+
+                    b.ToTable("Vendors");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Asset", b =>
                 {
                     b.HasOne("PPS.LicenseManager.API.Models.Department", "Department")
@@ -498,6 +664,28 @@ namespace PPS.LicenseManager.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Asset");
+
+                    b.Navigation("Software");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Department", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.Company", "Company")
+                        .WithMany("Departments")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.License", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.Software", "Software")
+                        .WithMany("Licenses")
+                        .HasForeignKey("SoftwareId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Software");
                 });
@@ -529,6 +717,11 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("AssetSoftwares");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Company", b =>
+                {
+                    b.Navigation("Departments");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Role", b =>
                 {
                     b.Navigation("Users");
@@ -537,6 +730,8 @@ namespace PPS.LicenseManager.API.Migrations
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Software", b =>
                 {
                     b.Navigation("AssetSoftwares");
+
+                    b.Navigation("Licenses");
                 });
 #pragma warning restore 612, 618
         }

@@ -67,12 +67,18 @@ public class SoftwareService : ISoftwareService
             Description = request.Description
         };
 
-        software.IsActive = false;
-	await _context.SaveChangesAsync();
+software.IsActive = false;
+await _context.SaveChangesAsync();
 
-        return await GetByIdAsync(software.Id)!;
-    }
+var createdSoftware = await GetByIdAsync(software.Id);
 
+if (createdSoftware == null)
+{
+    throw new InvalidOperationException("Software was created but could not be retrieved.");
+}
+
+return createdSoftware;
+}
     public async Task<bool> UpdateAsync(int id, UpdateSoftwareRequest request)
     {
         var software = await _context.Software.FindAsync(id);
