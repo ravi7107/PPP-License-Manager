@@ -37,6 +37,8 @@ public class LicensePurchase
 
     public int? ClientId { get; set; }
 
+    public Client? Client { get; set; }
+
     [Required]
     [MaxLength(20)]
     public string PurchaseScope { get; set; } = "Organization";
@@ -67,4 +69,8 @@ public class LicensePurchase
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
+
+    // Individual usable licenses created under this purchase.
+    public ICollection<License> Licenses { get; set; } =
+        new List<License>();
 }

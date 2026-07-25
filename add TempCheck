@@ -1,0 +1,93 @@
+[1mdiff --git a/backend/PPS.LicenseManager.API/Data/ApplicationDbContext.cs b/backend/PPS.LicenseManager.API/Data/ApplicationDbContext.cs[m
+[1mindex 3bbb795c..b3cdc973 100644[m
+[1m--- a/backend/PPS.LicenseManager.API/Data/ApplicationDbContext.cs[m
+[1m+++ b/backend/PPS.LicenseManager.API/Data/ApplicationDbContext.cs[m
+[36m@@ -1,7 +1,6 @@[m
+ using Microsoft.EntityFrameworkCore;[m
+ using PPS.LicenseManager.API.Models;[m
+ [m
+[31m-[m
+ namespace PPS.LicenseManager.API.Data;[m
+ [m
+ public class ApplicationDbContext : DbContext[m
+[36m@@ -14,31 +13,40 @@[m [mpublic class ApplicationDbContext : DbContext[m
+     public DbSet<Role> Roles => Set<Role>();[m
+     public DbSet<User> Users => Set<User>();[m
+     public DbSet<Department> Departments => Set<Department>();[m
+[31m-    public DbSet<License> Licenses => Set<License>();[m
+[31m-   [m
+[31m-    public DbSet<Software> Software => Set<Software>();[m
+[32m+[m[32m    public DbSet<Company> Companies => Set<Company>();[m
+     public DbSet<Vendor> Vendors => Set<Vendor>();[m
+[31m-    public DbSet<LicensePurchase> LicensePurchases => Set<LicensePurchase>();[m
+[32m+[m
+[32m+[m[32m    public DbSet<Software> Software => Set<Software>();[m
+[32m+[m
+     public DbSet<Asset> Assets => Set<Asset>();[m
+[31m-    public DbSet<Company> Companies { get; set; }[m
+[31m-    // NEW[m
+     public DbSet<AssetSoftware> AssetSoftwares => Set<AssetSoftware>();[m
+ [m
+[32m+[m[32m    public DbSet<License> Licenses => Set<License>();[m
+[32m+[m[32m    public DbSet<LicensePurchase> LicensePurchases => Set<LicensePurchase>();[m
+[32m+[m
+[32m+[m[32m    public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();[m
+[32m+[m[32m    public DbSet<AllocationRequest> AllocationRequests => Set<AllocationRequest>();[m
+[32m+[m
+     protected override void OnModelCreating(ModelBuilder modelBuilder)[m
+     {[m
+         base.OnModelCreating(modelBuilder);[m
+[31m-	[m
+[32m+[m
+[32m+[m[32m        // Automatically apply all IEntityTypeConfiguration<T>[m
+         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);[m
+[31m-	modelBuilder.Entity<Department>()[m
+[31m-        .HasOne(d => d.Company)[m
+[31m-        .WithMany(c => c.Departments)[m
+[31m-        .HasForeignKey(d => d.CompanyId)[m
+[31m-        .OnDelete(DeleteBehavior.Restrict);[m
+ [m
+[31m-      modelBuilder.Entity<Vendor>()[m
+[31m-    .HasIndex(v => v.VendorCode)[m
+[31m-    .IsUnique();[m
+[32m+[m[32m        // Department -> Company[m
+[32m+[m[32m        modelBuilder.Entity<Department>()[m
+[32m+[m[32m            .HasOne(d => d.Company)[m
+[32m+[m[32m            .WithMany(c => c.Departments)[m
+[32m+[m[32m            .HasForeignKey(d => d.CompanyId)[m
+[32m+[m[32m            .OnDelete(DeleteBehavior.Restrict);[m
+[32m+[m
+[32m+[m[32m        // Vendor[m
+[32m+[m[32m        modelBuilder.Entity<Vendor>()[m
+[32m+[m[32m            .HasIndex(v => v.VendorCode)[m
+[32m+[m[32m            .IsUnique();[m
+ [m
+[32m+[m[32m        // Seed Roles[m
+         modelBuilder.Entity<Role>().HasData([m
+             new Role[m
+             {[m
+[36m@@ -82,6 +90,7 @@[m [mpublic class ApplicationDbContext : DbContext[m
+             }[m
+         );[m
+ [m
+[32m+[m[32m        // Asset[m
+         modelBuilder.Entity<Asset>(entity =>[m
+         {[m
+             entity.HasKey(a => a.Id);[m
+[36m@@ -129,7 +138,7 @@[m [mpublic class ApplicationDbContext : DbContext[m
+                   .OnDelete(DeleteBehavior.Restrict);[m
+         });[m
+ [m
+[31m-        // NEW - AssetSoftware[m
+[32m+[m[32m        // Asset Software[m
+         modelBuilder.Entity<AssetSoftware>(entity =>[m
+         {[m
+             entity.HasKey(x => x.Id);[m
+[36m@@ -160,7 +169,6 @@[m [mpublic class ApplicationDbContext : DbContext[m
+                   .HasForeignKey(x => x.SoftwareId)[m
+                   .OnDelete(DeleteBehavior.Restrict);[m
+ [m
+[31m-            // Prevent duplicate software assignment to the same asset[m
+             entity.HasIndex(x => new { x.AssetId, x.SoftwareId })[m
+                   .IsUnique();[m
+         });[m

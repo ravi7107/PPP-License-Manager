@@ -20,5 +20,9 @@ public class UpdateUserRequest
     [Required]
     public int RoleId { get; set; }
 
+    public int? CompanyId { get; set; }
+
+    public int? DepartmentId { get; set; }
+
     public bool IsActive { get; set; }
 }

@@ -2,7 +2,11 @@
 
 import '@/index.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
 import { AppLayout } from '@/app/layout/app-layout';
+import ProtectedRoute from '@/components/auth/protected-route';
+import LoginPage from '@/app/pages/login/login-page';
+
 import DashboardPage from '@/app/pages/dashboard/dashboard-page';
 import HardwarePage from '@/app/pages/hardware/hardware-page';
 import LicensesPage from '@/app/pages/licenses/licenses-page';
@@ -23,7 +27,17 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AppLayout />}>
+
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<DashboardPage />} />
           <Route path="hardware" element={<HardwarePage />} />
           <Route path="licenses" element={<LicensesPage />} />
@@ -40,6 +54,7 @@ function App() {
           <Route path="clients" element={<ClientsPage />} />
           <Route path="access-management" element={<AccessManagementPage />} />
         </Route>
+
       </Routes>
     </BrowserRouter>
   );

@@ -18,6 +18,8 @@ public class UserRepository : IUserRepository
     {
         return await _context.Users
             .Include(u => u.Role)
+            .Include(u => u.Company)
+            .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Email == email);
     }
 
@@ -25,6 +27,8 @@ public class UserRepository : IUserRepository
     {
         return await _context.Users
             .Include(u => u.Role)
+            .Include(u => u.Company)
+            .Include(u => u.Department)
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
@@ -36,6 +40,8 @@ public async Task<(List<User> Users, int TotalRecords)> SearchAsync(
 {
     var query = _context.Users
         .Include(u => u.Role)
+            .Include(u => u.Company)
+            .Include(u => u.Department)
         .AsQueryable();
 
     if (!string.IsNullOrWhiteSpace(search))
@@ -71,6 +77,8 @@ public async Task<List<User>> GetAllAsync()
 {
     return await _context.Users
         .Include(u => u.Role)
+            .Include(u => u.Company)
+            .Include(u => u.Department)
         .OrderBy(u => u.FullName)
         .ToListAsync();
 }
@@ -79,6 +87,8 @@ public async Task<User?> GetByEmployeeCodeAsync(string employeeCode)
 {
     return await _context.Users
         .Include(u => u.Role)
+            .Include(u => u.Company)
+            .Include(u => u.Department)
         .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode);
 }
 

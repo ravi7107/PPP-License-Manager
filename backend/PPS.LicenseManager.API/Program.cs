@@ -22,6 +22,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
+// ===============================
+// CORS - React Frontend
+// ===============================
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ReactApp", policy =>
+    {
+        policy
+            .WithOrigins("http://98.93.56.145:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -45,15 +60,22 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// ===============================
 // Database
+// ===============================
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// JWT
+// ===============================
+// JWT Authentication
+// ===============================
+
 var jwt = builder.Configuration.GetSection("Jwt");
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -62,34 +84,71 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+
             ValidIssuer = jwt["Issuer"],
             ValidAudience = jwt["Audience"],
+
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwt["Key"]!)),
+                Encoding.UTF8.GetBytes(jwt["Key"]!)
+            ),
+
             ClockSkew = TimeSpan.Zero
         };
     });
 
+// ===============================
 // Dependency Injection
+// ===============================
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
+
 builder.Services.AddScoped<ICompanyService, CompanyService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<IClientService, ClientService>();
+
 builder.Services.AddScoped<ISoftwareService, SoftwareService>();
+
 builder.Services.AddScoped<IAssetService, AssetService>();
-builder.Services.AddScoped<IAssetSoftwareService, AssetSoftwareService>();
-builder.Services.AddScoped<IVendorRepository, VendorRepository>();
-builder.Services.AddScoped<IVendorService, VendorService>();
+
+builder.Services.AddScoped<
+    IAssetSoftwareService,
+    AssetSoftwareService>();
+
+builder.Services.AddScoped<
+    IVendorRepository,
+    VendorRepository>();
+
+builder.Services.AddScoped<
+    IVendorService,
+    VendorService>();
+
+builder.Services.AddScoped<
+    ILicenseService,
+    LicenseService>();
+
+builder.Services.AddScoped<
+    IResourceAllocationService,
+    ResourceAllocationService>();
+
+builder.Services.AddScoped<
+    IAllocationRequestService,
+    AllocationRequestService>();
 
 var app = builder.Build();
 
-// Seed initial data
+// ===============================
+// Seed Initial Data
+// ===============================
+
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var db = scope.ServiceProvider
+        .GetRequiredService<ApplicationDbContext>();
+
     await DbSeeder.SeedAsync(db);
 }
 
@@ -103,9 +162,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// We are currently developing over HTTP.
+// Enable this later when HTTPS is configured.
+// app.UseHttpsRedirection();
 
 app.UseMiddleware<ExceptionMiddleware>();
+
+app.UseRouting();
+
+// IMPORTANT:
+// CORS must run before authentication/authorization.
+app.UseCors("ReactApp");
 
 app.UseAuthentication();
 app.UseAuthorization();

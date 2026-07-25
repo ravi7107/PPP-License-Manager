@@ -1,15 +1,60 @@
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useLoadAction } from '@/lib/uibakery';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, Line, LineChart, LabelList } from 'recharts';
-import { HardDrive, KeySquare, Share2, ClipboardCheck, AlertTriangle, PackageCheck, PackageOpen, Wrench } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Pie,
+  PieChart,
+  Cell,
+  Line,
+  LineChart,
+  LabelList,
+} from 'recharts';
+
+import {
+  HardDrive,
+  KeySquare,
+  Share2,
+  ClipboardCheck,
+  AlertTriangle,
+  PackageCheck,
+  PackageOpen,
+  Wrench,
+  Activity,
+  RefreshCw,
+} from 'lucide-react';
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
+
 import { Badge } from '@/components/ui/badge';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from '@/components/ui/chart';
+
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartConfig,
+} from '@/components/ui/chart';
+
 import { KpiCard } from '@/components/layout/kpi-card';
 import { KpiCardSkeleton } from '@/components/layout/kpi-card-skeleton';
+
 import { AppRole, canManage } from '@/lib/auth/roles';
-import loadPendingApprovalsCount from '@/actions/requests/loadPendingApprovalsCount';
-import loadPendingApprovalsForDashboard from '@/actions/requests/loadPendingApprovalsForDashboard';
+
+import {
+  getAllocationRequests,
+  AllocationRequest,
+} from '@/lib/api/allocation-requests.api';
+
 import {
   getDashboardKpis,
   getLicenseUtilizationChartData,
@@ -23,95 +68,354 @@ import {
   getExpiringLicensesList,
 } from '@/lib/mock/dashboard';
 
-interface PendingApprovalDashboardRow {
-  id: number;
-  request_type: string;
-  requester_name: string | null;
-  department_name: string | null;
-  software_name: string | null;
-  created_at: string;
-}
 
 const utilizationConfig: ChartConfig = {
-  used: { label: 'Seats Used', color: 'var(--chart-1)' },
-  available: { label: 'Seats Available', color: 'var(--chart-2)' },
+  used: {
+    label: 'Seats Used',
+    color: 'var(--chart-1)',
+  },
+  available: {
+    label: 'Seats Available',
+    color: 'var(--chart-2)',
+  },
 };
 
 const costEntityConfig: ChartConfig = {
-  cost: { label: 'Cost ($)', color: 'var(--chart-1)' },
+  cost: {
+    label: 'Cost (₹)',
+    color: 'var(--chart-1)',
+  },
 };
 
 const costClientConfig: ChartConfig = {
-  cost: { label: 'Cost ($)', color: 'var(--chart-2)' },
+  cost: {
+    label: 'Cost (₹)',
+    color: 'var(--chart-2)',
+  },
 };
 
 const departmentAssetsConfig: ChartConfig = {
-  count: { label: 'Assets', color: 'var(--chart-3)' },
+  count: {
+    label: 'Assets',
+    color: 'var(--chart-3)',
+  },
 };
 
 const allocationTrendConfig: ChartConfig = {
-  allocations: { label: 'Allocations', color: 'var(--chart-1)' },
+  allocations: {
+    label: 'Allocations',
+    color: 'var(--chart-1)',
+  },
 };
 
 const approvalTrendConfig: ChartConfig = {
-  pending: { label: 'Pending Approvals', color: 'var(--chart-4)' },
+  pending: {
+    label: 'Pending Approvals',
+    color: 'var(--chart-4)',
+  },
 };
 
 const expiryTimelineConfig: ChartConfig = {
-  daysToExpiry: { label: 'Days to Expiry', color: 'var(--chart-5)' },
+  daysToExpiry: {
+    label: 'Days to Expiry',
+    color: 'var(--chart-5)',
+  },
 };
 
-const PIE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
+const PIE_COLORS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+];
+
 
 export default function DashboardPage() {
-  const { roles } = useOutletContext<{ roles: AppRole[] }>();
+  const { roles } = useOutletContext<{
+    roles: AppRole[];
+  }>();
+
   const kpis = getDashboardKpis();
+
   const showActionableWidgets = canManage(roles);
 
-  const utilizationData = getLicenseUtilizationChartData();
-  const costEntityData = getCostByEntityChartData();
-  const costClientData = getCostByClientChartData();
-  const departmentAssetsData = getDepartmentWiseAssetsChartData();
-  const allocationTrendData = getMonthlyAllocationTrendChartData();
-  const expiryTimelineData = getSoftwareExpiryTimelineChartData();
-  const approvalTrendData = getPendingApprovalTrendChartData();
+  /*
+   * Existing dashboard datasets.
+   * These are still using the current mock dashboard source.
+   * We can migrate these to the backend API separately.
+   */
+  const utilizationData =
+    getLicenseUtilizationChartData();
 
-  const lowAvailability = getLowAvailabilityLicenses();
-  const expiringLicenses = getExpiringLicensesList();
+  const costEntityData =
+    getCostByEntityChartData();
 
-  const [pendingCountRows, pendingCountLoading]: [{ pending_count: number }[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadPendingApprovalsCount,
-    [],
-    {},
-  );
-  const pendingApprovalsCount = pendingCountRows?.[0]?.pending_count ?? 0;
+  const costClientData =
+    getCostByClientChartData();
 
-  const [pendingApprovals, pendingApprovalsLoading]: [PendingApprovalDashboardRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadPendingApprovalsForDashboard,
-    [],
-    {},
-  );
+  const departmentAssetsData =
+    getDepartmentWiseAssetsChartData();
+
+  const allocationTrendData =
+    getMonthlyAllocationTrendChartData();
+
+  const expiryTimelineData =
+    getSoftwareExpiryTimelineChartData();
+
+  const approvalTrendData =
+    getPendingApprovalTrendChartData();
+
+  const lowAvailability =
+    getLowAvailabilityLicenses();
+
+  const expiringLicenses =
+    getExpiringLicensesList();
+
+
+  /*
+   * REAL BACKEND DATA
+   *
+   * Pending allocation/license requests are now loaded
+   * from the ASP.NET Core API instead of UI Bakery SQL.
+   */
+  const [
+    allocationRequests,
+    setAllocationRequests,
+  ] = useState<AllocationRequest[]>([]);
+
+  const [
+    pendingApprovalsLoading,
+    setPendingApprovalsLoading,
+  ] = useState(true);
+
+  const [
+    pendingApprovalsError,
+    setPendingApprovalsError,
+  ] = useState<string | null>(null);
+
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRequests() {
+      try {
+        setPendingApprovalsLoading(true);
+        setPendingApprovalsError(null);
+
+        const result =
+          await getAllocationRequests();
+
+        if (!mounted) {
+          return;
+        }
+
+        /*
+         * Protect the dashboard from malformed
+         * or unexpected API responses.
+         */
+        if (Array.isArray(result)) {
+          setAllocationRequests(result);
+        } else {
+          console.error(
+            'Allocation request API did not return an array:',
+            result
+          );
+
+          setAllocationRequests([]);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load allocation requests:',
+          error
+        );
+
+        if (mounted) {
+          setAllocationRequests([]);
+
+          setPendingApprovalsError(
+            'Unable to load pending requests.'
+          );
+        }
+      } finally {
+        if (mounted) {
+          setPendingApprovalsLoading(false);
+        }
+      }
+    }
+
+    loadRequests();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+
+  /*
+   * Only Pending requests should appear on
+   * the Dashboard approval widget.
+   */
+  const pendingRequests =
+    allocationRequests.filter(
+      (request) =>
+        String(request.status ?? '')
+          .trim()
+          .toLowerCase() === 'pending'
+    );
+
+
+  /*
+   * Dashboard KPI count.
+   */
+  const pendingApprovalsCount =
+    pendingRequests.length;
+
+
+  /*
+   * Only show the latest six requests
+   * inside the dashboard widget.
+   */
+  const pendingApprovals =
+    pendingRequests.slice(0, 6);
+
+
+  /*
+   * Reuse the same API loading state
+   * for the Pending Requests KPI.
+   */
+  const pendingCountLoading =
+    pendingApprovalsLoading;
+
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Operations Dashboard</h2>
-        <p className="text-sm text-muted-foreground">Overview of hardware assets, software licenses, and allocation activity across PPS.</p>
+
+      {/* MODERN OPERATIONS HEADER */}
+
+      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="absolute inset-x-0 top-0 h-[3px] bg-primary" />
+
+        <div className="flex flex-col gap-5 p-5 md:p-6 lg:flex-row lg:items-center lg:justify-between">
+
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+
+              <Badge
+                variant="outline"
+                className="gap-1.5 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+
+                Operational
+              </Badge>
+
+              <Badge variant="secondary">
+                IT Operations
+              </Badge>
+
+            </div>
+
+            <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              IT Operations Overview
+            </h2>
+
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Centralized visibility into hardware assets, software licensing,
+              utilization, renewals and allocation activity across PPS.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+
+            <div className="hidden rounded-lg border bg-background/70 px-4 py-2.5 sm:block">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-emerald-600" />
+
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Platform Status
+                  </p>
+
+                  <p className="text-sm font-semibold">
+                    Systems Operational
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-sm transition-all duration-200 hover:bg-accent hover:shadow"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+
+          </div>
+
+        </div>
       </div>
 
+
+      {/* KPI CARDS */}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Total Assets" value={kpis.totalAssets} icon={HardDrive} hint="All tracked hardware" />
-        <KpiCard title="Allocated Assets" value={kpis.allocatedAssets} icon={PackageCheck} hint="Currently in active use" />
-        <KpiCard title="Available Assets" value={kpis.availableAssets} icon={PackageOpen} hint="Ready for assignment" />
+
+        <KpiCard
+          title="Total Assets"
+          value={kpis.totalAssets}
+          icon={HardDrive}
+          hint="All tracked hardware"
+        />
+
+        <KpiCard
+          title="Allocated Assets"
+          value={kpis.allocatedAssets}
+          icon={PackageCheck}
+          hint="Currently in active use"
+        />
+
+        <KpiCard
+          title="Available Assets"
+          value={kpis.availableAssets}
+          icon={PackageOpen}
+          hint="Ready for assignment"
+        />
+
         <KpiCard
           title="Assets Under Maintenance"
           value={kpis.assetsUnderMaintenance}
           icon={Wrench}
           hint="In repair / servicing"
-          tone={kpis.assetsUnderMaintenance > 0 ? 'warning' : 'default'}
+          tone={
+            kpis.assetsUnderMaintenance > 0
+              ? 'warning'
+              : 'default'
+          }
         />
-        <KpiCard title="Software Licenses" value={kpis.totalLicenseSeats} icon={KeySquare} hint="Total seats across all software" />
-        <KpiCard title="Available Licenses" value={kpis.availableLicenseSeats} icon={Share2} hint="Unassigned seats in pool" />
+
+        <KpiCard
+          title="Software Licenses"
+          value={kpis.totalLicenseSeats}
+          icon={KeySquare}
+          hint="Total seats across all software"
+        />
+
+        <KpiCard
+          title="Available Licenses"
+          value={kpis.availableLicenseSeats}
+          icon={Share2}
+          hint="Unassigned seats in pool"
+        />
+
+
+        {/* REAL PENDING REQUEST COUNT */}
+
         {pendingCountLoading ? (
           <KpiCardSkeleton />
         ) : (
@@ -119,237 +423,797 @@ export default function DashboardPage() {
             title="Pending Requests"
             value={pendingApprovalsCount}
             icon={ClipboardCheck}
-            hint="Awaiting IT review"
-            tone={pendingApprovalsCount > 0 ? 'warning' : 'default'}
+            hint={
+              pendingApprovalsError
+                ? 'Unable to load requests'
+                : 'Awaiting IT review'
+            }
+            tone={
+              pendingApprovalsCount > 0
+                ? 'warning'
+                : 'default'
+            }
           />
         )}
+
+
         <KpiCard
           title="Expiring Licenses"
           value={kpis.expiringLicenses}
           icon={AlertTriangle}
           hint="Renewing within 30 days"
-          tone={kpis.expiringLicenses > 0 ? 'danger' : 'default'}
+          tone={
+            kpis.expiringLicenses > 0
+              ? 'danger'
+              : 'default'
+          }
         />
       </div>
 
+
+      {/* DASHBOARD CHARTS */}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+        {/* LICENSE UTILIZATION */}
+
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">License Utilization</CardTitle>
-            <CardDescription>Seats used vs. available per software title</CardDescription>
+            <CardTitle className="text-base">
+              License Utilization
+            </CardTitle>
+
+            <CardDescription>
+              Seats used vs. available per software title
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
-            <ChartContainer config={utilizationConfig} className="h-72 w-full">
+            <ChartContainer
+              config={utilizationConfig}
+              className="h-72 w-full"
+            >
               <BarChart data={utilizationData}>
+
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} angle={-20} textAnchor="end" height={60} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="used" stackId="a" fill="var(--color-used)" radius={[0, 0, 4, 4]} />
-                <Bar dataKey="available" stackId="a" fill="var(--color-available)" radius={[4, 4, 0, 0]} />
+
+                <XAxis
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={0}
+                  angle={-20}
+                  textAnchor="end"
+                  height={60}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="used"
+                  stackId="a"
+                  fill="var(--color-used)"
+                  radius={[0, 0, 4, 4]}
+                />
+
+                <Bar
+                  dataKey="available"
+                  stackId="a"
+                  fill="var(--color-available)"
+                  radius={[4, 4, 0, 0]}
+                />
+
               </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Software Cost by Entity</CardTitle>
-            <CardDescription>Annual license spend allocated by business entity</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={costEntityConfig} className="h-64 w-full">
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Pie data={costEntityData} dataKey="cost" nameKey="entity" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {costEntityData.map((_, index) => (
-                    <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            <ul className="mt-3 space-y-1.5">
-              {costEntityData.map((row, index) => (
-                <li key={row.entity} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                      style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-                    />
-                    <span className="text-muted-foreground">{row.entity}</span>
-                  </span>
-                  <span className="font-medium">${row.cost.toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+
+        {/* COST BY ENTITY */}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Software Cost by Client</CardTitle>
-            <CardDescription>Annual license spend allocated by client project</CardDescription>
+            <CardTitle className="text-base">
+              Software Cost by Entity
+            </CardTitle>
+
+            <CardDescription>
+              Annual license spend allocated by business entity
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
-            <ChartContainer config={costClientConfig} className="h-64 w-full">
+
+            <ChartContainer
+              config={costEntityConfig}
+              className="h-64 w-full"
+            >
               <PieChart>
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Pie data={costClientData} dataKey="cost" nameKey="client" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {costClientData.map((_, index) => (
-                    <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Pie
+                  data={costEntityData}
+                  dataKey="cost"
+                  nameKey="entity"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={2}
+                >
+
+                  {costEntityData.map(
+                    (_, index) => (
+                      <Cell
+                        key={index}
+                        fill={
+                          PIE_COLORS[
+                            index %
+                              PIE_COLORS.length
+                          ]
+                        }
+                      />
+                    )
+                  )}
+
                 </Pie>
+
               </PieChart>
             </ChartContainer>
+
+
             <ul className="mt-3 space-y-1.5">
-              {costClientData.map((row, index) => (
-                <li key={row.client} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                      style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-                    />
-                    <span className="text-muted-foreground">{row.client}</span>
-                  </span>
-                  <span className="font-medium">${row.cost.toLocaleString()}</span>
-                </li>
-              ))}
+
+              {costEntityData.map(
+                (row, index) => (
+
+                  <li
+                    key={row.entity}
+                    className="flex items-center justify-between text-sm"
+                  >
+
+                    <span className="flex items-center gap-2">
+
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                        style={{
+                          backgroundColor:
+                            PIE_COLORS[
+                              index %
+                                PIE_COLORS.length
+                            ],
+                        }}
+                      />
+
+                      <span className="text-muted-foreground">
+                        {row.entity}
+                      </span>
+
+                    </span>
+
+                    <span className="font-medium">
+                      ₹{Number(row.cost).toLocaleString('en-IN')}
+                    </span>
+
+                  </li>
+                )
+              )}
+
             </ul>
+
           </CardContent>
         </Card>
 
+
+        {/* COST BY CLIENT */}
+
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Department-wise Assets</CardTitle>
-            <CardDescription>Hardware asset distribution by team/department</CardDescription>
+
+            <CardTitle className="text-base">
+              Software Cost by Client
+            </CardTitle>
+
+            <CardDescription>
+              Annual license spend allocated by client project
+            </CardDescription>
+
           </CardHeader>
+
           <CardContent>
-            <ChartContainer config={departmentAssetsConfig} className="h-72 w-full">
-              <BarChart data={departmentAssetsData}>
+
+            <ChartContainer
+              config={costClientConfig}
+              className="h-64 w-full"
+            >
+
+              <PieChart>
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Pie
+                  data={costClientData}
+                  dataKey="cost"
+                  nameKey="client"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={2}
+                >
+
+                  {costClientData.map(
+                    (_, index) => (
+                      <Cell
+                        key={index}
+                        fill={
+                          PIE_COLORS[
+                            index %
+                              PIE_COLORS.length
+                          ]
+                        }
+                      />
+                    )
+                  )}
+
+                </Pie>
+
+              </PieChart>
+
+            </ChartContainer>
+
+
+            <ul className="mt-3 space-y-1.5">
+
+              {costClientData.map(
+                (row, index) => (
+
+                  <li
+                    key={row.client}
+                    className="flex items-center justify-between text-sm"
+                  >
+
+                    <span className="flex items-center gap-2">
+
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                        style={{
+                          backgroundColor:
+                            PIE_COLORS[
+                              index %
+                                PIE_COLORS.length
+                            ],
+                        }}
+                      />
+
+                      <span className="text-muted-foreground">
+                        {row.client}
+                      </span>
+
+                    </span>
+
+                    <span className="font-medium">
+                      ₹{Number(row.cost).toLocaleString('en-IN')}
+                    </span>
+
+                  </li>
+                )
+              )}
+
+            </ul>
+
+          </CardContent>
+        </Card>
+
+
+        {/* DEPARTMENT ASSETS */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Department-wise Assets
+            </CardTitle>
+
+            <CardDescription>
+              Hardware asset distribution by team/department
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={departmentAssetsConfig}
+              className="h-72 w-full"
+            >
+
+              <BarChart
+                data={departmentAssetsData}
+              >
+
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="department" tickLine={false} axisLine={false} tickMargin={8} interval={0} angle={-15} textAnchor="end" height={55} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} />
+
+                <XAxis
+                  dataKey="department"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={0}
+                  angle={-15}
+                  textAnchor="end"
+                  height={55}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="count"
+                  fill="var(--color-count)"
+                  radius={[4, 4, 0, 0]}
+                />
+
               </BarChart>
+
             </ChartContainer>
+
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Monthly Allocation Trend</CardTitle>
-            <CardDescription>License seats allocated per month</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={allocationTrendConfig} className="h-72 w-full">
-              <LineChart data={allocationTrendData}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line type="monotone" dataKey="allocations" stroke="var(--color-allocations)" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+
+        {/* MONTHLY ALLOCATION TREND */}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Pending Approval Trend</CardTitle>
-            <CardDescription>Open requests awaiting decision, month over month</CardDescription>
+
+            <CardTitle className="text-base">
+              Monthly Allocation Trend
+            </CardTitle>
+
+            <CardDescription>
+              License seats allocated per month
+            </CardDescription>
+
           </CardHeader>
+
           <CardContent>
-            <ChartContainer config={approvalTrendConfig} className="h-72 w-full">
-              <LineChart data={approvalTrendData}>
+
+            <ChartContainer
+              config={allocationTrendConfig}
+              className="h-72 w-full"
+            >
+
+              <LineChart
+                data={allocationTrendData}
+              >
+
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line type="monotone" dataKey="pending" stroke="var(--color-pending)" strokeWidth={2} dot={{ r: 3 }} />
+
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="allocations"
+                  stroke="var(--color-allocations)"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+
               </LineChart>
+
             </ChartContainer>
+
           </CardContent>
         </Card>
+
+
+        {/* APPROVAL TREND */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Pending Approval Trend
+            </CardTitle>
+
+            <CardDescription>
+              Open requests awaiting decision,
+              month over month
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={approvalTrendConfig}
+              className="h-72 w-full"
+            >
+
+              <LineChart
+                data={approvalTrendData}
+              >
+
+                <CartesianGrid vertical={false} />
+
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="pending"
+                  stroke="var(--color-pending)"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+
+              </LineChart>
+
+            </ChartContainer>
+
+          </CardContent>
+        </Card>
+
+
+        {/* SOFTWARE EXPIRY */}
 
         <Card className="lg:col-span-2">
+
           <CardHeader>
-            <CardTitle className="text-base">Software Expiry Timeline</CardTitle>
-            <CardDescription>Days remaining until each license renews or expires</CardDescription>
+
+            <CardTitle className="text-base">
+              Software Expiry Timeline
+            </CardTitle>
+
+            <CardDescription>
+              Days remaining until each license
+              renews or expires
+            </CardDescription>
+
           </CardHeader>
+
           <CardContent>
-            <ChartContainer config={expiryTimelineConfig} className="h-72 w-full">
-              <BarChart data={expiryTimelineData} layout="vertical" margin={{ left: 16 }}>
-                <CartesianGrid horizontal={false} />
-                <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={110} fontSize={11} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="daysToExpiry" fill="var(--color-daysToExpiry)" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="daysToExpiry" position="right" fontSize={11} />
+
+            <ChartContainer
+              config={expiryTimelineConfig}
+              className="h-72 w-full"
+            >
+
+              <BarChart
+                data={expiryTimelineData}
+                layout="vertical"
+                margin={{ left: 16 }}
+              >
+
+                <CartesianGrid
+                  horizontal={false}
+                />
+
+                <XAxis
+                  type="number"
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  width={110}
+                  fontSize={11}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="daysToExpiry"
+                  fill="var(--color-daysToExpiry)"
+                  radius={[0, 4, 4, 0]}
+                >
+
+                  <LabelList
+                    dataKey="daysToExpiry"
+                    position="right"
+                    fontSize={11}
+                  />
+
                 </Bar>
+
               </BarChart>
+
             </ChartContainer>
+
           </CardContent>
+
         </Card>
+
       </div>
 
+
+      {/* ACTIONABLE ADMIN WIDGETS */}
+
       {showActionableWidgets && (
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Pending Approvals</CardTitle>
-              <CardDescription>Requests awaiting your review</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {pendingApprovalsLoading && <p className="text-sm text-muted-foreground">Loading pending requests…</p>}
-              {!pendingApprovalsLoading && pendingApprovals.length === 0 && <p className="text-sm text-muted-foreground">No pending requests.</p>}
-              {!pendingApprovalsLoading && pendingApprovals.map((req) => (
-                <div key={req.id} className="flex items-center justify-between rounded-md border p-3">
-                  <div>
-                    <p className="text-sm font-medium">{req.software_name ?? 'Reallocation / release request'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {req.request_type} · {req.requester_name ?? 'Unknown'} ({req.department_name ?? 'Unassigned'})
-                    </p>
-                  </div>
-                  <Badge variant="outline">{req.request_type === 'New License' ? 'New' : req.request_type === 'Release' ? 'Release' : 'Reallocation'}</Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+
+
+          {/* REAL PENDING APPROVALS */}
 
           <Card>
+
             <CardHeader>
-              <CardTitle className="text-base">Low Availability &amp; Expiring Licenses</CardTitle>
-              <CardDescription>Licenses needing attention soon</CardDescription>
+
+              <CardTitle className="text-base">
+                Pending Approvals
+              </CardTitle>
+
+              <CardDescription>
+                Requests awaiting your review
+              </CardDescription>
+
             </CardHeader>
+
+
             <CardContent className="flex flex-col gap-3">
-              {lowAvailability.map((l) => (
-                <div key={l.id} className="flex items-center justify-between rounded-md border p-3">
-                  <div>
-                    <p className="text-sm font-medium">{l.softwareName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {l.totalSeats - l.seatsUsed} seat(s) left of {l.totalSeats}
-                    </p>
-                  </div>
-                  <Badge variant="secondary">Low availability</Badge>
-                </div>
-              ))}
-              {expiringLicenses.map((l) => (
-                <div key={l.id} className="flex items-center justify-between rounded-md border p-3">
-                  <div>
-                    <p className="text-sm font-medium">{l.softwareName}</p>
-                    <p className="text-xs text-muted-foreground">Renews {l.renewalDate}</p>
-                  </div>
-                  <Badge variant="destructive">Expiring soon</Badge>
-                </div>
-              ))}
-              {lowAvailability.length === 0 && expiringLicenses.length === 0 && (
-                <p className="text-sm text-muted-foreground">No licenses need attention right now.</p>
+
+
+              {pendingApprovalsLoading && (
+
+                <p className="text-sm text-muted-foreground">
+                  Loading pending requests…
+                </p>
+
               )}
+
+
+              {!pendingApprovalsLoading &&
+                pendingApprovalsError && (
+
+                  <p className="text-sm text-destructive">
+                    {pendingApprovalsError}
+                  </p>
+
+                )}
+
+
+              {!pendingApprovalsLoading &&
+                !pendingApprovalsError &&
+                pendingApprovals.length === 0 && (
+
+                  <p className="text-sm text-muted-foreground">
+                    No pending requests.
+                  </p>
+
+                )}
+
+
+              {!pendingApprovalsLoading &&
+                !pendingApprovalsError &&
+                pendingApprovals.map(
+                  (req) => (
+
+                    <div
+                      key={req.id}
+                      className="flex items-center justify-between gap-3 rounded-md border p-3"
+                    >
+
+                      <div className="min-w-0">
+
+                        <p className="truncate text-sm font-medium">
+                          {req.softwareName ||
+                            'Software allocation request'}
+                        </p>
+
+
+                        <p className="text-xs text-muted-foreground">
+
+                          {req.requestedByUserName ||
+                            'Unknown user'}
+
+                          {req.requestReference
+                            ? ` · ${req.requestReference}`
+                            : ''}
+
+                        </p>
+
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+
+                          Required from:{' '}
+
+                          {req.requiredFrom
+                            ? new Date(
+                                req.requiredFrom
+                              ).toLocaleDateString()
+                            : '—'}
+
+                        </p>
+
+                      </div>
+
+
+                      <Badge
+                        variant={
+                          String(
+                            req.priority ?? ''
+                          ).toLowerCase() ===
+                          'high'
+                            ? 'destructive'
+                            : 'outline'
+                        }
+                      >
+
+                        {req.priority ||
+                          'Normal'}
+
+                      </Badge>
+
+                    </div>
+
+                  )
+                )}
+
             </CardContent>
+
           </Card>
+
+
+          {/* LOW AVAILABILITY / EXPIRING */}
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle className="text-base">
+                Low Availability &amp; Expiring Licenses
+              </CardTitle>
+
+              <CardDescription>
+                Licenses needing attention soon
+              </CardDescription>
+
+            </CardHeader>
+
+
+            <CardContent className="flex flex-col gap-3">
+
+
+              {lowAvailability.map((l) => (
+
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between rounded-md border p-3"
+                >
+
+                  <div>
+
+                    <p className="text-sm font-medium">
+                      {l.softwareName}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+
+                      {l.totalSeats -
+                        l.seatsUsed}{' '}
+
+                      seat(s) left of{' '}
+
+                      {l.totalSeats}
+
+                    </p>
+
+                  </div>
+
+
+                  <Badge variant="secondary">
+                    Low availability
+                  </Badge>
+
+                </div>
+
+              ))}
+
+
+              {expiringLicenses.map((l) => (
+
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between rounded-md border p-3"
+                >
+
+                  <div>
+
+                    <p className="text-sm font-medium">
+                      {l.softwareName}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      Renews {l.renewalDate}
+                    </p>
+
+                  </div>
+
+
+                  <Badge variant="destructive">
+                    Expiring soon
+                  </Badge>
+
+                </div>
+
+              ))}
+
+
+              {lowAvailability.length === 0 &&
+                expiringLicenses.length === 0 && (
+
+                  <p className="text-sm text-muted-foreground">
+                    No licenses need attention right now.
+                  </p>
+
+                )}
+
+            </CardContent>
+
+          </Card>
+
         </div>
+
       )}
+
     </div>
   );
 }

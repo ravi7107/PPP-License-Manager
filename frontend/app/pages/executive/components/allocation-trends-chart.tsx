@@ -8,8 +8,10 @@ const config: ChartConfig = {
   active_allocations: { label: 'Active Allocations', color: 'var(--chart-2)' },
 };
 
-export function AllocationTrendsChart({ rows }: { rows: AllocationTrendRow[] }) {
-  const data = rows.map((r) => ({
+export function AllocationTrendsChart({ rows }: { rows: AllocationTrendRow[] | unknown }) {
+  const safeRows: AllocationTrendRow[] = Array.isArray(rows) ? rows : [];
+
+  const data = safeRows.map((r) => ({
     month: r.month_label,
     new_allocations: Number(r.new_allocations),
     active_allocations: Number(r.active_allocations),

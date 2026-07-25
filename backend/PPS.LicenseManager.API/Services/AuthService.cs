@@ -27,24 +27,66 @@ public class AuthService : IAuthService
 
         Console.WriteLine($"User Found: {user != null}");
 
-        if (user != null)
+        if (user == null)
         {
-            Console.WriteLine($"DB Email: {user.Email}");
-            Console.WriteLine($"Stored Hash: {user.PasswordHash}");
-
-            bool verify = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
-            Console.WriteLine($"Password Verify: {verify}");
+            Console.WriteLine("Login failed: user not found.");
+            throw new InvalidOperationException("Invalid email or password.");
         }
 
-        if (user == null)
-            throw new InvalidOperationException("Invalid email or password.");
+        Console.WriteLine($"DB Email: {user.Email}");
+        Console.WriteLine($"Role: {user.Role?.Name ?? "NULL"}");
+        Console.WriteLine($"Is Active: {user.IsActive}");
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            throw new InvalidOperationException("Invalid email or password.");
+        if (!user.IsActive)
+        {
+            Console.WriteLine("Login failed: account inactive.");
+            throw new InvalidOperationException("User account is inactive.");
+        }
 
-        var token = _jwtService.GenerateToken(user);
+        bool passwordValid;
 
-        return new LoginResponse
+        try
+        {
+            passwordValid = BCrypt.Net.BCrypt.Verify(
+                request.Password,
+                user.PasswordHash
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("BCRYPT VERIFICATION FAILED");
+            Console.WriteLine(ex.ToString());
+            throw;
+        }
+
+        Console.WriteLine($"Password Verify: {passwordValid}");
+
+        if (!passwordValid)
+        {
+            throw new InvalidOperationException(
+                "Invalid email or password."
+            );
+        }
+
+        Console.WriteLine("Generating JWT...");
+
+        string token;
+
+        try
+        {
+            token = _jwtService.GenerateToken(user);
+            Console.WriteLine("JWT generated successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("JWT GENERATION FAILED");
+            Console.WriteLine(ex.ToString());
+            throw;
+        }
+
+        Console.WriteLine("Building login response...");
+
+        var response = new LoginResponse
         {
             Token = token,
             Expiration = DateTime.UtcNow.AddMinutes(60),
@@ -52,5 +94,11 @@ public class AuthService : IAuthService
             Email = user.Email,
             Role = user.Role?.Name ?? string.Empty
         };
+
+        Console.WriteLine(
+            $"Login successful: {user.Email} / {response.Role}"
+        );
+
+        return response;
     }
 }

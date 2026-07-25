@@ -55,29 +55,34 @@ public class SoftwareService : ISoftwareService
     }
 
     public async Task<SoftwareResponse> CreateAsync(CreateSoftwareRequest request)
-    {
-        var software = new Software
-        {
-            Name = request.Name,
-            Version = request.Version,
-            Vendor = request.Vendor,
-            Category = request.Category,
-            LicenseType = request.LicenseType,
-            IsLicenseRequired = request.IsLicenseRequired,
-            Description = request.Description
-        };
-
-software.IsActive = false;
-await _context.SaveChangesAsync();
-
-var createdSoftware = await GetByIdAsync(software.Id);
-
-if (createdSoftware == null)
 {
-    throw new InvalidOperationException("Software was created but could not be retrieved.");
-}
+    var software = new Software
+    {
+        Name = request.Name,
+        Version = request.Version,
+        Vendor = request.Vendor,
+        Category = request.Category,
+        LicenseType = request.LicenseType,
+        IsLicenseRequired = request.IsLicenseRequired,
+        Description = request.Description,
+        IsActive = true
+    };
 
-return createdSoftware;
+    _context.Software.Add(software);
+
+    await _context.SaveChangesAsync();
+
+    var createdSoftware = await GetByIdAsync(software.Id);
+
+    if (createdSoftware == null)
+    {
+        throw new InvalidOperationException(
+            "Software was created but could not be retrieved."
+        );
+    }
+
+    return createdSoftware;
+
 }
     public async Task<bool> UpdateAsync(int id, UpdateSoftwareRequest request)
     {

@@ -22,6 +22,80 @@ namespace PPS.LicenseManager.API.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.AllocationRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ApprovedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BusinessJustification")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("RequestReference")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RequestedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RequiredFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RequiredTill")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SoftwareId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("RequestReference")
+                        .IsUnique();
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("SoftwareId");
+
+                    b.ToTable("AllocationRequests");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Asset", b =>
                 {
                     b.Property<int>("Id")
@@ -180,6 +254,57 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("AssetSoftwares");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Client", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Clients");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Company", b =>
                 {
                     b.Property<int>("Id")
@@ -287,6 +412,9 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LicensePurchaseId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("LicensedEmail")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -322,6 +450,8 @@ namespace PPS.LicenseManager.API.Migrations
 
                     b.HasIndex("AliasCode")
                         .IsUnique();
+
+                    b.HasIndex("LicensePurchaseId");
 
                     b.HasIndex("SoftwareId");
 
@@ -414,9 +544,76 @@ namespace PPS.LicenseManager.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClientId");
+
                     b.HasIndex("SoftwareId");
 
                     b.ToTable("LicensePurchases");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.ResourceAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ActualReturnDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AllocatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AllocatedOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AllocationReference")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpectedReturnDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LicenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocatedByUserId");
+
+                    b.HasIndex("AllocationReference")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("LicenseId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ResourceAllocations");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Role", b =>
@@ -546,8 +743,14 @@ namespace PPS.LicenseManager.API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -581,6 +784,10 @@ namespace PPS.LicenseManager.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("RoleId");
 
@@ -638,6 +845,39 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("Vendors");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.AllocationRequest", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PPS.LicenseManager.API.Models.Software", "Software")
+                        .WithMany()
+                        .HasForeignKey("SoftwareId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("RequestedByUser");
+
+                    b.Navigation("Software");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Asset", b =>
                 {
                     b.HasOne("PPS.LicenseManager.API.Models.Department", "Department")
@@ -681,33 +921,95 @@ namespace PPS.LicenseManager.API.Migrations
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.License", b =>
                 {
+                    b.HasOne("PPS.LicenseManager.API.Models.LicensePurchase", "LicensePurchase")
+                        .WithMany("Licenses")
+                        .HasForeignKey("LicensePurchaseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.Software", "Software")
                         .WithMany("Licenses")
                         .HasForeignKey("SoftwareId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("LicensePurchase");
+
                     b.Navigation("Software");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.LicensePurchase", b =>
                 {
+                    b.HasOne("PPS.LicenseManager.API.Models.Client", "Client")
+                        .WithMany("LicensePurchases")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.Software", "Software")
                         .WithMany()
                         .HasForeignKey("SoftwareId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Client");
+
                     b.Navigation("Software");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.ResourceAllocation", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "AllocatedByUser")
+                        .WithMany()
+                        .HasForeignKey("AllocatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PPS.LicenseManager.API.Models.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.License", "License")
+                        .WithMany()
+                        .HasForeignKey("LicenseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AllocatedByUser");
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("License");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.User", b =>
                 {
+                    b.HasOne("PPS.LicenseManager.API.Models.Company", "Company")
+                        .WithMany("Users")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.Department", "Department")
+                        .WithMany("Users")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Department");
 
                     b.Navigation("Role");
                 });
@@ -717,9 +1019,26 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("AssetSoftwares");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Client", b =>
+                {
+                    b.Navigation("LicensePurchases");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Company", b =>
                 {
                     b.Navigation("Departments");
+
+                    b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.Department", b =>
+                {
+                    b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.LicensePurchase", b =>
+                {
+                    b.Navigation("Licenses");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Role", b =>

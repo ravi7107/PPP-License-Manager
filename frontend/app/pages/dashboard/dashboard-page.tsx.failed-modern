@@ -1,0 +1,1325 @@
+  const kpis = getDashboardKpis();
+
+  const showActionableWidgets = canManage(roles);
+
+  /*
+   * Existing dashboard datasets.
+   * These are still using the current mock dashboard source.
+   * We can migrate these to the backend API separately.
+   */
+  const utilizationData =
+    getLicenseUtilizationChartData();
+
+  const costEntityData =
+    getCostByEntityChartData();
+
+  const costClientData =
+    getCostByClientChartData();
+
+  const departmentAssetsData =
+    getDepartmentWiseAssetsChartData();
+
+  const allocationTrendData =
+    getMonthlyAllocationTrendChartData();
+
+  const expiryTimelineData =
+    getSoftwareExpiryTimelineChartData();
+
+  const approvalTrendData =
+    getPendingApprovalTrendChartData();
+
+  const lowAvailability =
+    getLowAvailabilityLicenses();
+
+  const expiringLicenses =
+    getExpiringLicensesList();
+
+
+  /*
+   * REAL BACKEND DATA
+   *
+   * Pending allocation/license requests are now loaded
+   * from the ASP.NET Core API instead of UI Bakery SQL.
+   */
+  const [
+    allocationRequests,
+    setAllocationRequests,
+  ] = useState<AllocationRequest[]>([]);
+
+  const [
+    pendingApprovalsLoading,
+    setPendingApprovalsLoading,
+  ] = useState(true);
+
+  const [
+    pendingApprovalsError,
+    setPendingApprovalsError,
+  ] = useState<string | null>(null);
+
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRequests() {
+      try {
+        setPendingApprovalsLoading(true);
+        setPendingApprovalsError(null);
+
+        const result =
+          await getAllocationRequests();
+
+        if (!mounted) {
+          return;
+        }
+
+        /*
+         * Protect the dashboard from malformed
+         * or unexpected API responses.
+         */
+        if (Array.isArray(result)) {
+          setAllocationRequests(result);
+        } else {
+          console.error(
+            'Allocation request API did not return an array:',
+            result
+          );
+
+          setAllocationRequests([]);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load allocation requests:',
+          error
+        );
+
+        if (mounted) {
+          setAllocationRequests([]);
+
+          setPendingApprovalsError(
+            'Unable to load pending requests.'
+          );
+        }
+      } finally {
+        if (mounted) {
+          setPendingApprovalsLoading(false);
+        }
+      }
+    }
+
+    loadRequests();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+
+  /*
+   * Only Pending requests should appear on
+   * the Dashboard approval widget.
+   */
+  const pendingRequests =
+    allocationRequests.filter(
+      (request) =>
+        String(request.status ?? '')
+          .trim()
+          .toLowerCase() === 'pending'
+    );
+
+
+  /*
+   * Dashboard KPI count.
+   */
+  const pendingApprovalsCount =
+    pendingRequests.length;
+
+
+  /*
+   * Only show the latest six requests
+   * inside the dashboard widget.
+   */
+  const pendingApprovals =
+    pendingRequests.slice(0, 6);
+
+
+  /*
+   * Reuse the same API loading state
+   * for the Pending Requests KPI.
+   */
+  const pendingCountLoading =
+    pendingApprovalsLoading;
+
+
+  return (
+    <div className="flex flex-col gap-4 md:gap-6">
+
+      {/* MODERN COMMAND HEADER */}
+
+      <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm md:p-6">
+        <div className="absolute inset-x-0 top-0 h-[3px] bg-primary" />
+
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+
+              <Badge
+                variant="outline"
+                className="gap-1.5 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-50" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+
+                Operational
+              </Badge>
+
+              <Badge variant="secondary">
+                IT Operations
+              </Badge>
+
+            </div>
+
+            <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              IT Operations Overview
+            </h2>
+
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Real-time visibility into hardware assets,
+              software licensing, utilization, renewals and
+              allocation activity across PPS.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+
+            <div className="hidden text-right sm:block">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Last refreshed
+              </p>
+
+              <p className="text-sm font-medium">
+                {lastUpdated.toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={refreshDashboard}
+              className="inline-flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-sm transition-all hover:bg-accent hover:shadow"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+
+          </div>
+
+        </div>
+      </div>
+
+
+      {/* KPI CARDS */}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+
+        <KpiCard
+          title="Total Assets"
+          value={kpis.totalAssets}
+          icon={HardDrive}
+          hint="All tracked hardware"
+        />
+
+        <KpiCard
+          title="Allocated Assets"
+          value={kpis.allocatedAssets}
+          icon={PackageCheck}
+          hint="Currently in active use"
+        />
+
+        <KpiCard
+          title="Available Assets"
+          value={kpis.availableAssets}
+          icon={PackageOpen}
+          hint="Ready for assignment"
+        />
+
+        <KpiCard
+          title="Assets Under Maintenance"
+          value={kpis.assetsUnderMaintenance}
+          icon={Wrench}
+          hint="In repair / servicing"
+          tone={
+            kpis.assetsUnderMaintenance > 0
+              ? 'warning'
+              : 'default'
+          }
+        />
+
+        <KpiCard
+          title="Software Licenses"
+          value={kpis.totalLicenseSeats}
+          icon={KeySquare}
+          hint="Total seats across all software"
+        />
+
+        <KpiCard
+          title="License Utilization"
+          value={licenseUtilization}
+          suffix="%"
+          icon={Activity}
+          hint={`${usedLicenseSeats.toLocaleString(
+            'en-IN'
+          )} of ${totalLicenseSeats.toLocaleString(
+            'en-IN'
+          )} seats utilized`}
+          tone={
+            licenseUtilization >= 70
+              ? 'success'
+              : licenseUtilization >= 50
+                ? 'warning'
+                : 'danger'
+          }
+        />
+
+        <KpiCard
+          title="Available Licenses"
+          value={kpis.availableLicenseSeats}
+          icon={Share2}
+          hint="Unassigned seats in pool"
+        />
+
+
+        {/* REAL PENDING REQUEST COUNT */}
+
+        {pendingCountLoading ? (
+          <KpiCardSkeleton />
+        ) : (
+          <KpiCard
+            title="Pending Requests"
+            value={pendingApprovalsCount}
+            icon={ClipboardCheck}
+            hint={
+              pendingApprovalsError
+                ? 'Unable to load requests'
+                : 'Awaiting IT review'
+            }
+            tone={
+              pendingApprovalsCount > 0
+                ? 'warning'
+                : 'default'
+            }
+          />
+        )}
+
+
+        <KpiCard
+          title="Expiring Licenses"
+          value={kpis.expiringLicenses}
+          icon={AlertTriangle}
+          hint="Renewing within 30 days"
+          tone={
+            kpis.expiringLicenses > 0
+              ? 'danger'
+              : 'default'
+          }
+        />
+      </div>
+
+
+      {/* MANAGEMENT ATTENTION + RENEWAL OUTLOOK */}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+
+        {/* ATTENTION REQUIRED */}
+
+        <Card className="overflow-hidden xl:col-span-3">
+
+          <CardHeader className="border-b bg-muted/20">
+
+            <div className="flex items-start justify-between gap-4">
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+                    <AlertTriangle className="h-4 w-4" />
+                  </div>
+
+                  <CardTitle className="text-base">
+                    Attention Required
+                  </CardTitle>
+                </div>
+
+                <CardDescription className="mt-2">
+                  Items requiring IT review or upcoming action
+                </CardDescription>
+              </div>
+
+              <Badge
+                variant={
+                  attentionCount > 0
+                    ? 'destructive'
+                    : 'secondary'
+                }
+              >
+                {attentionCount} item
+                {attentionCount === 1 ? '' : 's'}
+              </Badge>
+
+            </div>
+
+          </CardHeader>
+
+          <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
+
+            <div className="group flex items-center gap-3 rounded-lg border p-3 transition-all hover:bg-muted/40">
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600">
+                <Clock3 className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {kpis.expiringLicenses} licenses
+                </p>
+
+                <p className="text-xs text-muted-foreground">
+                  Expiring within 30 days
+                </p>
+              </div>
+
+            </div>
+
+            <div className="group flex items-center gap-3 rounded-lg border p-3 transition-all hover:bg-muted/40">
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+                <Wrench className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {kpis.assetsUnderMaintenance} assets
+                </p>
+
+                <p className="text-xs text-muted-foreground">
+                  Currently under maintenance
+                </p>
+              </div>
+
+            </div>
+
+            <div className="group flex items-center gap-3 rounded-lg border p-3 transition-all hover:bg-muted/40">
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                <ClipboardCheck className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {pendingApprovalsCount} requests
+                </p>
+
+                <p className="text-xs text-muted-foreground">
+                  Awaiting IT review
+                </p>
+              </div>
+
+            </div>
+
+            <div className="group flex items-center gap-3 rounded-lg border p-3 transition-all hover:bg-muted/40">
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600">
+                <KeySquare className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {lowAvailability.length} software titles
+                </p>
+
+                <p className="text-xs text-muted-foreground">
+                  Low license availability
+                </p>
+              </div>
+
+            </div>
+
+          </CardContent>
+
+        </Card>
+
+        {/* RENEWAL OUTLOOK */}
+
+        <Card className="overflow-hidden xl:col-span-2">
+
+          <CardHeader className="border-b bg-muted/20">
+
+            <div className="flex items-center gap-2">
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+
+              <div>
+                <CardTitle className="text-base">
+                  Renewal Outlook
+                </CardTitle>
+
+                <CardDescription>
+                  Upcoming software expiry exposure
+                </CardDescription>
+              </div>
+
+            </div>
+
+          </CardHeader>
+
+          <CardContent className="space-y-5 p-5">
+
+            {[
+              {
+                label: 'Next 30 days',
+                value: renewalOutlook.days30,
+                width: '100%',
+                bar: 'bg-red-500',
+              },
+              {
+                label: '31–60 days',
+                value: renewalOutlook.days60,
+                width: '72%',
+                bar: 'bg-amber-500',
+              },
+              {
+                label: '61–90 days',
+                value: renewalOutlook.days90,
+                width: '48%',
+                bar: 'bg-primary',
+              },
+            ].map((row) => (
+
+              <div
+                key={row.label}
+                className="space-y-2"
+              >
+
+                <div className="flex items-center justify-between">
+
+                  <span className="text-sm text-muted-foreground">
+                    {row.label}
+                  </span>
+
+                  <span className="text-sm font-bold tabular-nums">
+                    {row.value}
+                  </span>
+
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+
+                  <div
+                    className={`h-full rounded-full ${row.bar} transition-all duration-700`}
+                    style={{
+                      width:
+                        row.value > 0
+                          ? row.width
+                          : '0%',
+                    }}
+                  />
+
+                </div>
+
+              </div>
+
+            ))}
+
+            <div className="flex items-center gap-2 rounded-lg bg-muted/40 p-3">
+
+              <ShieldCheck className="h-4 w-4 text-primary" />
+
+              <p className="text-xs text-muted-foreground">
+                Review upcoming renewals early to avoid
+                licensing interruptions.
+              </p>
+
+            </div>
+
+          </CardContent>
+
+        </Card>
+
+      </div>
+
+
+      {/* DASHBOARD CHARTS */}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+        {/* LICENSE UTILIZATION */}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              License Utilization
+            </CardTitle>
+
+            <CardDescription>
+              Seats used vs. available per software title
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <ChartContainer
+              config={utilizationConfig}
+              className="h-72 w-full"
+            >
+              <BarChart data={utilizationData}>
+
+                <CartesianGrid vertical={false} />
+
+                <XAxis
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={0}
+                  angle={-20}
+                  textAnchor="end"
+                  height={60}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="used"
+                  stackId="a"
+                  fill="var(--color-used)"
+                  radius={[0, 0, 4, 4]}
+                />
+
+                <Bar
+                  dataKey="available"
+                  stackId="a"
+                  fill="var(--color-available)"
+                  radius={[4, 4, 0, 0]}
+                />
+
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+
+        {/* COST BY ENTITY */}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Software Cost by Entity
+            </CardTitle>
+
+            <CardDescription>
+              Annual license spend allocated by business entity
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={costEntityConfig}
+              className="h-64 w-full"
+            >
+              <PieChart>
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Pie
+                  data={costEntityData}
+                  dataKey="cost"
+                  nameKey="entity"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={2}
+                >
+
+                  {costEntityData.map(
+                    (_, index) => (
+                      <Cell
+                        key={index}
+                        fill={
+                          PIE_COLORS[
+                            index %
+                              PIE_COLORS.length
+                          ]
+                        }
+                      />
+                    )
+                  )}
+
+                </Pie>
+
+              </PieChart>
+            </ChartContainer>
+
+
+            <ul className="mt-3 space-y-1.5">
+
+              {costEntityData.map(
+                (row, index) => (
+
+                  <li
+                    key={row.entity}
+                    className="flex items-center justify-between text-sm"
+                  >
+
+                    <span className="flex items-center gap-2">
+
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                        style={{
+                          backgroundColor:
+                            PIE_COLORS[
+                              index %
+                                PIE_COLORS.length
+                            ],
+                        }}
+                      />
+
+                      <span className="text-muted-foreground">
+                        {row.entity}
+                      </span>
+
+                    </span>
+
+                    <span className="font-semibold tabular-nums">
+                      ₹{Number(row.cost).toLocaleString('en-IN')}
+                    </span>
+
+                  </li>
+                )
+              )}
+
+            </ul>
+
+          </CardContent>
+        </Card>
+
+
+        {/* COST BY CLIENT */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Software Cost by Client
+            </CardTitle>
+
+            <CardDescription>
+              Annual license spend allocated by client project
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={costClientConfig}
+              className="h-64 w-full"
+            >
+
+              <PieChart>
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Pie
+                  data={costClientData}
+                  dataKey="cost"
+                  nameKey="client"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={2}
+                >
+
+                  {costClientData.map(
+                    (_, index) => (
+                      <Cell
+                        key={index}
+                        fill={
+                          PIE_COLORS[
+                            index %
+                              PIE_COLORS.length
+                          ]
+                        }
+                      />
+                    )
+                  )}
+
+                </Pie>
+
+              </PieChart>
+
+            </ChartContainer>
+
+
+            <ul className="mt-3 space-y-1.5">
+
+              {costClientData.map(
+                (row, index) => (
+
+                  <li
+                    key={row.client}
+                    className="flex items-center justify-between text-sm"
+                  >
+
+                    <span className="flex items-center gap-2">
+
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                        style={{
+                          backgroundColor:
+                            PIE_COLORS[
+                              index %
+                                PIE_COLORS.length
+                            ],
+                        }}
+                      />
+
+                      <span className="text-muted-foreground">
+                        {row.client}
+                      </span>
+
+                    </span>
+
+                    <span className="font-semibold tabular-nums">
+                      ₹{Number(row.cost).toLocaleString('en-IN')}
+                    </span>
+
+                  </li>
+                )
+              )}
+
+            </ul>
+
+          </CardContent>
+        </Card>
+
+
+        {/* DEPARTMENT ASSETS */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Department-wise Assets
+            </CardTitle>
+
+            <CardDescription>
+              Hardware asset distribution by team/department
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={departmentAssetsConfig}
+              className="h-72 w-full"
+            >
+
+              <BarChart
+                data={departmentAssetsData}
+              >
+
+                <CartesianGrid vertical={false} />
+
+                <XAxis
+                  dataKey="department"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={0}
+                  angle={-15}
+                  textAnchor="end"
+                  height={55}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="count"
+                  fill="var(--color-count)"
+                  radius={[4, 4, 0, 0]}
+                />
+
+              </BarChart>
+
+            </ChartContainer>
+
+          </CardContent>
+        </Card>
+
+
+        {/* MONTHLY ALLOCATION TREND */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Monthly Allocation Trend
+            </CardTitle>
+
+            <CardDescription>
+              License seats allocated per month
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={allocationTrendConfig}
+              className="h-72 w-full"
+            >
+
+              <LineChart
+                data={allocationTrendData}
+              >
+
+                <CartesianGrid vertical={false} />
+
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="allocations"
+                  stroke="var(--color-allocations)"
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 6 }}
+                  animationDuration={900}
+                />
+
+              </LineChart>
+
+            </ChartContainer>
+
+          </CardContent>
+        </Card>
+
+
+        {/* APPROVAL TREND */}
+
+        <Card>
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Pending Approval Trend
+            </CardTitle>
+
+            <CardDescription>
+              Open requests awaiting decision,
+              month over month
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={approvalTrendConfig}
+              className="h-72 w-full"
+            >
+
+              <LineChart
+                data={approvalTrendData}
+              >
+
+                <CartesianGrid vertical={false} />
+
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                />
+
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="pending"
+                  stroke="var(--color-pending)"
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 6 }}
+                  animationDuration={800}
+                />
+
+              </LineChart>
+
+            </ChartContainer>
+
+          </CardContent>
+        </Card>
+
+
+        {/* SOFTWARE EXPIRY */}
+
+        <Card className="lg:col-span-2">
+
+          <CardHeader>
+
+            <CardTitle className="text-base">
+              Software Expiry Timeline
+            </CardTitle>
+
+            <CardDescription>
+              Days remaining until each license
+              renews or expires
+            </CardDescription>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <ChartContainer
+              config={expiryTimelineConfig}
+              className="h-72 w-full"
+            >
+
+              <BarChart
+                data={expiryTimelineData}
+                layout="vertical"
+                margin={{ left: 16 }}
+              >
+
+                <CartesianGrid
+                  horizontal={false}
+                />
+
+                <XAxis
+                  type="number"
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  width={110}
+                  fontSize={11}
+                />
+
+                <ChartTooltip
+                  content={<ChartTooltipContent />}
+                />
+
+                <Bar
+                  dataKey="daysToExpiry"
+                  fill="var(--color-daysToExpiry)"
+                  radius={[0, 4, 4, 0]}
+                >
+
+                  <LabelList
+                    dataKey="daysToExpiry"
+                    position="right"
+                    fontSize={11}
+                  />
+
+                </Bar>
+
+              </BarChart>
+
+            </ChartContainer>
+
+          </CardContent>
+
+        </Card>
+
+      </div>
+
+
+      {/* ACTIONABLE ADMIN WIDGETS */}
+
+      {showActionableWidgets && (
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+
+          {/* REAL PENDING APPROVALS */}
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle className="text-base">
+                Pending Approvals
+              </CardTitle>
+
+              <CardDescription>
+                Requests awaiting your review
+              </CardDescription>
+
+            </CardHeader>
+
+
+            <CardContent className="flex flex-col gap-3">
+
+
+              {pendingApprovalsLoading && (
+
+                <p className="text-sm text-muted-foreground">
+                  Loading pending requests…
+                </p>
+
+              )}
+
+
+              {!pendingApprovalsLoading &&
+                pendingApprovalsError && (
+
+                  <p className="text-sm text-destructive">
+                    {pendingApprovalsError}
+                  </p>
+
+                )}
+
+
+              {!pendingApprovalsLoading &&
+                !pendingApprovalsError &&
+                pendingApprovals.length === 0 && (
+
+                  <p className="text-sm text-muted-foreground">
+                    No pending requests.
+                  </p>
+
+                )}
+
+
+              {!pendingApprovalsLoading &&
+                !pendingApprovalsError &&
+                pendingApprovals.map(
+                  (req) => (
+
+                    <div
+                      key={req.id}
+                      className="flex items-center justify-between gap-3 rounded-md border p-3"
+                    >
+
+                      <div className="min-w-0">
+
+                        <p className="truncate text-sm font-medium">
+                          {req.softwareName ||
+                            'Software allocation request'}
+                        </p>
+
+
+                        <p className="text-xs text-muted-foreground">
+
+                          {req.requestedByUserName ||
+                            'Unknown user'}
+
+                          {req.requestReference
+                            ? ` · ${req.requestReference}`
+                            : ''}
+
+                        </p>
+
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+
+                          Required from:{' '}
+
+                          {req.requiredFrom
+                            ? new Date(
+                                req.requiredFrom
+                              ).toLocaleDateString()
+                            : '—'}
+
+                        </p>
+
+                      </div>
+
+
+                      <Badge
+                        variant={
+                          String(
+                            req.priority ?? ''
+                          ).toLowerCase() ===
+                          'high'
+                            ? 'destructive'
+                            : 'outline'
+                        }
+                      >
+
+                        {req.priority ||
+                          'Normal'}
+
+                      </Badge>
+
+                    </div>
+
+                  )
+                )}
+
+            </CardContent>
+
+          </Card>
+
+
+          {/* LOW AVAILABILITY / EXPIRING */}
+
+          <Card>
+
+            <CardHeader>
+
+              <CardTitle className="text-base">
+                Low Availability &amp; Expiring Licenses
+              </CardTitle>
+
+              <CardDescription>
+                Licenses needing attention soon
+              </CardDescription>
+
+            </CardHeader>
+
+
+            <CardContent className="flex flex-col gap-3">
+
+
+              {lowAvailability.map((l) => (
+
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between rounded-md border p-3"
+                >
+
+                  <div>
+
+                    <p className="text-sm font-medium">
+                      {l.softwareName}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+
+                      {l.totalSeats -
+                        l.seatsUsed}{' '}
+
+                      seat(s) left of{' '}
+
+                      {l.totalSeats}
+
+                    </p>
+
+                  </div>
+
+
+                  <Badge variant="secondary">
+                    Low availability
+                  </Badge>
+
+                </div>
+
+              ))}
+
+
+              {expiringLicenses.map((l) => (
+
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between rounded-md border p-3"
+                >
+
+                  <div>
+
+                    <p className="text-sm font-medium">
+                      {l.softwareName}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      Renews {l.renewalDate}
+                    </p>
+
+                  </div>
+
+
+                  <Badge variant="destructive">
+                    Expiring soon
+                  </Badge>
+
+                </div>
+
+              ))}
+
+
+              {lowAvailability.length === 0 &&
+                expiringLicenses.length === 0 && (
+
+                  <p className="text-sm text-muted-foreground">
+                    No licenses need attention right now.
+                  </p>
+
+                )}
+
+            </CardContent>
+
+          </Card>
+
+        </div>
+
+      )}
+
+    </div>
+  );
+}

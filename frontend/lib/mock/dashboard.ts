@@ -1,102 +1,109 @@
-import { hardwareAssets } from '@/lib/mock/hardware';
-import { softwareLicenses } from '@/lib/mock/licenses';
-import { allocations } from '@/lib/mock/allocations';
-import { licenseRequests } from '@/lib/mock/requests';
-import { costByEntity, costByClient } from '@/lib/mock/entities-clients';
-import { monthlyAllocationTrend, pendingApprovalTrend } from '@/lib/mock/trends';
-
-export function daysBetween(dateStr: string, from: Date = new Date()): number {
-  const target = new Date(dateStr).getTime();
-  const diff = target - from.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
 export function getDashboardKpis() {
-  const totalAssets = hardwareAssets.length;
-  const allocatedAssets = hardwareAssets.filter((a) => a.status === 'Active').length;
-  const availableAssets = hardwareAssets.filter((a) => a.status !== 'Active' && a.status !== 'Retired' && a.status !== 'Decommissioned').length;
-  const assetsUnderMaintenance = hardwareAssets.filter((a) => a.status === 'In Repair').length;
-
-  const totalLicenseSeats = softwareLicenses.reduce((sum, l) => sum + l.totalSeats, 0);
-  const usedLicenseSeats = softwareLicenses.reduce((sum, l) => sum + l.seatsUsed, 0);
-  const availableLicenseSeats = totalLicenseSeats - usedLicenseSeats;
-
-  const activeAllocations = allocations.filter((a) => a.status !== 'Pending Return').length;
-  const pendingApprovals = licenseRequests.filter((r) => r.status === 'Pending').length;
-  const expiringLicenses = softwareLicenses.filter((l) => daysBetween(l.renewalDate) <= 30 && daysBetween(l.renewalDate) >= 0).length;
-
   return {
-    totalAssets,
-    allocatedAssets,
-    availableAssets,
-    assetsUnderMaintenance,
-    totalLicenseSeats,
-    availableLicenseSeats,
-    activeAllocations,
-    pendingApprovals,
-    expiringLicenses,
+    totalAssets: 420,
+    allocatedAssets: 318,
+    availableAssets: 92,
+    assetsUnderMaintenance: 10,
+    totalLicenseSeats: 850,
+    availableLicenseSeats: 180,
+    expiringLicenses: 6,
   };
 }
 
 export function getLicenseUtilizationChartData() {
-  return softwareLicenses.map((l) => ({
-    name: l.softwareName,
-    used: l.seatsUsed,
-    available: l.totalSeats - l.seatsUsed,
-  }));
-}
-
-export function getCostByDepartmentChartData() {
-  const byDept = new Map<string, number>();
-  for (const l of softwareLicenses) {
-    byDept.set(l.department, (byDept.get(l.department) ?? 0) + l.cost);
-  }
-  return Array.from(byDept.entries()).map(([department, cost]) => ({ department, cost }));
+  return [
+    { name: "AutoCAD", used: 42, available: 8 },
+    { name: "Revit", used: 18, available: 7 },
+    { name: "Tekla", used: 24, available: 6 },
+    { name: "Navisworks", used: 10, available: 5 },
+  ];
 }
 
 export function getCostByEntityChartData() {
-  return costByEntity;
+  return [
+    { entity: "Engineering", cost: 120000 },
+    { entity: "Projects", cost: 85000 },
+    { entity: "Corporate", cost: 40000 },
+  ];
 }
 
 export function getCostByClientChartData() {
-  return costByClient;
+  return [
+    { client: "Client A", cost: 95000 },
+    { client: "Client B", cost: 70000 },
+    { client: "Internal", cost: 80000 },
+  ];
 }
 
 export function getDepartmentWiseAssetsChartData() {
-  const byTeam = new Map<string, number>();
-  for (const a of hardwareAssets) {
-    byTeam.set(a.team, (byTeam.get(a.team) ?? 0) + 1);
-  }
-  return Array.from(byTeam.entries()).map(([department, count]) => ({ department, count }));
+  return [
+    { department: "Engineering", count: 120 },
+    { department: "Design", count: 80 },
+    { department: "IT", count: 35 },
+    { department: "Finance", count: 18 },
+    { department: "HR", count: 12 },
+  ];
 }
 
 export function getMonthlyAllocationTrendChartData() {
-  return monthlyAllocationTrend;
+  return [
+    { month: "Jan", allocations: 15 },
+    { month: "Feb", allocations: 18 },
+    { month: "Mar", allocations: 20 },
+    { month: "Apr", allocations: 24 },
+    { month: "May", allocations: 21 },
+    { month: "Jun", allocations: 27 },
+  ];
 }
 
 export function getPendingApprovalTrendChartData() {
-  return pendingApprovalTrend;
+  return [
+    { month: "Jan", pending: 5 },
+    { month: "Feb", pending: 4 },
+    { month: "Mar", pending: 7 },
+    { month: "Apr", pending: 6 },
+    { month: "May", pending: 3 },
+    { month: "Jun", pending: 2 },
+  ];
 }
 
 export function getSoftwareExpiryTimelineChartData() {
-  return softwareLicenses
-    .map((l) => ({ name: l.softwareName, daysToExpiry: Math.max(daysBetween(l.renewalDate), 0) }))
-    .sort((a, b) => a.daysToExpiry - b.daysToExpiry);
+  return [
+    { name: "AutoCAD", daysToExpiry: 18 },
+    { name: "Revit", daysToExpiry: 35 },
+    { name: "Tekla", daysToExpiry: 52 },
+    { name: "Navisworks", daysToExpiry: 70 },
+  ];
 }
 
-export function getLowAvailabilityLicenses(thresholdPct = 15) {
-  return softwareLicenses.filter((l) => {
-    const availablePct = ((l.totalSeats - l.seatsUsed) / l.totalSeats) * 100;
-    return availablePct <= thresholdPct;
-  });
+export function getLowAvailabilityLicenses() {
+  return [
+    {
+      id: 1,
+      softwareName: "AutoCAD",
+      totalSeats: 50,
+      seatsUsed: 48,
+    },
+    {
+      id: 2,
+      softwareName: "Revit",
+      totalSeats: 25,
+      seatsUsed: 24,
+    },
+  ];
 }
 
-export function getPendingApprovalsList() {
-  return licenseRequests.filter((r) => r.status === 'Pending');
-}
-
-export function getExpiringLicensesList(withinDays = 30) {
-  return softwareLicenses
-    .filter((l) => daysBetween(l.renewalDate) <= withinDays && daysBetween(l.renewalDate) >= 0)
-    .sort((a, b) => daysBetween(a.renewalDate) - daysBetween(b.renewalDate));
+export function getExpiringLicensesList() {
+  return [
+    {
+      id: 1,
+      softwareName: "AutoCAD",
+      renewalDate: "2026-08-10",
+    },
+    {
+      id: 2,
+      softwareName: "Tekla",
+      renewalDate: "2026-08-25",
+    },
+  ];
 }

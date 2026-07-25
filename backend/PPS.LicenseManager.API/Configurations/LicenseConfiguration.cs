@@ -37,5 +37,12 @@ public class LicenseConfiguration : IEntityTypeConfiguration<License>
                .WithMany(x => x.Licenses)
                .HasForeignKey(x => x.SoftwareId)
                .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.LicensePurchase)
+               .WithMany(x => x.Licenses)
+               .HasForeignKey(x => x.LicensePurchaseId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => x.LicensePurchaseId);
     }
 }

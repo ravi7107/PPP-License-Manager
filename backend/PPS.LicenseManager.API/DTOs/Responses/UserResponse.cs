@@ -12,8 +12,15 @@ public class UserResponse
 
     public string Role { get; set; } = string.Empty;
 
+    public int? CompanyId { get; set; }
+
+    public string? CompanyName { get; set; }
+
+    public int? DepartmentId { get; set; }
+
+    public string? DepartmentName { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }
 }
-

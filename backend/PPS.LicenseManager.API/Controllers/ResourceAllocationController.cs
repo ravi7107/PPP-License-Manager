@@ -1,0 +1,83 @@
+using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.DTOs.ResourceAllocation;
+using PPS.LicenseManager.API.Services.Interfaces;
+
+
+namespace PPS.LicenseManager.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ResourceAllocationController : ControllerBase
+{
+    private readonly IResourceAllocationService _resourceAllocationService;
+
+    public ResourceAllocationController(IResourceAllocationService resourceAllocationService)
+    {
+        _resourceAllocationService = resourceAllocationService;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        var allocations = await _resourceAllocationService.GetAllAsync();
+        return Ok(allocations);
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var allocation = await _resourceAllocationService.GetByIdAsync(id);
+
+        if (allocation == null)
+            return NotFound();
+
+        return Ok(allocation);
+    }
+
+[HttpPost("{id}/release")]
+public async Task<IActionResult> Release(int id, ReleaseResourceAllocationRequest request)
+{
+    var released = await _resourceAllocationService.ReleaseAsync(id, request);
+
+    if (!released)
+        return NotFound();
+
+    return Ok(new
+    {
+        Success = true,
+        Message = "License released successfully."
+    });
+}
+
+    [HttpPost]
+    public async Task<IActionResult> Create(CreateResourceAllocationRequest request)
+    {
+        var allocation = await _resourceAllocationService.CreateAsync(request);
+
+        return CreatedAtAction(nameof(GetById),
+            new { id = allocation.Id },
+            allocation);
+    }
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(int id, UpdateResourceAllocationRequest request)
+    {
+        var allocation = await _resourceAllocationService.UpdateAsync(id, request);
+
+        if (allocation == null)
+            return NotFound();
+
+        return Ok(allocation);
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var deleted = await _resourceAllocationService.DeleteAsync(id);
+
+        if (!deleted)
+            return NotFound();
+
+        return NoContent();
+    }
+}

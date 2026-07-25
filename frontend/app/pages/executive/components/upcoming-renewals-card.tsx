@@ -11,7 +11,9 @@ function renewalTone(days: number | null): 'destructive' | 'secondary' | 'outlin
   return 'outline';
 }
 
-export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] }) {
+export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] | unknown }) {
+  const safeRows: UpcomingRenewalRow[] = Array.isArray(rows) ? rows : [];
+
   return (
     <Card>
       <CardHeader>
@@ -31,14 +33,14 @@ export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.length === 0 && (
+            {safeRows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                   No renewals due in the next 90 days.
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((r) => (
+            {safeRows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="font-medium">
                   {r.software_name}
@@ -46,7 +48,7 @@ export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] }) {
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{r.entity_name ?? r.client_name ?? '—'}</TableCell>
                 <TableCell>{r.total_seats}</TableCell>
-                <TableCell>${Number(r.cost ?? 0).toLocaleString()}</TableCell>
+                <TableCell>₹{Number(r.cost ?? 0).toLocaleString('en-IN')}</TableCell>
                 <TableCell>{r.expiry_date ?? '—'}</TableCell>
                 <TableCell className="text-right">
                   <Badge variant={renewalTone(r.days_to_expiry)}>

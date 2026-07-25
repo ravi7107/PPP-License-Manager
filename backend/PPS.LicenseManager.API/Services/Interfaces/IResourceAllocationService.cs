@@ -1,0 +1,14 @@
+using PPS.LicenseManager.API.DTOs.ResourceAllocation;
+
+namespace PPS.LicenseManager.API.Services.Interfaces
+{
+    public interface IResourceAllocationService
+    {
+        Task<IEnumerable<ResourceAllocationResponse>> GetAllAsync();
+        Task<ResourceAllocationResponse?> GetByIdAsync(int id);
+        Task<ResourceAllocationResponse> CreateAsync(CreateResourceAllocationRequest request);
+        Task<ResourceAllocationResponse?> UpdateAsync(int id, UpdateResourceAllocationRequest request);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> ReleaseAsync(int id, ReleaseResourceAllocationRequest request);
+    }
+}

@@ -13,7 +13,7 @@ export function ExecutiveKpiCards({ summary }: { summary: InvestmentSummaryRow |
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <KpiCard
         title="Current Software Investment"
-        value={`$${totalInvestment.toLocaleString()}`}
+        value={`₹${totalInvestment.toLocaleString('en-IN')}`}
         icon={DollarSign}
         hint={`Across ${summary?.active_software_count ?? 0} active titles`}
       />
@@ -26,7 +26,7 @@ export function ExecutiveKpiCards({ summary }: { summary: InvestmentSummaryRow |
       />
       <KpiCard
         title="Unused License Cost"
-        value={`$${unusedCost.toLocaleString()}`}
+        value={`₹${unusedCost.toLocaleString('en-IN')}`}
         icon={TrendingDown}
         hint="Spend tied to idle seats"
         tone={unusedCost > 0 ? 'danger' : 'default'}

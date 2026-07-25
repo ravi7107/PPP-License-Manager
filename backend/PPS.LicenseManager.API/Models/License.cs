@@ -15,6 +15,12 @@ public class License
 
     public Software Software { get; set; } = null!;
 
+    // Commercial purchase/batch this license belongs to.
+    // Nullable initially for flexibility and safe migration.
+    public int? LicensePurchaseId { get; set; }
+
+    public LicensePurchase? LicensePurchase { get; set; }
+
     [Required]
     [MaxLength(100)]
     public string LicensedEmail { get; set; } = string.Empty;

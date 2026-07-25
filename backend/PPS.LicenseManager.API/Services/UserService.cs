@@ -1,5 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Common;
-using BCrypt.Net;
+using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.Requests;
 using PPS.LicenseManager.API.DTOs.Responses;
 using PPS.LicenseManager.API.Interfaces;
@@ -11,37 +12,35 @@ namespace PPS.LicenseManager.API.Services;
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly ApplicationDbContext _context;
 
-    public UserService(IUserRepository userRepository)
+    public UserService(
+        IUserRepository userRepository,
+        ApplicationDbContext context)
     {
         _userRepository = userRepository;
+        _context = context;
     }
 
-    public async Task<PagedResponse<UserResponse>> GetAllAsync(UserSearchRequest request)
-{
-    var result = await _userRepository.SearchAsync(
-        request.Search,
-        request.Page,
-        request.PageSize);
-
-    return new PagedResponse<UserResponse>
+    public async Task<PagedResponse<UserResponse>> GetAllAsync(
+        UserSearchRequest request)
     {
-        Items = result.Users.Select(u => new UserResponse
-        {
-            Id = u.Id,
-            FullName = u.FullName,
-            EmployeeCode = u.EmployeeCode,
-            Email = u.Email,
-            Role = u.Role?.Name ?? string.Empty,
-            IsActive = u.IsActive,
-            CreatedAt = u.CreatedAt
-        }).ToList(),
+        var result = await _userRepository.SearchAsync(
+            request.Search,
+            request.Page,
+            request.PageSize);
 
-        Page = request.Page,
-        PageSize = request.PageSize,
-        TotalRecords = result.TotalRecords
-    };
-}
+        return new PagedResponse<UserResponse>
+        {
+            Items = result.Users
+                .Select(MapUser)
+                .ToList(),
+
+            Page = request.Page,
+            PageSize = request.PageSize,
+            TotalRecords = result.TotalRecords
+        };
+    }
 
     public async Task<UserResponse?> GetByIdAsync(int id)
     {
@@ -50,35 +49,42 @@ public class UserService : IUserService
         if (user == null)
             return null;
 
-        return new UserResponse
-        {
-            Id = user.Id,
-            FullName = user.FullName,
-            EmployeeCode = user.EmployeeCode,
-            Email = user.Email,
-            Role = user.Role?.Name ?? string.Empty,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt
-        };
+        return MapUser(user);
     }
 
-    public async Task<UserResponse> CreateAsync(CreateUserRequest request)
+    public async Task<UserResponse> CreateAsync(
+        CreateUserRequest request)
     {
-        // Check duplicate email
-        if (await _userRepository.GetByEmailAsync(request.Email) != null)
-            throw new InvalidOperationException("Email already exists.");
+        if (await _userRepository.GetByEmailAsync(
+                request.Email.Trim()) != null)
+        {
+            throw new InvalidOperationException(
+                "Email already exists.");
+        }
 
-        // Check duplicate employee code
-        if (await _userRepository.GetByEmployeeCodeAsync(request.EmployeeCode) != null)
-            throw new InvalidOperationException("Employee Code already exists.");
+        if (await _userRepository.GetByEmployeeCodeAsync(
+                request.EmployeeCode.Trim()) != null)
+        {
+            throw new InvalidOperationException(
+                "Employee Code already exists.");
+        }
+
+        await ValidateOrganizationAsync(
+            request.CompanyId,
+            request.DepartmentId);
+
+        await ValidateRoleAsync(request.RoleId);
 
         var user = new User
         {
-            FullName = request.FullName,
-            EmployeeCode = request.EmployeeCode,
-            Email = request.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            FullName = request.FullName.Trim(),
+            EmployeeCode = request.EmployeeCode.Trim(),
+            Email = request.Email.Trim(),
+            PasswordHash =
+                BCrypt.Net.BCrypt.HashPassword(request.Password),
             RoleId = request.RoleId,
+            CompanyId = request.CompanyId,
+            DepartmentId = request.DepartmentId,
             IsActive = request.IsActive,
             CreatedAt = DateTime.UtcNow
         };
@@ -86,9 +92,159 @@ public class UserService : IUserService
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
 
-        // Reload user with Role
-        user = await _userRepository.GetByIdAsync(user.Id) ?? user;
+        user = await _userRepository.GetByIdAsync(user.Id)
+            ?? user;
 
+        return MapUser(user);
+    }
+
+    public async Task<UserResponse> UpdateAsync(
+        int id,
+        UpdateUserRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+            throw new InvalidOperationException(
+                "User not found.");
+
+        var email = request.Email.Trim();
+        var employeeCode = request.EmployeeCode.Trim();
+
+        var existingEmail =
+            await _userRepository.GetByEmailAsync(email);
+
+        if (existingEmail != null &&
+            existingEmail.Id != id)
+        {
+            throw new InvalidOperationException(
+                "Email already exists.");
+        }
+
+        var existingEmployee =
+            await _userRepository.GetByEmployeeCodeAsync(
+                employeeCode);
+
+        if (existingEmployee != null &&
+            existingEmployee.Id != id)
+        {
+            throw new InvalidOperationException(
+                "Employee Code already exists.");
+        }
+
+        await ValidateOrganizationAsync(
+            request.CompanyId,
+            request.DepartmentId);
+
+        await ValidateRoleAsync(request.RoleId);
+
+        user.FullName = request.FullName.Trim();
+        user.EmployeeCode = employeeCode;
+        user.Email = email;
+        user.RoleId = request.RoleId;
+        user.CompanyId = request.CompanyId;
+        user.DepartmentId = request.DepartmentId;
+        user.IsActive = request.IsActive;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
+
+        user = await _userRepository.GetByIdAsync(id)
+            ?? user;
+
+        return MapUser(user);
+    }
+
+    public async Task ResetPasswordAsync(
+        int id,
+        ResetPasswordRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+            throw new KeyNotFoundException(
+                "User not found.");
+
+        user.PasswordHash =
+            BCrypt.Net.BCrypt.HashPassword(
+                request.NewPassword);
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
+    }
+
+    private async Task ValidateOrganizationAsync(
+        int? companyId,
+        int? departmentId)
+    {
+        // Existing system/admin accounts are allowed
+        // to remain without organizational assignment.
+        if (companyId == null && departmentId == null)
+            return;
+
+        // Prevent partial assignment.
+        if (companyId == null || departmentId == null)
+        {
+            throw new InvalidOperationException(
+                "Both entity and department must be selected.");
+        }
+
+        var companyExists = await _context.Companies
+            .AsNoTracking()
+            .AnyAsync(c =>
+                c.Id == companyId.Value &&
+                c.IsActive);
+
+        if (!companyExists)
+        {
+            throw new InvalidOperationException(
+                "Selected entity does not exist or is inactive.");
+        }
+
+        var department = await _context.Departments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d =>
+                d.Id == departmentId.Value);
+
+        if (department == null)
+        {
+            throw new InvalidOperationException(
+                "Selected department does not exist.");
+        }
+
+        if (!department.IsActive)
+        {
+            throw new InvalidOperationException(
+                "Selected department is inactive.");
+        }
+
+        if (department.CompanyId != companyId.Value)
+        {
+            throw new InvalidOperationException(
+                "Selected department does not belong to the selected entity.");
+        }
+    }
+
+    private async Task ValidateRoleAsync(int roleId)
+    {
+        var roleExists = await _context.Roles
+            .AsNoTracking()
+            .AnyAsync(r =>
+                r.Id == roleId &&
+                r.IsActive);
+
+        if (!roleExists)
+        {
+            throw new InvalidOperationException(
+                "Selected role does not exist or is inactive.");
+        }
+    }
+
+    private static UserResponse MapUser(User user)
+    {
         return new UserResponse
         {
             Id = user.Id,
@@ -96,63 +252,16 @@ public class UserService : IUserService
             EmployeeCode = user.EmployeeCode,
             Email = user.Email,
             Role = user.Role?.Name ?? string.Empty,
+
+            CompanyId = user.CompanyId,
+            CompanyName = user.Company?.Name,
+
+            DepartmentId = user.DepartmentId,
+            DepartmentName =
+                user.Department?.DepartmentName,
+
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
         };
     }
-public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
-{
-    var user = await _userRepository.GetByIdAsync(id);
-
-    if (user == null)
-        throw new InvalidOperationException("User not found.");
-
-    // Check duplicate email
-    var existingEmail = await _userRepository.GetByEmailAsync(request.Email);
-    if (existingEmail != null && existingEmail.Id != id)
-        throw new InvalidOperationException("Email already exists.");
-
-    // Check duplicate employee code
-    var existingEmployee = await _userRepository.GetByEmployeeCodeAsync(request.EmployeeCode);
-    if (existingEmployee != null && existingEmployee.Id != id)
-        throw new InvalidOperationException("Employee Code already exists.");
-
-    user.FullName = request.FullName;
-    user.EmployeeCode = request.EmployeeCode;
-    user.Email = request.Email;
-    user.RoleId = request.RoleId;
-    user.IsActive = request.IsActive;
-
-    await _userRepository.UpdateAsync(user);
-    await _userRepository.SaveChangesAsync();
-
-    user = await _userRepository.GetByIdAsync(id) ?? user;
-
-    return new UserResponse
-    {
-        Id = user.Id,
-        FullName = user.FullName,
-        EmployeeCode = user.EmployeeCode,
-        Email = user.Email,
-        Role = user.Role?.Name ?? string.Empty,
-        IsActive = user.IsActive,
-        CreatedAt = user.CreatedAt
-    };
 }
-
-public async Task ResetPasswordAsync(int id, ResetPasswordRequest request)
-{
-    var user = await _userRepository.GetByIdAsync(id);
-
-    if (user == null)
-    {
-        throw new KeyNotFoundException("User not found.");
-    }
-
-    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-
-    await _userRepository.UpdateAsync(user);
-    await _userRepository.SaveChangesAsync();
-}
-}
-

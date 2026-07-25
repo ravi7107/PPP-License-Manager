@@ -4,12 +4,14 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from '
 import { DepartmentEfficiencyRow } from '@/app/pages/executive/types';
 
 const config: ChartConfig = {
-  cost_per_employee: { label: 'Cost / Employee ($)', color: 'var(--chart-3)' },
+  cost_per_employee: { label: 'Cost / Employee (₹)', color: 'var(--chart-3)' },
   assets_per_employee: { label: 'Assets / Employee', color: 'var(--chart-4)' },
 };
 
-export function DepartmentEfficiencyChart({ rows }: { rows: DepartmentEfficiencyRow[] }) {
-  const data = rows.map((r) => ({
+export function DepartmentEfficiencyChart({ rows }: { rows: DepartmentEfficiencyRow[] | unknown }) {
+  const safeRows: DepartmentEfficiencyRow[] = Array.isArray(rows) ? rows : [];
+
+  const data = safeRows.map((r) => ({
     department: r.department_name,
     cost_per_employee: Number(r.cost_per_employee),
     assets_per_employee: Number(r.assets_per_employee),

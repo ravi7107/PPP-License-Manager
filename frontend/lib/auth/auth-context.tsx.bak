@@ -1,0 +1,79 @@
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { login as loginApi } from "@/lib/api/auth.api";
+import { AuthStorage } from "./auth-storage";
+
+interface User {
+  fullName: string;
+  email: string;
+  role: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+  isAuthenticated: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>(null!);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const existing = AuthStorage.getUser();
+
+    if (existing) {
+      setUser(existing);
+    }
+
+    setLoading(false);
+  }, []);
+
+  async function login(email: string, password: string) {
+    const response = await loginApi({ email, password });
+
+    AuthStorage.set(response.token, {
+      fullName: response.fullName,
+      email: response.email,
+      role: response.role,
+    });
+
+    setUser({
+      fullName: response.fullName,
+      email: response.email,
+      role: response.role,
+    });
+  }
+
+  function logout() {
+    AuthStorage.clear();
+    setUser(null);
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}

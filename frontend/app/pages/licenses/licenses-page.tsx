@@ -1,340 +1,498 @@
-import { useMemo, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
-import { Plus, Search, Pencil, Trash2, Eye, KeySquare, PackageCheck, PackageOpen, DollarSign, AlertTriangle, Wrench, Gauge, Download, Upload } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { KpiCard } from '@/components/layout/kpi-card';
-import { AppRole, canManage } from '@/lib/auth/roles';
-import loadSoftwareInventory from '@/actions/software/loadSoftwareInventory';
-import loadSoftwareStats from '@/actions/software/loadSoftwareStats';
-import loadEntityOptions from '@/actions/lookups/loadEntityOptions';
-import loadClientOptions from '@/actions/lookups/loadClientOptions';
-import createSoftwareInventory from '@/actions/software/createSoftwareInventory';
-import updateSoftwareInventory from '@/actions/software/updateSoftwareInventory';
-import deleteSoftwareInventory from '@/actions/software/deleteSoftwareInventory';
-import { SoftwareFormDialog } from '@/app/pages/licenses/components/software-form-dialog';
-import { SoftwareViewDialog } from '@/app/pages/licenses/components/software-view-dialog';
-import { SoftwareDeleteDialog } from '@/app/pages/licenses/components/software-delete-dialog';
-import { SoftwareImportDialog } from '@/app/pages/licenses/components/software-import-dialog';
-import { SoftwareFormValues, SoftwareInventoryRecord, SoftwareStats } from '@/app/pages/licenses/types';
-import { exportSoftwareToExcel, ImportedSoftwareRow } from '@/lib/utils/software-excel';
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  KeySquare,
+  PackageCheck,
+  PackageOpen,
+  DollarSign,
+  AlertTriangle,
+  RefreshCw,
+} from "lucide-react";
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'Active':
-      return 'default';
-    case 'Expired':
-      return 'destructive';
-    default:
-      return 'outline';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { KpiCard } from "@/components/layout/kpi-card";
+import { AppRole, canManage } from "@/lib/auth/roles";
+
+import {
+  Software,
+  CreateSoftwareRequest,
+  getSoftware,
+  createSoftware,
+  updateSoftware,
+} from "@/lib/api/software.api";
+
+import {
+  License,
+  CreateLicenseRequest,
+  UpdateLicenseRequest,
+  getLicenses,
+  createLicense,
+  updateLicense,
+  deleteLicense,
+} from "@/lib/api/licenses.api";
+
+type SoftwareFormState = {
+  name: string;
+  version: string;
+  vendor: string;
+  category: string;
+  licenseType: string;
+  isLicenseRequired: boolean;
+  description: string;
+};
+
+type LicenseFormState = {
+  aliasCode: string;
+  softwareId: string;
+  licensedEmail: string;
+  subscriptionId: string;
+  status: string;
+  allowTemporaryCheckout: boolean;
+  maxCheckoutDays: string;
+  purchaseDate: string;
+  expiryDate: string;
+  purchaseCost: string;
+  isActive: boolean;
+  remarks: string;
+};
+
+const EMPTY_SOFTWARE: SoftwareFormState = {
+  name: "",
+  version: "",
+  vendor: "",
+  category: "Engineering",
+  licenseType: "Subscription",
+  isLicenseRequired: true,
+  description: "",
+};
+
+const EMPTY_LICENSE: LicenseFormState = {
+  aliasCode: "",
+  softwareId: "",
+  licensedEmail: "",
+  subscriptionId: "",
+  status: "Available",
+  allowTemporaryCheckout: true,
+  maxCheckoutDays: "5",
+  purchaseDate: "",
+  expiryDate: "",
+  purchaseCost: "0",
+  isActive: true,
+  remarks: "",
+};
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 10);
   }
+
+  return date.toLocaleDateString("en-IN");
 }
 
-const EMPTY_STATS: SoftwareStats = {
-  total_titles: 0,
-  total_licenses: 0,
-  used_licenses: 0,
-  available_licenses: 0,
-  total_cost: 0,
-  expiring_soon: 0,
-  maintenance_expiring_soon: 0,
-  avg_cost_per_license: 0,
-  utilization_pct: 0,
-};
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+}
+
+function licenseStatusVariant(
+  status: string
+): "default" | "secondary" | "destructive" | "outline" {
+  const normalized = status.toLowerCase();
+
+  if (normalized === "available") return "default";
+  if (normalized === "expired") return "destructive";
+  if (normalized === "allocated" || normalized === "assigned") {
+    return "secondary";
+  }
+
+  return "outline";
+}
 
 export default function LicensesPage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
-  const user = useUser();
   const canEdit = canManage(roles);
-  const actorName = user?.name ?? 'System';
 
-  const [records, loading, , reload]: [SoftwareInventoryRecord[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadSoftwareInventory, [], {});
-  const [statsRows]: [SoftwareStats[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadSoftwareStats,
-    [],
-    {},
-  );
-  const stats = statsRows[0] ?? EMPTY_STATS;
+  const [software, setSoftware] = useState<Software[]>([]);
+  const [licenses, setLicenses] = useState<License[]>([]);
 
-  const [entityOptions]: [{ id: number; name: string }[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadEntityOptions, [], {});
-  const [clientOptions]: [{ id: number; name: string }[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadClientOptions, [], {});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [saveSoftware, saving] = useMutateAction(createSoftwareInventory);
-  const [editSoftware, updating] = useMutateAction(updateSoftwareInventory);
-  const [removeSoftware, deleting] = useMutateAction(deleteSoftwareInventory);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [licenseTypeFilter, setLicenseTypeFilter] = useState<string>('all');
-  const [entityFilter, setEntityFilter] = useState<string>('all');
-  const [clientFilter, setClientFilter] = useState<string>('all');
+  const [softwareDialogOpen, setSoftwareDialogOpen] = useState(false);
+  const [licenseDialogOpen, setLicenseDialogOpen] = useState(false);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [selected, setSelected] = useState<SoftwareInventoryRecord | null>(null);
+  const [editingSoftware, setEditingSoftware] = useState<Software | null>(null);
+  const [editingLicense, setEditingLicense] = useState<License | null>(null);
 
-  const filtered = useMemo(() => {
-    let list = [...records];
+  const [softwareForm, setSoftwareForm] =
+    useState<SoftwareFormState>(EMPTY_SOFTWARE);
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((r) =>
-        [r.software_name, r.vendor, r.version, r.associated_assets, r.associated_users]
-          .filter(Boolean)
-          .some((field) => field!.toLowerCase().includes(q)),
+  const [licenseForm, setLicenseForm] =
+    useState<LicenseFormState>(EMPTY_LICENSE);
+
+  const [savingSoftware, setSavingSoftware] = useState(false);
+  const [savingLicense, setSavingLicense] = useState(false);
+
+  async function loadData() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [softwareData, licenseData] = await Promise.all([
+        getSoftware(),
+        getLicenses(),
+      ]);
+
+      setSoftware(softwareData);
+      setLicenses(licenseData);
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          "Unable to load software and license information."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const next30Days = new Date();
+    next30Days.setDate(next30Days.getDate() + 30);
+
+    const activeLicenses = licenses.filter((x) => x.isActive);
+
+    const available = activeLicenses.filter(
+      (x) => x.status.toLowerCase() === "available"
+    ).length;
+
+    const expired = activeLicenses.filter(
+      (x) =>
+        x.status.toLowerCase() === "expired" ||
+        new Date(x.expiryDate) < now
+    ).length;
+
+    const expiringSoon = activeLicenses.filter((x) => {
+      const expiry = new Date(x.expiryDate);
+
+      return expiry >= now && expiry <= next30Days;
+    }).length;
+
+    const totalCost = activeLicenses.reduce(
+      (sum, item) => sum + Number(item.purchaseCost || 0),
+      0
+    );
+
+    return {
+      softwareTitles: software.filter((x) => x.isActive).length,
+      totalLicenses: activeLicenses.length,
+      available,
+      allocated: Math.max(activeLicenses.length - available - expired, 0),
+      expiringSoon,
+      totalCost,
+    };
+  }, [software, licenses]);
+
+  const filteredLicenses = useMemo(() => {
+    let result = [...licenses];
+
+    if (statusFilter !== "all") {
+      result = result.filter(
+        (x) => x.status.toLowerCase() === statusFilter.toLowerCase()
       );
     }
 
-    if (statusFilter !== 'all') {
-      list = list.filter((r) => r.status === statusFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+
+      result = result.filter((x) =>
+        [
+          x.aliasCode,
+          x.softwareName,
+          x.licensedEmail,
+          x.subscriptionId || "",
+          x.status,
+        ].some((value) => value.toLowerCase().includes(q))
+      );
     }
 
-    if (licenseTypeFilter !== 'all') {
-      list = list.filter((r) => r.license_type === licenseTypeFilter);
+    return result;
+  }, [licenses, search, statusFilter]);
+
+  function openAddSoftware() {
+    setEditingSoftware(null);
+    setSoftwareForm(EMPTY_SOFTWARE);
+    setSoftwareDialogOpen(true);
+  }
+
+  function openEditSoftware(item: Software) {
+    setEditingSoftware(item);
+
+    setSoftwareForm({
+      name: item.name,
+      version: item.version || "",
+      vendor: item.vendor,
+      category: item.category,
+      licenseType: item.licenseType,
+      isLicenseRequired: item.isLicenseRequired,
+      description: item.description || "",
+    });
+
+    setSoftwareDialogOpen(true);
+  }
+
+  function openAddLicense() {
+    setEditingLicense(null);
+
+    setLicenseForm({
+      ...EMPTY_LICENSE,
+      softwareId: software.length > 0 ? String(software[0].id) : "",
+    });
+
+    setLicenseDialogOpen(true);
+  }
+
+  function openEditLicense(item: License) {
+    setEditingLicense(item);
+
+    setLicenseForm({
+      aliasCode: item.aliasCode,
+      softwareId: String(item.softwareId),
+      licensedEmail: item.licensedEmail,
+      subscriptionId: item.subscriptionId || "",
+      status: item.status || "Available",
+      allowTemporaryCheckout: item.allowTemporaryCheckout,
+      maxCheckoutDays: String(item.maxCheckoutDays),
+      purchaseDate: item.purchaseDate?.slice(0, 10) || "",
+      expiryDate: item.expiryDate?.slice(0, 10) || "",
+      purchaseCost: String(item.purchaseCost),
+      isActive: item.isActive,
+      remarks: item.remarks || "",
+    });
+
+    setLicenseDialogOpen(true);
+  }
+
+  async function handleSoftwareSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    setSavingSoftware(true);
+    setError("");
+
+    try {
+      const payload: CreateSoftwareRequest = {
+        name: softwareForm.name.trim(),
+        version: softwareForm.version.trim() || null,
+        vendor: softwareForm.vendor.trim(),
+        category: softwareForm.category.trim(),
+        licenseType: softwareForm.licenseType,
+        isLicenseRequired: softwareForm.isLicenseRequired,
+        description: softwareForm.description.trim() || null,
+      };
+
+      if (editingSoftware) {
+        await updateSoftware(editingSoftware.id, {
+          ...payload,
+          isActive: editingSoftware.isActive,
+        });
+      } else {
+        await createSoftware(payload);
+      }
+
+      setSoftwareDialogOpen(false);
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          "Unable to save software."
+      );
+    } finally {
+      setSavingSoftware(false);
     }
+  }
 
-    if (entityFilter !== 'all') {
-      list = list.filter((r) => String(r.entity_id ?? '') === entityFilter);
+  async function handleLicenseSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    setSavingLicense(true);
+    setError("");
+
+    try {
+      if (!licenseForm.softwareId) {
+        setError("Please select software.");
+        return;
+      }
+
+      const basePayload = {
+        aliasCode: licenseForm.aliasCode.trim(),
+        softwareId: Number(licenseForm.softwareId),
+        licensedEmail: licenseForm.licensedEmail.trim(),
+        subscriptionId: licenseForm.subscriptionId.trim() || null,
+        allowTemporaryCheckout: licenseForm.allowTemporaryCheckout,
+        maxCheckoutDays: Number(licenseForm.maxCheckoutDays),
+        purchaseDate: licenseForm.purchaseDate,
+        expiryDate: licenseForm.expiryDate,
+        purchaseCost: Number(licenseForm.purchaseCost),
+        remarks: licenseForm.remarks.trim() || null,
+      };
+
+      if (editingLicense) {
+        const payload: UpdateLicenseRequest = {
+          ...basePayload,
+          status: licenseForm.status,
+          isActive: licenseForm.isActive,
+        };
+
+        await updateLicense(editingLicense.id, payload);
+      } else {
+        const payload: CreateLicenseRequest = basePayload;
+        await createLicense(payload);
+      }
+
+      setLicenseDialogOpen(false);
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          "Unable to save license."
+      );
+    } finally {
+      setSavingLicense(false);
     }
+  }
 
-    if (clientFilter !== 'all') {
-      list = list.filter((r) => String(r.client_id ?? '') === clientFilter);
+  async function handleDeleteLicense(item: License) {
+    const confirmed = window.confirm(
+      `Delete license ${item.aliasCode}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteLicense(item.id);
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          "Unable to delete license."
+      );
     }
-
-    return list;
-  }, [records, search, statusFilter, licenseTypeFilter, entityFilter, clientFilter]);
-
-  const openAdd = () => {
-    setSelected(null);
-    setFormOpen(true);
-  };
-
-  const openEdit = (record: SoftwareInventoryRecord) => {
-    setSelected(record);
-    setFormOpen(true);
-  };
-
-  const openView = (record: SoftwareInventoryRecord) => {
-    setSelected(record);
-    setViewOpen(true);
-  };
-
-  const openDelete = (record: SoftwareInventoryRecord) => {
-    setSelected(record);
-    setDeleteOpen(true);
-  };
-
-  const handleSubmit = async (values: SoftwareFormValues) => {
-    const payload = {
-      softwareName: values.softwareName,
-      vendor: values.vendor,
-      version: values.version || null,
-      licenseType: values.licenseType,
-      licenseCount: values.licenseCount,
-      costPerLicense: values.costPerLicense,
-      expiryDate: values.expiryDate || null,
-      maintenanceExpiry: values.maintenanceExpiry || null,
-      status: values.status,
-      entityId: values.entityId || null,
-      departmentId: values.departmentId || null,
-      clientId: values.clientId || null,
-      actorName,
-    };
-
-    if (selected) {
-      await editSoftware({ ...payload, id: selected.id, softwareId: selected.software_id });
-    } else {
-      await saveSoftware(payload);
-    }
-    setFormOpen(false);
-    await reload();
-  };
-
-  const handleDelete = async () => {
-    if (!selected) return;
-    await removeSoftware({ id: selected.id, actorName });
-    setDeleteOpen(false);
-    await reload();
-  };
-
-  const handleImport = async (rows: ImportedSoftwareRow[]) => {
-    for (const row of rows) {
-      await saveSoftware({
-        softwareName: row.softwareName,
-        vendor: row.vendor || 'Unknown',
-        version: row.version || null,
-        licenseType: (row.licenseType as SoftwareFormValues['licenseType']) || 'Subscription',
-        licenseCount: row.licenseCount || '0',
-        costPerLicense: row.costPerLicense || '0',
-        expiryDate: row.expiryDate || null,
-        maintenanceExpiry: row.maintenanceExpiry || null,
-        status: (row.status as SoftwareFormValues['status']) || 'Active',
-        entityId: null,
-        departmentId: null,
-        clientId: null,
-        actorName,
-      });
-    }
-    setImportOpen(false);
-    await reload();
-  };
+  }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Software Titles" value={stats.total_titles} icon={KeySquare} hint="Distinct software tracked" />
-        <KpiCard title="Total Licenses" value={stats.total_licenses} icon={PackageCheck} hint="Seats across all software" />
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
-          title="Available Licenses"
-          value={stats.available_licenses}
-          icon={PackageOpen}
-          hint="Unassigned seats in pool"
+          title="Software Titles"
+          value={stats.softwareTitles}
+          icon={KeySquare}
+          hint="Active software products"
         />
+
         <KpiCard
-          title="Total License Cost"
-          value={`$${Number(stats.total_cost).toLocaleString()}`}
-          icon={DollarSign}
-          hint="Sum of license count × cost/license"
-        />
-        <KpiCard
-          title="Used Licenses"
-          value={stats.used_licenses}
+          title="Total Licenses"
+          value={stats.totalLicenses}
           icon={PackageCheck}
-          hint="Currently allocated seats"
+          hint="Individual licenses tracked"
         />
+
+        <KpiCard
+          title="Available"
+          value={stats.available}
+          icon={PackageOpen}
+          hint="Available for allocation"
+        />
+
+        <KpiCard
+          title="Allocated"
+          value={stats.allocated}
+          icon={PackageCheck}
+          hint="Currently in use"
+        />
+
         <KpiCard
           title="Expiring Soon"
-          value={stats.expiring_soon}
+          value={stats.expiringSoon}
           icon={AlertTriangle}
           tone="warning"
-          hint="License expiry within 30 days"
+          hint="Expiry within 30 days"
         />
+
         <KpiCard
-          title="Maintenance Expiring"
-          value={stats.maintenance_expiring_soon}
-          icon={Wrench}
-          tone="warning"
-          hint="Maintenance expiry within 30 days"
-        />
-        <KpiCard
-          title="Cost Per License"
-          value={`$${Number(stats.avg_cost_per_license).toLocaleString()}`}
+          title="Total Cost"
+          value={formatCurrency(stats.totalCost)}
           icon={DollarSign}
-          hint="Average cost per seat across all software"
-        />
-        <KpiCard
-          title="Utilization"
-          value={`${Number(stats.utilization_pct)}%`}
-          icon={Gauge}
-          hint="Seats used vs. total purchased"
-          tone={Number(stats.utilization_pct) < 60 ? 'warning' : 'default'}
+          hint="Purchase cost of active licenses"
         />
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Software Inventory</CardTitle>
-            <CardDescription>Manage software titles, license pools, cost and expiry.</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportSoftwareToExcel(filtered)}>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
-            {canEdit ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Import Excel
-                </Button>
-                <Button size="sm" onClick={openAdd}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Software
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by software, vendor, asset, user…"
-                className="pl-8"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-                <SelectItem value="Retired">Retired</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={licenseTypeFilter} onValueChange={setLicenseTypeFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="License Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All License Types</SelectItem>
-                <SelectItem value="Perpetual">Perpetual</SelectItem>
-                <SelectItem value="Subscription">Subscription</SelectItem>
-                <SelectItem value="Floating">Floating</SelectItem>
-                <SelectItem value="Node-locked">Node-locked</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={entityFilter} onValueChange={setEntityFilter}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Entity" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Entities</SelectItem>
-                {entityOptions.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>
-                    {e.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Client" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clientOptions.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-sm text-muted-foreground">{filtered.length} title(s)</span>
+            <CardTitle>Software Titles</CardTitle>
+            <CardDescription>
+              Manage software products available for licensing.
+            </CardDescription>
           </div>
 
+          {canEdit ? (
+            <Button size="sm" onClick={openAddSoftware}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Software
+            </Button>
+          ) : null}
+        </CardHeader>
+
+        <CardContent>
           <div className="rounded-lg border">
             <Table>
               <TableHeader>
@@ -342,72 +500,65 @@ export default function LicensesPage() {
                   <TableHead>Software</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Version</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>License Type</TableHead>
-                  <TableHead>Allocation</TableHead>
-                  <TableHead>Count</TableHead>
-                  <TableHead>Used / Available</TableHead>
-                  <TableHead>Cost / License</TableHead>
-                  <TableHead>Expiry</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {canEdit ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
-                      Loading software inventory…
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      Loading…
                     </TableCell>
                   </TableRow>
-                ) : filtered.length === 0 ? (
+                ) : software.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
-                      No software found.
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      No software configured.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">{record.software_name}</TableCell>
-                      <TableCell>{record.vendor}</TableCell>
-                      <TableCell>{record.version ?? '—'}</TableCell>
-                      <TableCell>{record.license_type}</TableCell>
-                      <TableCell className="text-xs">
-                        {[record.entity_name, record.department_name, record.client_name].filter(Boolean).join(' · ') || '—'}
+                  software.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">
+                        {item.name}
                       </TableCell>
-                      <TableCell>{record.license_count}</TableCell>
+                      <TableCell>{item.vendor}</TableCell>
+                      <TableCell>{item.version || "—"}</TableCell>
+                      <TableCell>{item.category}</TableCell>
+                      <TableCell>{item.licenseType}</TableCell>
                       <TableCell>
-                        {record.used_licenses} / {record.available_licenses}
+                        <Badge
+                          variant={
+                            item.isActive ? "default" : "secondary"
+                          }
+                        >
+                          {item.isActive ? "Active" : "Inactive"}
+                        </Badge>
                       </TableCell>
-                      <TableCell>${Number(record.cost_per_license).toFixed(2)}</TableCell>
-                      <TableCell>{record.expiry_date?.slice(0, 10) ?? '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(record.status)}>{record.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              Actions
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openView(record)}>
-                              <Eye className="mr-2 h-4 w-4" /> View
-                            </DropdownMenuItem>
-                            {canEdit ? (
-                              <>
-                                <DropdownMenuItem onClick={() => openEdit(record)}>
-                                  <Pencil className="mr-2 h-4 w-4" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive" onClick={() => openDelete(record)}>
-                                  <Trash2 className="mr-2 h-4 w-4" /> Retire / Delete
-                                </DropdownMenuItem>
-                              </>
-                            ) : null}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+
+                      {canEdit ? (
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditSoftware(item)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))
                 )}
@@ -417,22 +568,584 @@ export default function LicensesPage() {
         </CardContent>
       </Card>
 
-      <SoftwareFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        record={selected}
-        saving={saving || updating}
-        onSubmit={handleSubmit}
-      />
-      <SoftwareViewDialog open={viewOpen} onOpenChange={setViewOpen} record={selected} />
-      <SoftwareDeleteDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        record={selected}
-        deleting={deleting}
-        onConfirm={handleDelete}
-      />
-      <SoftwareImportDialog open={importOpen} onOpenChange={setImportOpen} importing={saving} onImport={handleImport} />
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>License Inventory</CardTitle>
+              <CardDescription>
+                Track individual licenses, subscriptions, cost and expiry.
+              </CardDescription>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadData}
+                disabled={loading}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </Button>
+
+              {canEdit ? (
+                <Button
+                  size="sm"
+                  onClick={openAddLicense}
+                  disabled={software.length === 0}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add License
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+
+              <Input
+                className="pl-8"
+                placeholder="Search license, software, email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Available">Available</SelectItem>
+                <SelectItem value="Allocated">Allocated</SelectItem>
+                <SelectItem value="Expired">Expired</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <span className="self-center text-sm text-muted-foreground">
+              {filteredLicenses.length} license(s)
+            </span>
+          </div>
+
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Alias</TableHead>
+                  <TableHead>Software</TableHead>
+                  <TableHead>Licensed Email</TableHead>
+                  <TableHead>Subscription ID</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Purchase Date</TableHead>
+                  <TableHead>Expiry Date</TableHead>
+                  <TableHead>Cost</TableHead>
+                  {canEdit ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={9}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      Loading licenses…
+                    </TableCell>
+                  </TableRow>
+                ) : filteredLicenses.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={9}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      No licenses found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredLicenses.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">
+                        {item.aliasCode}
+                      </TableCell>
+                      <TableCell>{item.softwareName}</TableCell>
+                      <TableCell>{item.licensedEmail}</TableCell>
+                      <TableCell>
+                        {item.subscriptionId || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={licenseStatusVariant(item.status)}>
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(item.purchaseDate)}
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(item.expiryDate)}
+                      </TableCell>
+                      <TableCell>
+                        {formatCurrency(Number(item.purchaseCost))}
+                      </TableCell>
+
+                      {canEdit ? (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditLicense(item)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteLicense(item)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={softwareDialogOpen}
+        onOpenChange={setSoftwareDialogOpen}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingSoftware ? "Edit Software" : "Add Software"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form
+            onSubmit={handleSoftwareSubmit}
+            className="space-y-4"
+          >
+            <div>
+              <label className="text-sm font-medium">Software Name</label>
+              <Input
+                value={softwareForm.name}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    name: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Vendor</label>
+              <Input
+                value={softwareForm.vendor}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    vendor: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Version</label>
+              <Input
+                value={softwareForm.version}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    version: e.target.value,
+                  })
+                }
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Category</label>
+              <Input
+                value={softwareForm.category}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    category: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">License Type</label>
+
+              <Select
+                value={softwareForm.licenseType}
+                onValueChange={(value) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    licenseType: value,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="Subscription">
+                    Subscription
+                  </SelectItem>
+                  <SelectItem value="Perpetual">
+                    Perpetual
+                  </SelectItem>
+                  <SelectItem value="Floating">
+                    Floating
+                  </SelectItem>
+                  <SelectItem value="Node-locked">
+                    Node-locked
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                value={softwareForm.description}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    description: e.target.value,
+                  })
+                }
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={softwareForm.isLicenseRequired}
+                onChange={(e) =>
+                  setSoftwareForm({
+                    ...softwareForm,
+                    isLicenseRequired: e.target.checked,
+                  })
+                }
+              />
+              License required
+            </label>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSoftwareDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+
+              <Button type="submit" disabled={savingSoftware}>
+                {savingSoftware
+                  ? "Saving..."
+                  : editingSoftware
+                    ? "Update Software"
+                    : "Create Software"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={licenseDialogOpen}
+        onOpenChange={setLicenseDialogOpen}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingLicense ? "Edit License" : "Add License"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form
+            onSubmit={handleLicenseSubmit}
+            className="space-y-4"
+          >
+            <div>
+              <label className="text-sm font-medium">Alias Code</label>
+              <Input
+                placeholder="Example: ACAD-001"
+                value={licenseForm.aliasCode}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    aliasCode: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Software</label>
+
+              <Select
+                value={licenseForm.softwareId}
+                onValueChange={(value) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    softwareId: value,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select software" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  {software
+                    .filter((x) => x.isActive)
+                    .map((item) => (
+                      <SelectItem
+                        key={item.id}
+                        value={String(item.id)}
+                      >
+                        {item.name}
+                        {item.version ? ` ${item.version}` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">
+                Licensed Email
+              </label>
+              <Input
+                type="email"
+                value={licenseForm.licensedEmail}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    licensedEmail: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">
+                Subscription ID
+              </label>
+              <Input
+                value={licenseForm.subscriptionId}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    subscriptionId: e.target.value,
+                  })
+                }
+              />
+            </div>
+
+            {editingLicense ? (
+              <div>
+                <label className="text-sm font-medium">Status</label>
+
+                <Select
+                  value={licenseForm.status}
+                  onValueChange={(value) =>
+                    setLicenseForm({
+                      ...licenseForm,
+                      status: value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value="Available">
+                      Available
+                    </SelectItem>
+                    <SelectItem value="Allocated">
+                      Allocated
+                    </SelectItem>
+                    <SelectItem value="Expired">
+                      Expired
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">
+                  Purchase Date
+                </label>
+                <Input
+                  type="date"
+                  value={licenseForm.purchaseDate}
+                  onChange={(e) =>
+                    setLicenseForm({
+                      ...licenseForm,
+                      purchaseDate: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">
+                  Expiry Date
+                </label>
+                <Input
+                  type="date"
+                  value={licenseForm.expiryDate}
+                  onChange={(e) =>
+                    setLicenseForm({
+                      ...licenseForm,
+                      expiryDate: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">
+                Purchase Cost (₹)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={licenseForm.purchaseCost}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    purchaseCost: e.target.value,
+                  })
+                }
+                required
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={licenseForm.allowTemporaryCheckout}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    allowTemporaryCheckout: e.target.checked,
+                  })
+                }
+              />
+              Allow temporary checkout
+            </label>
+
+            {licenseForm.allowTemporaryCheckout ? (
+              <div>
+                <label className="text-sm font-medium">
+                  Maximum Checkout Days
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={licenseForm.maxCheckoutDays}
+                  onChange={(e) =>
+                    setLicenseForm({
+                      ...licenseForm,
+                      maxCheckoutDays: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+            ) : null}
+
+            <div>
+              <label className="text-sm font-medium">Remarks</label>
+              <Input
+                value={licenseForm.remarks}
+                onChange={(e) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    remarks: e.target.value,
+                  })
+                }
+              />
+            </div>
+
+            {editingLicense ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={licenseForm.isActive}
+                  onChange={(e) =>
+                    setLicenseForm({
+                      ...licenseForm,
+                      isActive: e.target.checked,
+                    })
+                  }
+                />
+                Active license
+              </label>
+            ) : null}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLicenseDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+
+              <Button type="submit" disabled={savingLicense}>
+                {savingLicense
+                  ? "Saving..."
+                  : editingLicense
+                    ? "Update License"
+                    : "Create License"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
