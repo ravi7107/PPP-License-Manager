@@ -1,40 +1,81 @@
-import { action } from '@/lib/uibakery';
+import {
+  getReallocationRequests,
+} from '@/lib/api/availability.api';
 
-function loadReallocationRequests() {
-  return action('loadReallocationRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT
-        rr.id,
-        rr.unavailability_id,
-        uup.user_id AS source_user_id,
-        su.full_name AS source_user_name,
-        rr.resource_type,
-        rr.asset_id,
-        a.asset_tag,
-        rr.license_allocation_id,
-        s.name AS software_name,
-        rr.target_user_id,
-        tu.full_name AS target_user_name,
-        rr.requested_by,
-        rr.justification,
-        rr.status,
-        rr.decided_by,
-        rr.decided_at,
-        rr.decision_notes,
-        rr.created_at
-      FROM reallocation_requests rr
-      JOIN user_unavailability_periods uup ON uup.id = rr.unavailability_id
-      JOIN users su ON su.id = uup.user_id
-      LEFT JOIN users tu ON tu.id = rr.target_user_id
-      LEFT JOIN assets a ON a.id = rr.asset_id
-      LEFT JOIN license_allocations la ON la.id = rr.license_allocation_id
-      LEFT JOIN license_inventory li ON li.id = la.license_inventory_id
-      LEFT JOIN software s ON s.id = li.software_id
-      WHERE rr.deleted_at IS NULL
-      ORDER BY rr.created_at DESC;
-    `,
-  });
+async function loadReallocationRequests() {
+  const records = await getReallocationRequests();
+
+  return records.map((record) => ({
+    id: record.id,
+
+    unavailability_id:
+      record.userUnavailabilityId,
+
+    source_user_id:
+      record.currentUserId,
+
+    source_user_name:
+      record.currentUserName,
+
+    resource_type: 'License' as const,
+
+    asset_id: null,
+    asset_tag: null,
+
+    license_allocation_id:
+      record.resourceAllocationId,
+
+    resulting_allocation_id:
+      record.resultingAllocationId,
+
+    resulting_allocation_active:
+      record.resultingAllocationActive,
+
+    software_name:
+      record.softwareName,
+
+    target_user_id:
+      record.targetUserId,
+
+    target_user_name:
+      record.targetUserName,
+
+    requested_by:
+      record.requestedBy,
+
+    justification:
+      record.remarks,
+
+    status:
+      record.status,
+
+    decided_by:
+      record.decidedBy,
+
+    decided_at:
+      record.decidedAt,
+
+    decision_notes:
+      record.decisionRemarks,
+
+    returned_at:
+      record.returnedAt,
+
+    returned_by_user_id:
+      record.returnedByUserId,
+
+    returned_by:
+      record.returnedBy,
+
+    return_remarks:
+      record.returnRemarks,
+
+    return_allocation_id:
+      record.returnAllocationId,
+
+    created_at:
+      record.createdAt,
+  }));
 }
 
 export default loadReallocationRequests;

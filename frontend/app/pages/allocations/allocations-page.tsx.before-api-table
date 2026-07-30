@@ -1,0 +1,493 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
+import { Plus, Search, Repeat, Undo2, History, KeySquare, Timer, CalendarClock, PackageCheck } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { KpiCard } from '@/components/layout/kpi-card';
+import { AppRole, canManage } from '@/lib/auth/roles';
+import loadAllocations from '@/actions/allocations/loadAllocations';
+import loadAllocationStats from '@/actions/allocations/loadAllocationStats';
+import {
+  loadSoftwareWithAvailability,
+  loadUsersForAllocations,
+  loadComputersForAllocations,
+  loadEntitiesForAllocations,
+  loadClientsForAllocations,
+} from '@/actions/allocations/loadAllocationLookups';
+import createAllocation from '@/actions/allocations/createAllocation';
+import transferAllocation from '@/actions/allocations/transferAllocation';
+import releaseAllocation from '@/actions/allocations/releaseAllocation';
+import { recordAllocationAudit } from '@/actions/allocations/auditLog';
+import { AllocationFormDialog } from '@/app/pages/allocations/components/allocation-form-dialog';
+import { AllocationTransferDialog, TransferFormValues } from '@/app/pages/allocations/components/allocation-transfer-dialog';
+import { AllocationReleaseDialog, ReleaseFormValues } from '@/app/pages/allocations/components/allocation-release-dialog';
+import { AllocationHistoryDialog } from '@/app/pages/allocations/components/allocation-history-dialog';
+import {
+  AllocationRecord,
+  AllocationFormValues,
+  AllocationStats,
+  SoftwareAvailabilityOption,
+  LookupOption,
+} from '@/app/pages/allocations/types';
+
+import {
+  ResourceAllocation,
+  getResourceAllocations,
+} from '@/lib/api/resource-allocations.api';
+
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'Active':
+      return 'default';
+    case 'Released':
+      return 'outline';
+    default:
+      return 'secondary';
+  }
+}
+
+function targetLabel(record: AllocationRecord): string {
+  switch (record.allocation_type) {
+    case 'User':
+      return record.user_name ?? '—';
+    case 'Computer':
+      return record.computer_name ?? record.asset_tag ?? '—';
+    case 'Entity':
+      return record.entity_name ?? '—';
+    case 'Client':
+      return record.client_name ?? '—';
+    default:
+      return '—';
+  }
+}
+
+export default function AllocationsPage() {
+  const { roles } = useOutletContext<{ roles: AppRole[] }>();
+  const user = useUser();
+  const canEdit = canManage(roles);
+  const actorName = user?.name ?? 'System';
+
+  const [resourceAllocations, setResourceAllocations] =
+    useState<ResourceAllocation[]>([]);
+  const [resourceAllocationsLoading, setResourceAllocationsLoading] =
+    useState(true);
+  const [resourceAllocationsError, setResourceAllocationsError] =
+    useState('');
+
+  const loadResourceAllocations = async () => {
+    setResourceAllocationsLoading(true);
+    setResourceAllocationsError('');
+
+    try {
+      const data = await getResourceAllocations();
+      setResourceAllocations(data);
+    } catch (err: any) {
+      setResourceAllocationsError(
+        err?.response?.data?.message ||
+          'Unable to load resource allocations.',
+      );
+    } finally {
+      setResourceAllocationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadResourceAllocations();
+  }, []);
+
+  const [allocations, loading, , reload]: [AllocationRecord[], boolean, Error | null, () => Promise<void>] =
+    useLoadAction(loadAllocations, [], {});
+  const [stats]: [AllocationStats | null, boolean, Error | null, () => Promise<void>] = useLoadAction(
+    loadAllocationStats,
+    null,
+    {},
+  );
+  const [softwareOptions, , , reloadSoftware]: [SoftwareAvailabilityOption[], boolean, Error | null, () => Promise<void>] =
+    useLoadAction(loadSoftwareWithAvailability, [], {});
+  const [users]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(
+    loadUsersForAllocations,
+    [],
+    {},
+  );
+  const [computers]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(
+    loadComputersForAllocations,
+    [],
+    {},
+  );
+  const [entities]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(
+    loadEntitiesForAllocations,
+    [],
+    {},
+  );
+  const [clients]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(
+    loadClientsForAllocations,
+    [],
+    {},
+  );
+
+  const [saveAllocation, saving] = useMutateAction(createAllocation);
+  const [transferAlloc, transferring] = useMutateAction(transferAllocation);
+  const [releaseAlloc, releasing] = useMutateAction(releaseAllocation);
+  const [logAudit] = useMutateAction(recordAllocationAudit);
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [selected, setSelected] = useState<AllocationRecord | null>(null);
+
+  const refreshAll = async () => {
+    await Promise.all([reload(), reloadSoftware()]);
+  };
+
+  const filteredAllocations = useMemo(() => {
+    let list = Array.isArray(allocations)
+      ? [...allocations]
+      : [];
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((a) =>
+        [a.software_name, a.vendor, a.user_name, a.computer_name, a.asset_tag, a.entity_name, a.client_name, a.notes]
+          .filter(Boolean)
+          .some((field) => field!.toLowerCase().includes(q)),
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      list = list.filter((a) => a.status === statusFilter);
+    }
+
+    if (typeFilter !== 'all') {
+      list = list.filter((a) => a.allocation_type === typeFilter);
+    }
+
+    return list;
+  }, [allocations, search, statusFilter, typeFilter]);
+
+  const openAllocate = () => {
+    setFormOpen(true);
+  };
+
+  const openTransfer = (record: AllocationRecord) => {
+    setSelected(record);
+    setTransferOpen(true);
+  };
+
+  const openRelease = (record: AllocationRecord) => {
+    setSelected(record);
+    setReleaseOpen(true);
+  };
+
+  const openHistory = (record: AllocationRecord) => {
+    setSelected(record);
+    setHistoryOpen(true);
+  };
+
+  const handleAllocate = async (values: AllocationFormValues) => {
+    const payload = {
+      licenseInventoryId: values.licenseInventoryId,
+      allocationType: values.allocationType,
+      userId: values.allocationType === 'User' ? values.userId : null,
+      assetId: values.allocationType === 'Computer' ? values.assetId : null,
+      entityId: values.allocationType === 'Entity' ? values.entityId : null,
+      clientId: values.allocationType === 'Client' ? values.clientId : null,
+      allocationDate: values.allocationDate,
+      isTemporary: values.isTemporary,
+      shareEndDate: values.isTemporary ? values.shareEndDate || null : null,
+      notes: values.notes || null,
+      actorName,
+    };
+    await saveAllocation(payload);
+    await logAudit({
+      recordId: null,
+      action: 'INSERT',
+      oldValues: null,
+      newValues: JSON.stringify(payload),
+      actorName,
+    });
+    setFormOpen(false);
+    await refreshAll();
+  };
+
+  const handleTransfer = async (values: TransferFormValues) => {
+    if (!selected) return;
+    const payload = {
+      id: selected.id,
+      allocationType: values.allocationType,
+      userId: values.allocationType === 'User' ? values.userId : null,
+      assetId: values.allocationType === 'Computer' ? values.assetId : null,
+      entityId: values.allocationType === 'Entity' ? values.entityId : null,
+      clientId: values.allocationType === 'Client' ? values.clientId : null,
+      notes: values.notes || null,
+      actorName,
+    };
+    await transferAlloc(payload);
+    await logAudit({
+      recordId: selected.id,
+      action: 'TRANSFER',
+      oldValues: JSON.stringify(selected),
+      newValues: JSON.stringify(payload),
+      actorName,
+    });
+    setTransferOpen(false);
+    await refreshAll();
+  };
+
+  const handleRelease = async (values: ReleaseFormValues) => {
+    if (!selected) return;
+    const payload = { id: selected.id, releaseDate: values.releaseDate, notes: values.notes || null, actorName };
+    await releaseAlloc(payload);
+    await logAudit({
+      recordId: selected.id,
+      action: 'RELEASE',
+      oldValues: JSON.stringify(selected),
+      newValues: JSON.stringify(payload),
+      actorName,
+    });
+    setReleaseOpen(false);
+    await refreshAll();
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>New Resource Allocation API Test</CardTitle>
+          <CardDescription>
+            Records loaded from /api/ResourceAllocation
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {resourceAllocationsLoading ? (
+            <div className="text-sm text-muted-foreground">
+              Loading resource allocations...
+            </div>
+          ) : resourceAllocationsError ? (
+            <div className="text-sm text-red-600">
+              {resourceAllocationsError}
+            </div>
+          ) : resourceAllocations.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No resource allocations found.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {resourceAllocations.map((allocation) => (
+                <div
+                  key={allocation.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm"
+                >
+                  <span className="font-medium">
+                    {allocation.licenseAliasCode}
+                  </span>
+                  <span>{allocation.userName}</span>
+                  <Badge
+                    variant={
+                      allocation.status === 'Allocated'
+                        ? 'default'
+                        : 'outline'
+                    }
+                  >
+                    {allocation.status}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {allocation.assetName || 'No Asset'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard title="Active Allocations" value={stats?.active_allocations ?? 0} icon={PackageCheck} hint="Seats currently in use" />
+        <KpiCard title="Temporary Allocations" value={stats?.temporary_allocations ?? 0} icon={Timer} hint="Time-bound shared seats" />
+        <KpiCard title="Scheduled Releases" value={stats?.scheduled_releases ?? 0} icon={CalendarClock} hint="Future release dates set" />
+        <KpiCard title="Released Allocations" value={stats?.released_allocations ?? 0} icon={KeySquare} hint="Returned to available pool" />
+      </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>License Allocations</CardTitle>
+            <CardDescription>
+              Allocate, transfer, and release software licenses across users, computers, entities, and clients.
+            </CardDescription>
+          </div>
+          {canEdit ? (
+            <Button size="sm" onClick={openAllocate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Allocate License
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by software, user, computer, entity, client…"
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Released">Released</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Allocation Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="User">User</SelectItem>
+                <SelectItem value="Computer">Computer</SelectItem>
+                <SelectItem value="Entity">Entity</SelectItem>
+                <SelectItem value="Client">Client</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">{filteredAllocations.length} allocation(s)</span>
+          </div>
+
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Software</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Allocated To</TableHead>
+                  <TableHead>Allocation Date</TableHead>
+                  <TableHead>Release Date</TableHead>
+                  <TableHead>Temporary</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                      Loading allocations…
+                    </TableCell>
+                  </TableRow>
+                ) : filteredAllocations.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                      No allocations found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredAllocations.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell>
+                        <div className="font-medium">{record.software_name}</div>
+                        <div className="text-xs text-muted-foreground">{record.vendor}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{record.allocation_type}</Badge>
+                      </TableCell>
+                      <TableCell>{targetLabel(record)}</TableCell>
+                      <TableCell>{record.allocation_date}</TableCell>
+                      <TableCell>{record.release_date ?? '—'}</TableCell>
+                      <TableCell>
+                        {record.is_temporary ? (
+                          <Badge variant="secondary">Until {record.share_end_date ?? '—'}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant(record.status)}>{record.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              Actions
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openHistory(record)}>
+                              <History className="mr-2 h-4 w-4" />
+                              View History
+                            </DropdownMenuItem>
+                            {canEdit && record.status === 'Active' ? (
+                              <DropdownMenuItem onClick={() => openTransfer(record)}>
+                                <Repeat className="mr-2 h-4 w-4" />
+                                Transfer
+                              </DropdownMenuItem>
+                            ) : null}
+                            {canEdit && record.status === 'Active' ? (
+                              <DropdownMenuItem onClick={() => openRelease(record)}>
+                                <Undo2 className="mr-2 h-4 w-4" />
+                                Release
+                              </DropdownMenuItem>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <AllocationFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        saving={saving}
+        softwareOptions={softwareOptions}
+        users={users}
+        computers={computers}
+        entities={entities}
+        clients={clients}
+        onSubmit={handleAllocate}
+      />
+
+      <AllocationTransferDialog
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        record={selected}
+        saving={transferring}
+        users={users}
+        computers={computers}
+        entities={entities}
+        clients={clients}
+        onSubmit={handleTransfer}
+      />
+
+      <AllocationReleaseDialog
+        open={releaseOpen}
+        onOpenChange={setReleaseOpen}
+        record={selected}
+        saving={releasing}
+        onSubmit={handleRelease}
+      />
+
+      <AllocationHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} record={selected} />
+    </div>
+  );
+}

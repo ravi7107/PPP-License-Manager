@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { Plus, Search, Repeat, Undo2, History, KeySquare, Timer, CalendarClock, PackageCheck } from 'lucide-react';
@@ -24,10 +24,15 @@ import createAllocation from '@/actions/allocations/createAllocation';
 import transferAllocation from '@/actions/allocations/transferAllocation';
 import releaseAllocation from '@/actions/allocations/releaseAllocation';
 import { recordAllocationAudit } from '@/actions/allocations/auditLog';
-import { AllocationFormDialog } from '@/app/pages/allocations/components/allocation-form-dialog';
 import { AllocationTransferDialog, TransferFormValues } from '@/app/pages/allocations/components/allocation-transfer-dialog';
+import {
+  ResourceAllocationTransferDialog,
+  type ResourceTransferValues,
+} from '@/app/pages/allocations/components/resource-allocation-transfer-dialog';
+
 import { AllocationReleaseDialog, ReleaseFormValues } from '@/app/pages/allocations/components/allocation-release-dialog';
 import { AllocationHistoryDialog } from '@/app/pages/allocations/components/allocation-history-dialog';
+import { ResourceAllocationHistoryDialog } from '@/app/pages/allocations/components/resource-allocation-history-dialog';
 import {
   AllocationRecord,
   AllocationFormValues,
@@ -35,6 +40,36 @@ import {
   SoftwareAvailabilityOption,
   LookupOption,
 } from '@/app/pages/allocations/types';
+
+import {
+  ResourceAllocation,
+  getResourceAllocations,
+  createResourceAllocation,
+  releaseResourceAllocation,
+  transferResourceAllocation,
+} from '@/lib/api/resource-allocations.api';
+
+import {
+  getLicenses,
+  type License,
+} from '@/lib/api/licenses.api';
+
+import {
+  getUsers,
+  type User as ApiUser,
+} from '@/lib/api/users.api';
+
+import {
+  getAssets,
+  type Asset,
+} from '@/lib/api/assets.api';
+
+import { useAuth } from '@/lib/auth/auth-context';
+
+import {
+  AllocationFormDialog,
+  type ApiAllocationFormValues,
+} from '@/app/pages/allocations/components/allocation-form-dialog';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
@@ -64,9 +99,98 @@ function targetLabel(record: AllocationRecord): string {
 
 export default function AllocationsPage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
+  const { user: authenticatedUser } = useAuth();
+
+  const [availableLicenses, setAvailableLicenses] =
+    useState<License[]>([]);
+
+  const [apiUsers, setApiUsers] =
+    useState<ApiUser[]>([]);
+
+  const [apiAssets, setApiAssets] =
+    useState<Asset[]>([]);
+
+  const [savingApiAllocation, setSavingApiAllocation] =
+    useState(false);
   const user = useUser();
   const canEdit = canManage(roles);
   const actorName = user?.name ?? 'System';
+
+  const [resourceAllocations, setResourceAllocations] =
+    useState<ResourceAllocation[]>([]);
+  const [resourceAllocationsLoading, setResourceAllocationsLoading] =
+    useState(true);
+  const [resourceAllocationsError, setResourceAllocationsError] =
+    useState('');
+
+  const loadApiAllocationLookups = async () => {
+    try {
+      const [licenseData, userData, assetData] =
+        await Promise.all([
+          getLicenses(),
+          getUsers('', 1, 500),
+          getAssets(),
+        ]);
+
+      const now = new Date();
+
+      setAvailableLicenses(
+        (Array.isArray(licenseData) ? licenseData : [])
+          .filter((license) => {
+            const expiry = new Date(license.expiryDate);
+
+            return (
+              license.isActive &&
+              license.status.toLowerCase() === 'available' &&
+              !Number.isNaN(expiry.getTime()) &&
+              expiry > now
+            );
+          })
+      );
+
+      setApiUsers(
+        Array.isArray(userData?.items)
+          ? userData.items.filter((u) => u.isActive)
+          : []
+      );
+
+      setApiAssets(
+        (Array.isArray(assetData) ? assetData : [])
+          .filter((asset) => asset.isActive)
+      );
+    } catch (error) {
+      console.error(
+        'Unable to load allocation form lookups:',
+        error
+      );
+
+      setAvailableLicenses([]);
+      setApiUsers([]);
+      setApiAssets([]);
+    }
+  };
+
+  const loadResourceAllocations = async () => {
+    setResourceAllocationsLoading(true);
+    setResourceAllocationsError('');
+
+    try {
+      const data = await getResourceAllocations();
+      setResourceAllocations(data);
+    } catch (err: any) {
+      setResourceAllocationsError(
+        err?.response?.data?.message ||
+          'Unable to load resource allocations.',
+      );
+    } finally {
+      setResourceAllocationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadResourceAllocations();
+    void loadApiAllocationLookups();
+  }, []);
 
   const [allocations, loading, , reload]: [AllocationRecord[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(loadAllocations, [], {});
@@ -103,6 +227,12 @@ export default function AllocationsPage() {
   const [releaseAlloc, releasing] = useMutateAction(releaseAllocation);
   const [logAudit] = useMutateAction(recordAllocationAudit);
 
+  const [transferringApiAllocation, setTransferringApiAllocation] = useState(false);
+
+  const [resourceHistoryOpen, setResourceHistoryOpen] = useState(false);
+  const [historyResourceAllocation, setHistoryResourceAllocation] =
+    useState<ResourceAllocation | null>(null);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -113,12 +243,24 @@ export default function AllocationsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selected, setSelected] = useState<AllocationRecord | null>(null);
 
+  const [
+    selectedResourceAllocation,
+    setSelectedResourceAllocation,
+  ] = useState<ResourceAllocation | null>(null);
+
+  const [
+    releasingApiAllocation,
+    setReleasingApiAllocation,
+  ] = useState(false);
+
   const refreshAll = async () => {
     await Promise.all([reload(), reloadSoftware()]);
   };
 
   const filteredAllocations = useMemo(() => {
-    let list = [...allocations];
+    let list = Array.isArray(allocations)
+      ? [...allocations]
+      : [];
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -140,6 +282,93 @@ export default function AllocationsPage() {
     return list;
   }, [allocations, search, statusFilter, typeFilter]);
 
+  const filteredResourceAllocations = useMemo(() => {
+    // Main Allocations table shows only the current active
+    // allocation for each license. Released/transferred records
+    // remain in the database and are available through History.
+    let list = Array.isArray(resourceAllocations)
+      ? resourceAllocations.filter(
+          (allocation) =>
+            allocation.isActive &&
+            allocation.status === 'Allocated'
+        )
+      : [];
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+
+      list = list.filter((allocation) =>
+        [
+          allocation.licenseAliasCode,
+          allocation.softwareName,
+          allocation.userName,
+          allocation.assetName,
+          allocation.allocatedBy,
+          allocation.status,
+          allocation.remarks,
+        ]
+          .filter(Boolean)
+          .some((field) =>
+            String(field).toLowerCase().includes(q)
+          )
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      list = list.filter(
+        (allocation) => allocation.status === statusFilter
+      );
+    }
+
+    return list;
+  }, [resourceAllocations, search, statusFilter]);
+
+  const resourceStats = useMemo(() => {
+    const list = Array.isArray(resourceAllocations)
+      ? resourceAllocations
+      : [];
+
+    const now = new Date();
+    const soon = new Date();
+    soon.setDate(now.getDate() + 30);
+
+    return {
+      active: list.filter(
+        (x) => x.isActive && x.status === 'Allocated'
+      ).length,
+
+      dueSoon: list.filter((x) => {
+        if (!x.isActive || !x.expectedReturnDate) {
+          return false;
+        }
+
+        const due = new Date(x.expectedReturnDate);
+
+        return due >= now && due <= soon;
+      }).length,
+
+      released: list.filter(
+        (x) => x.status === 'Released'
+      ).length,
+
+      total: list.length,
+    };
+  }, [resourceAllocations]);
+
+  const formatAllocationDate = (
+    value: string | null | undefined
+  ) => {
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+
+    return date.toLocaleDateString('en-IN');
+  };
+
   const openAllocate = () => {
     setFormOpen(true);
   };
@@ -157,6 +386,120 @@ export default function AllocationsPage() {
   const openHistory = (record: AllocationRecord) => {
     setSelected(record);
     setHistoryOpen(true);
+  };
+
+  const handleApiAllocate = async (
+    values: ApiAllocationFormValues
+  ) => {
+    if (!authenticatedUser?.userId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    try {
+      setSavingApiAllocation(true);
+      setResourceAllocationsError('');
+
+      await createResourceAllocation({
+        licenseId: Number(values.licenseId),
+        userId: Number(values.userId),
+
+        assetId:
+          values.assetId &&
+          values.assetId !== 'none'
+            ? Number(values.assetId)
+            : null,
+
+        allocatedByUserId:
+          authenticatedUser.userId,
+
+        expectedReturnDate:
+          values.expectedReturnDate
+            ? `${values.expectedReturnDate}T00:00:00Z`
+            : null,
+
+        remarks:
+          values.remarks.trim() || null,
+      });
+
+      setFormOpen(false);
+
+      await Promise.all([
+        loadResourceAllocations(),
+        loadApiAllocationLookups(),
+      ]);
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.title ||
+        error?.response?.data ||
+        error?.message ||
+        'Unable to allocate license.';
+
+      setResourceAllocationsError(
+        typeof message === 'string'
+          ? message
+          : 'Unable to allocate license.'
+      );
+    } finally {
+      setSavingApiAllocation(false);
+    }
+  };
+
+  const handleApiTransfer = async (
+    values: ResourceTransferValues
+  ) => {
+    if (!selectedResourceAllocation) {
+      return;
+    }
+
+    if (!authenticatedUser?.userId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    try {
+      setTransferringApiAllocation(true);
+      setResourceAllocationsError('');
+
+      await transferResourceAllocation(
+        selectedResourceAllocation.id,
+        {
+          newUserId: values.newUserId,
+          newAssetId: values.newAssetId,
+          transferredByUserId:
+            authenticatedUser.userId,
+          expectedReturnDate:
+            values.expectedReturnDate,
+          remarks: values.remarks,
+        }
+      );
+
+      setTransferOpen(false);
+      setSelectedResourceAllocation(null);
+
+      await Promise.all([
+        loadResourceAllocations(),
+        loadApiAllocationLookups(),
+      ]);
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.title ||
+        error?.response?.data ||
+        error?.message ||
+        'Unable to transfer license.';
+
+      setResourceAllocationsError(
+        typeof message === 'string'
+          ? message
+          : 'Unable to transfer license.'
+      );
+    } finally {
+      setTransferringApiAllocation(false);
+    }
   };
 
   const handleAllocate = async (values: AllocationFormValues) => {
@@ -209,6 +552,54 @@ export default function AllocationsPage() {
     await refreshAll();
   };
 
+  const handleApiRelease = async (
+    values: ReleaseFormValues
+  ) => {
+    if (!selectedResourceAllocation) {
+      return;
+    }
+
+    try {
+      setReleasingApiAllocation(true);
+      setResourceAllocationsError('');
+
+      await releaseResourceAllocation(
+        selectedResourceAllocation.id,
+        {
+          remarks: values.remarks?.trim() || null,
+        }
+      );
+
+      setReleaseOpen(false);
+      setSelectedResourceAllocation(null);
+
+      await Promise.all([
+        loadResourceAllocations(),
+        loadApiAllocationLookups(),
+      ]);
+    } catch (error: any) {
+      console.error(
+        'Unable to release allocation:',
+        error
+      );
+
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.title ||
+        error?.response?.data ||
+        error?.message ||
+        'Unable to release license.';
+
+      setResourceAllocationsError(
+        typeof message === 'string'
+          ? message
+          : 'Unable to release license.'
+      );
+    } finally {
+      setReleasingApiAllocation(false);
+    }
+  };
+
   const handleRelease = async (values: ReleaseFormValues) => {
     if (!selected) return;
     const payload = { id: selected.id, releaseDate: values.releaseDate, notes: values.notes || null, actorName };
@@ -226,11 +617,40 @@ export default function AllocationsPage() {
 
   return (
     <div className="space-y-4">
+      {resourceAllocationsError ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {resourceAllocationsError}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Active Allocations" value={stats?.active_allocations ?? 0} icon={PackageCheck} hint="Seats currently in use" />
-        <KpiCard title="Temporary Allocations" value={stats?.temporary_allocations ?? 0} icon={Timer} hint="Time-bound shared seats" />
-        <KpiCard title="Scheduled Releases" value={stats?.scheduled_releases ?? 0} icon={CalendarClock} hint="Future release dates set" />
-        <KpiCard title="Released Allocations" value={stats?.released_allocations ?? 0} icon={KeySquare} hint="Returned to available pool" />
+        <KpiCard
+          title="Active Allocations"
+          value={resourceStats.active}
+          icon={PackageCheck}
+          hint="Licenses currently assigned"
+        />
+
+        <KpiCard
+          title="Due Soon"
+          value={resourceStats.dueSoon}
+          icon={CalendarClock}
+          hint="Expected return within 30 days"
+        />
+
+        <KpiCard
+          title="Released Allocations"
+          value={resourceStats.released}
+          icon={KeySquare}
+          hint="Licenses returned to available pool"
+        />
+
+        <KpiCard
+          title="Total Allocation History"
+          value={resourceStats.total}
+          icon={History}
+          hint="All allocation lifecycle records"
+        />
       </div>
 
       <Card>
@@ -238,9 +658,10 @@ export default function AllocationsPage() {
           <div>
             <CardTitle>License Allocations</CardTitle>
             <CardDescription>
-              Allocate, transfer, and release software licenses across users, computers, entities, and clients.
+              Allocate and manage individual software licenses across employees and assigned devices.
             </CardDescription>
           </div>
+
           {canEdit ? (
             <Button size="sm" onClick={openAllocate}>
               <Plus className="mr-2 h-4 w-4" />
@@ -248,118 +669,190 @@ export default function AllocationsPage() {
             </Button>
           ) : null}
         </CardHeader>
+
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+
               <Input
-                placeholder="Search by software, user, computer, entity, client…"
+                placeholder="Search license, software, employee or asset..."
                 className="pl-8"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
+
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger className="w-44">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
+
               <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Released">Released</SelectItem>
+                <SelectItem value="all">
+                  All Statuses
+                </SelectItem>
+
+                <SelectItem value="Allocated">
+                  Allocated
+                </SelectItem>
+
+                <SelectItem value="Released">
+                  Released
+                </SelectItem>
               </SelectContent>
             </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Allocation Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="User">User</SelectItem>
-                <SelectItem value="Computer">Computer</SelectItem>
-                <SelectItem value="Entity">Entity</SelectItem>
-                <SelectItem value="Client">Client</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-sm text-muted-foreground">{filteredAllocations.length} allocation(s)</span>
+
+            <span className="text-sm text-muted-foreground">
+              {filteredResourceAllocations.length} allocation(s)
+            </span>
           </div>
 
           <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>License</TableHead>
                   <TableHead>Software</TableHead>
-                  <TableHead>Type</TableHead>
                   <TableHead>Allocated To</TableHead>
-                  <TableHead>Allocation Date</TableHead>
-                  <TableHead>Release Date</TableHead>
-                  <TableHead>Temporary</TableHead>
+                  <TableHead>Asset</TableHead>
+                  <TableHead>Allocated On</TableHead>
+                  <TableHead>Expected Return</TableHead>
+                  <TableHead>Returned On</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>Allocated By</TableHead>
+                  <TableHead className="text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {loading ? (
+                {resourceAllocationsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                      Loading allocations…
+                    <TableCell
+                      colSpan={10}
+                      className="py-8 text-center text-sm text-muted-foreground"
+                    >
+                      Loading allocations...
                     </TableCell>
                   </TableRow>
-                ) : filteredAllocations.length === 0 ? (
+                ) : filteredResourceAllocations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={10}
+                      className="py-8 text-center text-sm text-muted-foreground"
+                    >
                       No allocations found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAllocations.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="font-medium">{record.software_name}</div>
-                        <div className="text-xs text-muted-foreground">{record.vendor}</div>
+                  filteredResourceAllocations.map((allocation) => (
+                    <TableRow key={allocation.id}>
+                      <TableCell className="font-medium">
+                        {allocation.licenseAliasCode}
                       </TableCell>
+
                       <TableCell>
-                        <Badge variant="outline">{record.allocation_type}</Badge>
+                        {allocation.softwareName}
                       </TableCell>
-                      <TableCell>{targetLabel(record)}</TableCell>
-                      <TableCell>{record.allocation_date}</TableCell>
-                      <TableCell>{record.release_date ?? '—'}</TableCell>
+
                       <TableCell>
-                        {record.is_temporary ? (
-                          <Badge variant="secondary">Until {record.share_end_date ?? '—'}</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No</span>
+                        {allocation.userName}
+                      </TableCell>
+
+                      <TableCell>
+                        {allocation.assetName || '—'}
+                      </TableCell>
+
+                      <TableCell>
+                        {formatAllocationDate(
+                          allocation.allocatedOn
                         )}
                       </TableCell>
+
                       <TableCell>
-                        <Badge variant={statusVariant(record.status)}>{record.status}</Badge>
+                        {formatAllocationDate(
+                          allocation.expectedReturnDate
+                        )}
                       </TableCell>
+
+                      <TableCell>
+                        {formatAllocationDate(
+                          allocation.actualReturnDate
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge
+                          variant={
+                            allocation.status === 'Allocated'
+                              ? 'default'
+                              : 'outline'
+                          }
+                        >
+                          {allocation.status}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>
+                        {allocation.allocatedBy}
+                      </TableCell>
+
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              Actions
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openHistory(record)}>
-                              <History className="mr-2 h-4 w-4" />
-                              View History
-                            </DropdownMenuItem>
-                            {canEdit && record.status === 'Active' ? (
-                              <DropdownMenuItem onClick={() => openTransfer(record)}>
-                                <Repeat className="mr-2 h-4 w-4" />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setHistoryResourceAllocation(
+                                allocation
+                              );
+                              setResourceHistoryOpen(true);
+                            }}
+                          >
+                            <History className="mr-1 h-4 w-4" />
+                            History
+                          </Button>
+
+                          {canEdit &&
+                          allocation.isActive &&
+                          allocation.status === 'Allocated' ? (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedResourceAllocation(
+                                    allocation
+                                  );
+                                  setTransferOpen(true);
+                                }}
+                              >
                                 Transfer
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canEdit && record.status === 'Active' ? (
-                              <DropdownMenuItem onClick={() => openRelease(record)}>
-                                <Undo2 className="mr-2 h-4 w-4" />
+                              </Button>
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedResourceAllocation(
+                                    allocation
+                                  );
+                                  setReleaseOpen(true);
+                                }}
+                              >
                                 Release
-                              </DropdownMenuItem>
-                            ) : null}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -373,17 +866,15 @@ export default function AllocationsPage() {
       <AllocationFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        saving={saving}
-        softwareOptions={softwareOptions}
-        users={users}
-        computers={computers}
-        entities={entities}
-        clients={clients}
-        onSubmit={handleAllocate}
+        saving={savingApiAllocation}
+        licenses={availableLicenses}
+        users={apiUsers}
+        assets={apiAssets}
+        onSubmit={handleApiAllocate}
       />
 
       <AllocationTransferDialog
-        open={transferOpen}
+        open={transferOpen && selected !== null}
         onOpenChange={setTransferOpen}
         record={selected}
         saving={transferring}
@@ -394,12 +885,49 @@ export default function AllocationsPage() {
         onSubmit={handleTransfer}
       />
 
+      <ResourceAllocationTransferDialog
+        open={
+          transferOpen &&
+          selectedResourceAllocation !== null
+        }
+        onOpenChange={(open) => {
+          setTransferOpen(open);
+
+          if (!open) {
+            setSelectedResourceAllocation(null);
+          }
+        }}
+        allocation={selectedResourceAllocation}
+        users={apiUsers}
+        assets={apiAssets}
+        saving={transferringApiAllocation}
+        onSubmit={handleApiTransfer}
+      />
+
       <AllocationReleaseDialog
         open={releaseOpen}
-        onOpenChange={setReleaseOpen}
-        record={selected}
-        saving={releasing}
-        onSubmit={handleRelease}
+        onOpenChange={(open) => {
+          setReleaseOpen(open);
+
+          if (!open) {
+            setSelectedResourceAllocation(null);
+          }
+        }}
+        record={selectedResourceAllocation}
+        saving={releasingApiAllocation}
+        onSubmit={handleApiRelease}
+      />
+
+      <ResourceAllocationHistoryDialog
+        open={resourceHistoryOpen}
+        onOpenChange={(open) => {
+          setResourceHistoryOpen(open);
+
+          if (!open) {
+            setHistoryResourceAllocation(null);
+          }
+        }}
+        allocation={historyResourceAllocation}
       />
 
       <AllocationHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} record={selected} />

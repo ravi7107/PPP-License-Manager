@@ -108,11 +108,17 @@ builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddScoped<ICompanyService, CompanyService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<IOfficeLocationService, OfficeLocationService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 
 builder.Services.AddScoped<ISoftwareService, SoftwareService>();
+builder.Services.AddScoped<ILicensePurchaseService, LicensePurchaseService>();
 
 builder.Services.AddScoped<IAssetService, AssetService>();
+
+builder.Services.AddScoped<
+    IAssetAssignmentService,
+    AssetAssignmentService>();
 
 builder.Services.AddScoped<
     IAssetSoftwareService,
@@ -133,6 +139,14 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IResourceAllocationService,
     ResourceAllocationService>();
+
+builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
+builder.Services.AddScoped<
+    IAvailabilityService,
+    AvailabilityService>();
 
 builder.Services.AddScoped<
     IAllocationRequestService,
@@ -167,6 +181,9 @@ if (app.Environment.IsDevelopment())
 // app.UseHttpsRedirection();
 
 app.UseMiddleware<ExceptionMiddleware>();
+
+// Serve uploaded floor-plan images from wwwroot.
+app.UseStaticFiles();
 
 app.UseRouting();
 

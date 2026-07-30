@@ -1,0 +1,78 @@
+import {
+  getReallocationRequests,
+} from '@/lib/api/availability.api';
+
+async function loadReallocationRequests() {
+  const records = await getReallocationRequests();
+
+  return records.map((record) => ({
+    id: record.id,
+
+    unavailability_id:
+      record.userUnavailabilityId,
+
+    source_user_id:
+      record.currentUserId,
+
+    source_user_name:
+      record.currentUserName,
+
+    resource_type: 'License' as const,
+
+    asset_id: null,
+    asset_tag: null,
+
+    license_allocation_id:
+      record.resourceAllocationId,
+
+    resulting_allocation_id:
+      record.resultingAllocationId,
+
+    software_name:
+      record.softwareName,
+
+    target_user_id:
+      record.targetUserId,
+
+    target_user_name:
+      record.targetUserName,
+
+    requested_by:
+      record.requestedBy,
+
+    justification:
+      record.remarks,
+
+    status:
+      record.status,
+
+    decided_by:
+      record.decidedBy,
+
+    decided_at:
+      record.decidedAt,
+
+    decision_notes:
+      record.decisionRemarks,
+
+    returned_at:
+      record.returnedAt,
+
+    returned_by_user_id:
+      record.returnedByUserId,
+
+    returned_by:
+      record.returnedBy,
+
+    return_remarks:
+      record.returnRemarks,
+
+    return_allocation_id:
+      record.returnAllocationId,
+
+    created_at:
+      record.createdAt,
+  }));
+}
+
+export default loadReallocationRequests;

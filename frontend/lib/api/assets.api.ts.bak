@@ -1,0 +1,28 @@
+import api from "./client";
+
+export interface Asset {
+  id: number;
+  assetTag: string;
+  assetName: string;
+  hostName: string | null;
+  status: string;
+  isActive: boolean;
+}
+
+export async function getAssets(): Promise<Asset[]> {
+  const response = await api.get("/Asset");
+
+  const body = response.data;
+
+  // Support both direct array responses and
+  // standard API wrapper responses.
+  if (Array.isArray(body)) {
+    return body;
+  }
+
+  if (Array.isArray(body?.data)) {
+    return body.data;
+  }
+
+  return [];
+}

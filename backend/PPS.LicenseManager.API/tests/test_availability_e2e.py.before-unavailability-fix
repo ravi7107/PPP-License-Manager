@@ -1,0 +1,1004 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+import sys
+import urllib.request
+import urllib.error
+import getpass
+from datetime import datetime, timedelta, timezone
+
+
+API = "http://127.0.0.1:5221/api"
+DB = "pps_license_manager"
+
+ADMIN_EMAIL = "admin@pps.com"
+ADMIN_USER_ID = 1
+
+LICENSE_ALIAS = "TEST-AUTO-001"
+
+ORIGINAL_USER_ID = 5
+ORIGINAL_USER_NAME = "Organization Test User"
+
+TEMP_USER_ID = 6
+TEMP_USER_NAME = "Employee4"
+
+passed = 0
+failed = 0
+token = None
+
+created_unavailability_id = None
+created_request_id = None
+
+
+# ============================================================
+# REPORTING
+# ============================================================
+
+def pass_test(name, detail=""):
+    global passed
+    passed += 1
+    print(f"[PASS] {name}")
+    if detail:
+        print(f"       {detail}")
+
+
+def fail_test(name, detail=""):
+    global failed
+    failed += 1
+    print(f"[FAIL] {name}")
+    if detail:
+        print(f"       {detail}")
+
+
+def abort(message):
+    print()
+    print("[ABORT]", message)
+    print("No further test actions will be performed.")
+    sys.exit(1)
+
+
+# ============================================================
+# DATABASE
+# ============================================================
+
+def db_query(sql):
+    result = subprocess.run(
+        [
+            "sudo", "-u", "postgres",
+            "psql",
+            "-d", DB,
+            "-t", "-A", "-F", "|",
+            "-c", sql,
+        ],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip())
+
+    return [
+        x.strip()
+        for x in result.stdout.splitlines()
+        if x.strip()
+    ]
+
+
+# ============================================================
+# HTTP
+# ============================================================
+
+def api_request(method, path, body=None, auth=True):
+    url = API + path
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    if auth and token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    data = None
+
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers=headers,
+        method=method
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            raw = response.read().decode("utf-8")
+
+            if not raw:
+                return response.status, None
+
+            try:
+                return response.status, json.loads(raw)
+            except json.JSONDecodeError:
+                return response.status, raw
+
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8")
+
+        try:
+            body = json.loads(raw) if raw else None
+        except json.JSONDecodeError:
+            body = raw
+
+        return e.code, body
+
+    except Exception as e:
+        raise RuntimeError(
+            f"Unable to call {url}: {e}"
+        )
+
+
+def unwrap(response):
+    """
+    Supports both:
+      { data: ... }
+    and direct API objects/arrays.
+    """
+    if isinstance(response, dict):
+        if "data" in response:
+            return response["data"]
+
+        if "Data" in response:
+            return response["Data"]
+
+    return response
+
+
+# ============================================================
+# START
+# ============================================================
+
+print()
+print("=" * 72)
+print(" PPS LICENSE MANAGER")
+print(" AVAILABILITY / REALLOCATION END-TO-END TEST")
+print("=" * 72)
+print(f" API              : {API}")
+print(f" Database         : {DB}")
+print(f" License          : {LICENSE_ALIAS}")
+print(f" Original user    : {ORIGINAL_USER_NAME} ({ORIGINAL_USER_ID})")
+print(f" Temporary user   : {TEMP_USER_NAME} ({TEMP_USER_ID})")
+print(f" Started          : {datetime.now()}")
+print("=" * 72)
+
+print()
+print("WARNING:")
+print("This is a WRITE test.")
+print(
+    f"It will temporarily transfer {LICENSE_ALIAS} "
+    f"from {ORIGINAL_USER_NAME} to {TEMP_USER_NAME}, "
+    "then return it."
+)
+
+confirmation = input(
+    f"\nType {LICENSE_ALIAS} to continue: "
+).strip()
+
+if confirmation != LICENSE_ALIAS:
+    abort("Confirmation did not match the test license.")
+
+
+# ============================================================
+# 1. API HEALTH
+# ============================================================
+
+try:
+    status, _ = api_request(
+        "POST",
+        "/Auth/login",
+        {
+            "email": "invalid-test@pps.invalid",
+            "password": "invalid"
+        },
+        auth=False
+    )
+
+    if status in (400, 401):
+        pass_test(
+            "API is reachable",
+            f"Authentication endpoint returned HTTP {status}."
+        )
+    else:
+        pass_test(
+            "API is reachable",
+            f"Authentication endpoint returned HTTP {status}."
+        )
+
+except Exception as e:
+    abort(f"API is not reachable: {e}")
+
+
+# ============================================================
+# 2. LOGIN
+# ============================================================
+
+password = getpass.getpass(
+    f"Password for {ADMIN_EMAIL}: "
+)
+
+status, response = api_request(
+    "POST",
+    "/Auth/login",
+    {
+        "email": ADMIN_EMAIL,
+        "password": password
+    },
+    auth=False
+)
+
+if status != 200:
+    abort(
+        f"Login failed. HTTP {status}: {response}"
+    )
+
+login = unwrap(response)
+
+if not isinstance(login, dict):
+    abort(
+        f"Unexpected login response: {response}"
+    )
+
+token = (
+    login.get("token")
+    or login.get("Token")
+)
+
+login_user_id = (
+    login.get("userId")
+    or login.get("UserId")
+)
+
+role = (
+    login.get("role")
+    or login.get("Role")
+)
+
+if not token:
+    abort(
+        f"JWT token not found in login response: {response}"
+    )
+
+pass_test(
+    "Administrator login",
+    f"UserId={login_user_id}, Role={role}"
+)
+
+
+# ============================================================
+# 3. PRE-FLIGHT DATABASE SAFETY
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    ra."Id",
+    ra."LicenseId",
+    ra."UserId",
+    ra."Status",
+    ra."IsActive"
+FROM "ResourceAllocations" ra
+JOIN "Licenses" l
+  ON l."Id" = ra."LicenseId"
+WHERE l."AliasCode" = '{LICENSE_ALIAS}'
+  AND ra."IsActive" = TRUE;
+''')
+
+if len(rows) != 1:
+    abort(
+        f"{LICENSE_ALIAS} must have exactly one active allocation. "
+        f"Found {len(rows)}."
+    )
+
+parts = rows[0].split("|")
+
+original_allocation_id = int(parts[0])
+license_id = int(parts[1])
+current_user_id = int(parts[2])
+allocation_status = parts[3]
+is_active = parts[4]
+
+if current_user_id != ORIGINAL_USER_ID:
+    abort(
+        f"{LICENSE_ALIAS} currently belongs to UserId "
+        f"{current_user_id}, not test owner {ORIGINAL_USER_ID}."
+    )
+
+if allocation_status != "Allocated" or is_active != "t":
+    abort(
+        "Test allocation is not in a safe Allocated/active state."
+    )
+
+pass_test(
+    "Pre-flight allocation safety",
+    f"Allocation #{original_allocation_id}, LicenseId={license_id}"
+)
+
+
+# ============================================================
+# 4. CHECK NO EXISTING PENDING REQUEST
+# ============================================================
+
+rows = db_query(f'''
+SELECT COUNT(*)
+FROM "ResourceReallocationRequests"
+WHERE "ResourceAllocationId" = {original_allocation_id}
+  AND "Status" = 'Pending';
+''')
+
+if rows and int(rows[0]) != 0:
+    abort(
+        "A pending reallocation request already exists "
+        "for this allocation."
+    )
+
+pass_test("No conflicting pending request")
+
+
+# ============================================================
+# 5. CREATE UNAVAILABILITY
+# ============================================================
+
+now = datetime.now(timezone.utc)
+
+start_date = now.isoformat()
+end_date = (
+    now + timedelta(days=1)
+).isoformat()
+
+status, response = api_request(
+    "POST",
+    "/Availability/unavailabilities",
+    {
+        "userId": ORIGINAL_USER_ID,
+        "startDate": start_date,
+        "endDate": end_date,
+        "reason":
+            "Automated E2E availability workflow test",
+        "createdByUserId": ADMIN_USER_ID
+    }
+)
+
+if status not in (200, 201):
+    abort(
+        f"Unable to create unavailability. "
+        f"HTTP {status}: {response}"
+    )
+
+unavailability = unwrap(response)
+
+if not isinstance(unavailability, dict):
+    abort(
+        f"Unexpected unavailability response: {response}"
+    )
+
+created_unavailability_id = (
+    unavailability.get("id")
+    or unavailability.get("Id")
+)
+
+if not created_unavailability_id:
+    abort(
+        "Created unavailability ID was not returned."
+    )
+
+pass_test(
+    "Create unavailability",
+    f"Unavailability #{created_unavailability_id}"
+)
+
+
+# ============================================================
+# 6. VERIFY AVAILABLE LICENSE API
+# ============================================================
+
+status, response = api_request(
+    "GET",
+    "/Availability/available-licenses"
+)
+
+if status != 200:
+    abort(
+        f"Available-license API failed. "
+        f"HTTP {status}: {response}"
+    )
+
+available = unwrap(response)
+
+if not isinstance(available, list):
+    abort(
+        f"Expected available-license array: {response}"
+    )
+
+matching = []
+
+for item in available:
+    alias = (
+        item.get("licenseAliasCode")
+        or item.get("LicenseAliasCode")
+    )
+
+    allocation_id = (
+        item.get("resourceAllocationId")
+        or item.get("ResourceAllocationId")
+    )
+
+    if (
+        alias == LICENSE_ALIAS
+        and int(allocation_id or 0)
+            == original_allocation_id
+    ):
+        matching.append(item)
+
+if not matching:
+    abort(
+        f"{LICENSE_ALIAS} did not appear in "
+        "temporary available resources."
+    )
+
+pass_test(
+    "Unavailable user's license became available",
+    LICENSE_ALIAS
+)
+
+
+# ============================================================
+# 7. CREATE REALLOCATION REQUEST
+# ============================================================
+
+status, response = api_request(
+    "POST",
+    "/Availability/reallocation-requests",
+    {
+        "userUnavailabilityId":
+            created_unavailability_id,
+
+        "resourceAllocationId":
+            original_allocation_id,
+
+        "targetUserId":
+            TEMP_USER_ID,
+
+        "requestedByUserId":
+            ADMIN_USER_ID,
+
+        "remarks":
+            "Automated E2E temporary allocation test"
+    }
+)
+
+if status not in (200, 201):
+    abort(
+        f"Create reallocation request failed. "
+        f"HTTP {status}: {response}"
+    )
+
+request = unwrap(response)
+
+if not isinstance(request, dict):
+    abort(
+        f"Unexpected reallocation response: {response}"
+    )
+
+created_request_id = (
+    request.get("id")
+    or request.get("Id")
+)
+
+request_status = (
+    request.get("status")
+    or request.get("Status")
+)
+
+if not created_request_id:
+    abort(
+        "Reallocation request ID was not returned."
+    )
+
+if request_status != "Pending":
+    abort(
+        f"Expected Pending but received "
+        f"{request_status}."
+    )
+
+pass_test(
+    "Create reallocation request",
+    f"Request #{created_request_id}"
+)
+
+pass_test(
+    "Initial request status is Pending"
+)
+
+
+# ============================================================
+# 8. VERIFY ORIGINAL OWNER STILL OWNS LICENSE BEFORE APPROVAL
+# ============================================================
+
+rows = db_query(f'''
+SELECT "UserId"
+FROM "ResourceAllocations"
+WHERE "LicenseId" = {license_id}
+  AND "IsActive" = TRUE;
+''')
+
+if len(rows) != 1 or int(rows[0]) != ORIGINAL_USER_ID:
+    abort(
+        "License ownership changed before approval."
+    )
+
+pass_test(
+    "Pending request does not change ownership"
+)
+
+
+# ============================================================
+# 9. APPROVE
+# ============================================================
+
+status, response = api_request(
+    "POST",
+    f"/Availability/reallocation-requests/"
+    f"{created_request_id}/decision",
+    {
+        "decidedByUserId":
+            ADMIN_USER_ID,
+
+        "approve":
+            True,
+
+        "decisionRemarks":
+            "Approved by automated E2E test"
+    }
+)
+
+if status != 200:
+    abort(
+        f"Approval failed. "
+        f"HTTP {status}: {response}"
+    )
+
+approved = unwrap(response)
+
+approved_status = (
+    approved.get("status")
+    or approved.get("Status")
+)
+
+resulting_allocation_id = (
+    approved.get("resultingAllocationId")
+    or approved.get("ResultingAllocationId")
+)
+
+if approved_status != "Approved":
+    abort(
+        f"Expected Approved, got "
+        f"{approved_status}."
+    )
+
+if not resulting_allocation_id:
+    abort(
+        "Approval did not return ResultingAllocationId."
+    )
+
+pass_test(
+    "Approve reallocation request",
+    f"Temporary allocation #{resulting_allocation_id}"
+)
+
+
+# ============================================================
+# 10. VERIFY TEMPORARY OWNERSHIP
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    "Id",
+    "UserId",
+    "Status",
+    "IsActive"
+FROM "ResourceAllocations"
+WHERE "LicenseId" = {license_id}
+  AND "IsActive" = TRUE;
+''')
+
+if len(rows) != 1:
+    abort(
+        f"Expected exactly one active allocation "
+        f"after approval, found {len(rows)}."
+    )
+
+parts = rows[0].split("|")
+
+active_id = int(parts[0])
+active_user = int(parts[1])
+active_status = parts[2]
+
+if active_user != TEMP_USER_ID:
+    abort(
+        f"Temporary allocation belongs to "
+        f"UserId {active_user}, expected {TEMP_USER_ID}."
+    )
+
+if active_id != int(resulting_allocation_id):
+    abort(
+        "Active allocation does not match "
+        "ResultingAllocationId."
+    )
+
+pass_test(
+    "Temporary user owns license after approval",
+    f"{TEMP_USER_NAME}, allocation #{active_id}"
+)
+
+pass_test(
+    "Exactly one active allocation after approval"
+)
+
+
+# ============================================================
+# 11. RETURN TO ORIGINAL USER
+# ============================================================
+
+status, response = api_request(
+    "POST",
+    f"/Availability/reallocation-requests/"
+    f"{created_request_id}/return",
+    {
+        "returnedByUserId":
+            ADMIN_USER_ID,
+
+        "remarks":
+            "Returned by automated E2E test"
+    }
+)
+
+if status != 200:
+    abort(
+        f"Return failed. "
+        f"HTTP {status}: {response}"
+    )
+
+returned = unwrap(response)
+
+returned_status = (
+    returned.get("status")
+    or returned.get("Status")
+)
+
+return_allocation_id = (
+    returned.get("returnAllocationId")
+    or returned.get("ReturnAllocationId")
+)
+
+returned_at = (
+    returned.get("returnedAt")
+    or returned.get("ReturnedAt")
+)
+
+returned_by = (
+    returned.get("returnedByUserId")
+    or returned.get("ReturnedByUserId")
+)
+
+if returned_status != "Returned":
+    abort(
+        f"Expected Returned, got "
+        f"{returned_status}."
+    )
+
+if not return_allocation_id:
+    abort(
+        "ReturnAllocationId was not populated."
+    )
+
+if not returned_at:
+    abort(
+        "ReturnedAt was not populated."
+    )
+
+if int(returned_by or 0) != ADMIN_USER_ID:
+    abort(
+        "ReturnedByUserId is incorrect."
+    )
+
+pass_test(
+    "Return temporary allocation",
+    f"Return allocation #{return_allocation_id}"
+)
+
+pass_test(
+    "Request status changed to Returned"
+)
+
+pass_test(
+    "Return lifecycle metadata populated"
+)
+
+
+# ============================================================
+# 12. VERIFY ORIGINAL OWNER RESTORED
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    "Id",
+    "UserId",
+    "Status",
+    "IsActive"
+FROM "ResourceAllocations"
+WHERE "LicenseId" = {license_id}
+  AND "IsActive" = TRUE;
+''')
+
+if len(rows) != 1:
+    abort(
+        f"Expected exactly one active allocation "
+        f"after return, found {len(rows)}."
+    )
+
+parts = rows[0].split("|")
+
+final_allocation_id = int(parts[0])
+final_user_id = int(parts[1])
+final_status = parts[2]
+
+if final_user_id != ORIGINAL_USER_ID:
+    abort(
+        f"License was not returned to original owner. "
+        f"Current UserId={final_user_id}."
+    )
+
+if final_allocation_id != int(return_allocation_id):
+    abort(
+        "Current active allocation does not match "
+        "ReturnAllocationId."
+    )
+
+pass_test(
+    "Original user owns license after return",
+    f"{ORIGINAL_USER_NAME}, allocation #{final_allocation_id}"
+)
+
+pass_test(
+    "Exactly one active allocation after return"
+)
+
+
+# ============================================================
+# 13. VERIFY ORIGINAL ALLOCATION CLOSED
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    "Status",
+    "IsActive",
+    CASE
+        WHEN "ActualReturnDate" IS NULL
+        THEN 'NULL'
+        ELSE 'SET'
+    END
+FROM "ResourceAllocations"
+WHERE "Id" = {original_allocation_id};
+''')
+
+if not rows:
+    abort(
+        "Original allocation disappeared."
+    )
+
+parts = rows[0].split("|")
+
+if parts[0] != "Transferred" or parts[1] != "f":
+    fail_test(
+        "Original allocation closed correctly",
+        rows[0]
+    )
+else:
+    pass_test(
+        "Original allocation closed correctly"
+    )
+
+
+# ============================================================
+# 14. VERIFY TEMPORARY ALLOCATION CLOSED
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    "Status",
+    "IsActive",
+    CASE
+        WHEN "ActualReturnDate" IS NULL
+        THEN 'NULL'
+        ELSE 'SET'
+    END
+FROM "ResourceAllocations"
+WHERE "Id" = {int(resulting_allocation_id)};
+''')
+
+if not rows:
+    fail_test(
+        "Temporary allocation preserved in history",
+        "Temporary allocation record is missing."
+    )
+else:
+    parts = rows[0].split("|")
+
+    if (
+        parts[0] == "Transferred"
+        and parts[1] == "f"
+        and parts[2] == "SET"
+    ):
+        pass_test(
+            "Temporary allocation closed and preserved"
+        )
+    else:
+        fail_test(
+            "Temporary allocation closed and preserved",
+            rows[0]
+        )
+
+
+# ============================================================
+# 15. VERIFY REQUEST LIFECYCLE DIRECTLY
+# ============================================================
+
+rows = db_query(f'''
+SELECT
+    "Status",
+    "ResourceAllocationId",
+    "ResultingAllocationId",
+    "ReturnAllocationId",
+    CASE WHEN "DecidedAt" IS NULL
+         THEN 'NULL' ELSE 'SET' END,
+    CASE WHEN "ReturnedAt" IS NULL
+         THEN 'NULL' ELSE 'SET' END,
+    "DecidedByUserId",
+    "ReturnedByUserId"
+FROM "ResourceReallocationRequests"
+WHERE "Id" = {created_request_id};
+''')
+
+if not rows:
+    fail_test(
+        "Reallocation lifecycle persisted",
+        "Request record missing."
+    )
+else:
+    parts = rows[0].split("|")
+
+    valid = (
+        parts[0] == "Returned"
+        and int(parts[1]) == original_allocation_id
+        and int(parts[2]) == int(resulting_allocation_id)
+        and int(parts[3]) == int(return_allocation_id)
+        and parts[4] == "SET"
+        and parts[5] == "SET"
+        and int(parts[6]) == ADMIN_USER_ID
+        and int(parts[7]) == ADMIN_USER_ID
+    )
+
+    if valid:
+        pass_test(
+            "Complete request lifecycle persisted"
+        )
+    else:
+        fail_test(
+            "Complete request lifecycle persisted",
+            rows[0]
+        )
+
+
+# ============================================================
+# 16. NEGATIVE TEST - DUPLICATE RETURN
+# ============================================================
+
+status, response = api_request(
+    "POST",
+    f"/Availability/reallocation-requests/"
+    f"{created_request_id}/return",
+    {
+        "returnedByUserId": ADMIN_USER_ID,
+        "remarks": "Duplicate return rejection test"
+    }
+)
+
+if 400 <= status < 500:
+    pass_test(
+        "Duplicate return rejected",
+        f"HTTP {status}"
+    )
+else:
+    fail_test(
+        "Duplicate return rejected",
+        f"Unexpected HTTP {status}: {response}"
+    )
+
+
+# ============================================================
+# 17. CANCEL TEST UNAVAILABILITY
+# ============================================================
+
+status, response = api_request(
+    "POST",
+    f"/Availability/unavailabilities/"
+    f"{created_unavailability_id}/cancel",
+    {
+        "cancelledByUserId":
+            ADMIN_USER_ID
+    }
+)
+
+if status == 200:
+    pass_test(
+        "Test unavailability cancelled"
+    )
+else:
+    fail_test(
+        "Test unavailability cancelled",
+        f"HTTP {status}: {response}"
+    )
+
+
+# ============================================================
+# 18. FINAL SINGLE OWNER CHECK
+# ============================================================
+
+rows = db_query(f'''
+SELECT COUNT(*)
+FROM "ResourceAllocations"
+WHERE "LicenseId" = {license_id}
+  AND "IsActive" = TRUE;
+''')
+
+if rows and int(rows[0]) == 1:
+    pass_test(
+        "Final license ownership integrity"
+    )
+else:
+    fail_test(
+        "Final license ownership integrity",
+        f"Active allocations={rows}"
+    )
+
+
+# ============================================================
+# RESULT
+# ============================================================
+
+total = passed + failed
+
+print()
+print("=" * 72)
+print(" E2E TEST RESULT")
+print("=" * 72)
+print(f" Test license       : {LICENSE_ALIAS}")
+print(f" Request ID         : {created_request_id}")
+print(f" Original allocation: {original_allocation_id}")
+print(f" Temporary allocation: {resulting_allocation_id}")
+print(f" Return allocation  : {return_allocation_id}")
+print()
+print(f" Total checks       : {total}")
+print(f" Passed             : {passed}")
+print(f" Failed             : {failed}")
+
+if failed == 0:
+    print()
+    print(" RESULT: COMPLETE E2E WORKFLOW PASSED")
+    print("=" * 72)
+    sys.exit(0)
+
+print()
+print(" RESULT: E2E WORKFLOW HAS FAILURES")
+print("=" * 72)
+sys.exit(1)

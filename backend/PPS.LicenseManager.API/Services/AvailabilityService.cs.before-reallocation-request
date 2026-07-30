@@ -1,0 +1,307 @@
+using Microsoft.EntityFrameworkCore;
+using PPS.LicenseManager.API.Data;
+using PPS.LicenseManager.API.DTOs.Availability;
+using PPS.LicenseManager.API.Services.Interfaces;
+
+namespace PPS.LicenseManager.API.Services;
+
+public class AvailabilityService : IAvailabilityService
+{
+    private readonly ApplicationDbContext _context;
+    private readonly IResourceAllocationService _resourceAllocationService;
+
+    public AvailabilityService(
+        ApplicationDbContext context,
+        IResourceAllocationService resourceAllocationService)
+    {
+        _context = context;
+        _resourceAllocationService = resourceAllocationService;
+    }
+
+    public async Task<IEnumerable<UserUnavailabilityResponse>>
+        GetUnavailabilitiesAsync()
+    {
+        var records = await _context.UserUnavailabilities
+            .AsNoTracking()
+            .Include(x => x.User)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.CancelledByUser)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+        return records.Select(MapUnavailability);
+    }
+
+    public async Task<UserUnavailabilityResponse?>
+        GetUnavailabilityByIdAsync(int id)
+    {
+        var record = await _context.UserUnavailabilities
+            .AsNoTracking()
+            .Include(x => x.User)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.CancelledByUser)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        return record == null
+            ? null
+            : MapUnavailability(record);
+    }
+
+    public async Task<UserUnavailabilityResponse>
+        CreateUnavailabilityAsync(
+            CreateUserUnavailabilityRequest request)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(x => x.Id == request.UserId);
+
+        if (user == null)
+            throw new InvalidOperationException(
+                "User not found.");
+
+        if (!user.IsActive)
+            throw new InvalidOperationException(
+                "Inactive users cannot be marked unavailable.");
+
+        var createdBy = await _context.Users
+            .FirstOrDefaultAsync(
+                x => x.Id == request.CreatedByUserId);
+
+        if (createdBy == null)
+            throw new InvalidOperationException(
+                "Created By user not found.");
+
+        if (!createdBy.IsActive)
+            throw new InvalidOperationException(
+                "Created By user is inactive.");
+
+        var startDate = EnsureUtc(request.StartDate);
+        var endDate = EnsureUtc(request.EndDate);
+
+        if (endDate <= startDate)
+            throw new InvalidOperationException(
+                "End date must be later than start date.");
+
+        var overlap = await _context.UserUnavailabilities
+            .AnyAsync(x =>
+                x.UserId == request.UserId &&
+                x.Status != "Cancelled" &&
+                startDate < x.EndDate &&
+                endDate > x.StartDate);
+
+        if (overlap)
+            throw new InvalidOperationException(
+                "The user already has an overlapping unavailability period.");
+
+        var record =
+            new PPS.LicenseManager.API.Models.UserUnavailability
+            {
+                UserId = request.UserId,
+                StartDate = startDate,
+                EndDate = endDate,
+                Reason = request.Reason.Trim(),
+                Status = "Active",
+                CreatedByUserId = request.CreatedByUserId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+        _context.UserUnavailabilities.Add(record);
+
+        await _context.SaveChangesAsync();
+
+        return (await GetUnavailabilityByIdAsync(record.Id))!;
+    }
+
+    public async Task<bool>
+        CancelUnavailabilityAsync(
+            int id,
+            CancelUserUnavailabilityRequest request)
+    {
+        var record = await _context.UserUnavailabilities
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (record == null)
+            return false;
+
+        if (string.Equals(
+                record.Status,
+                "Cancelled",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "This unavailability period is already cancelled.");
+        }
+
+        var cancelledBy = await _context.Users
+            .FirstOrDefaultAsync(
+                x => x.Id == request.CancelledByUserId);
+
+        if (cancelledBy == null)
+            throw new InvalidOperationException(
+                "Cancelled By user not found.");
+
+        record.Status = "Cancelled";
+        record.CancelledAt = DateTime.UtcNow;
+        record.CancelledByUserId =
+            request.CancelledByUserId;
+
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<IEnumerable<AvailableLicenseResourceResponse>>
+        GetAvailableLicenseResourcesAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        var records =
+            await (
+                from unavailability
+                    in _context.UserUnavailabilities
+                join allocation
+                    in _context.ResourceAllocations
+                    on unavailability.UserId
+                    equals allocation.UserId
+                where
+                    unavailability.Status != "Cancelled" &&
+                    unavailability.StartDate <= now &&
+                    unavailability.EndDate >= now &&
+                    allocation.IsActive &&
+                    allocation.Status == "Allocated" &&
+                    allocation.License.IsActive &&
+                    allocation.License.AllowTemporaryCheckout &&
+                    allocation.License.ExpiryDate > now
+                orderby unavailability.EndDate
+                select new AvailableLicenseResourceResponse
+                {
+                    UserUnavailabilityId =
+                        unavailability.Id,
+
+                    ResourceAllocationId =
+                        allocation.Id,
+
+                    LicenseId =
+                        allocation.LicenseId,
+
+                    LicenseAliasCode =
+                        allocation.License.AliasCode,
+
+                    SoftwareName =
+                        allocation.License.Software.Name,
+
+                    CurrentUserId =
+                        allocation.UserId,
+
+                    CurrentUserName =
+                        allocation.User.FullName,
+
+                    AssetId =
+                        allocation.AssetId,
+
+                    AssetName =
+                        allocation.Asset != null
+                            ? allocation.Asset.AssetName
+                            : null,
+
+                    UnavailableFrom =
+                        unavailability.StartDate,
+
+                    UnavailableTill =
+                        unavailability.EndDate,
+
+                    Reason =
+                        unavailability.Reason,
+
+                    LicenseExpiryDate =
+                        allocation.License.ExpiryDate
+                }
+            )
+            .AsNoTracking()
+            .ToListAsync();
+
+        return records;
+    }
+
+    public Task<IEnumerable<ResourceReallocationResponse>>
+        GetReallocationRequestsAsync()
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<ResourceReallocationResponse>
+        CreateReallocationRequestAsync(
+            CreateResourceReallocationRequest request)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<ResourceReallocationResponse?>
+        DecideReallocationRequestAsync(
+            int id,
+            DecideResourceReallocationRequest request)
+    {
+        throw new NotImplementedException();
+    }
+
+    private static UserUnavailabilityResponse
+        MapUnavailability(
+            PPS.LicenseManager.API.Models.UserUnavailability record)
+    {
+        var now = DateTime.UtcNow;
+
+        string effectiveStatus;
+
+        if (string.Equals(
+                record.Status,
+                "Cancelled",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveStatus = "Cancelled";
+        }
+        else if (record.StartDate > now)
+        {
+            effectiveStatus = "Upcoming";
+        }
+        else if (record.EndDate < now)
+        {
+            effectiveStatus = "Ended";
+        }
+        else
+        {
+            effectiveStatus = "Active";
+        }
+
+        return new UserUnavailabilityResponse
+        {
+            Id = record.Id,
+            UserId = record.UserId,
+            UserName = record.User.FullName,
+            EmployeeCode = record.User.EmployeeCode,
+            StartDate = record.StartDate,
+            EndDate = record.EndDate,
+            Reason = record.Reason,
+            Status = record.Status,
+            EffectiveStatus = effectiveStatus,
+            CreatedByUserId = record.CreatedByUserId,
+            CreatedBy = record.CreatedByUser.FullName,
+            CreatedAt = record.CreatedAt,
+            CancelledAt = record.CancelledAt,
+            CancelledByUserId = record.CancelledByUserId,
+            CancelledBy =
+                record.CancelledByUser?.FullName
+        };
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Utc)
+            return value;
+
+        if (value.Kind == DateTimeKind.Local)
+            return value.ToUniversalTime();
+
+        return DateTime.SpecifyKind(
+            value,
+            DateTimeKind.Utc);
+    }
+}

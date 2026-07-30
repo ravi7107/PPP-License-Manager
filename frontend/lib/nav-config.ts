@@ -13,7 +13,7 @@ import {
   Building,
   Landmark,
   Briefcase,
-  ShieldCheck,
+  ShieldCheck, MapPinned
 } from 'lucide-react';
 import { ModuleKey } from '@/lib/auth/roles';
 
@@ -37,6 +37,7 @@ export const navItems: NavItem[] = [
   { key: 'departments', label: 'Departments', path: '/departments', icon: Building },
   { key: 'entities', label: 'Entities', path: '/entities', icon: Landmark },
   { key: 'clients', label: 'Clients', path: '/clients', icon: Briefcase },
+  { key: 'officeLocations', label: 'Office Locations', path: '/office-locations', icon: MapPinned },
   { key: 'accessManagement', label: 'Access Management', path: '/access-management', icon: ShieldCheck },
   { key: 'search', label: 'Global Search', path: '/search', icon: Search },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3 },

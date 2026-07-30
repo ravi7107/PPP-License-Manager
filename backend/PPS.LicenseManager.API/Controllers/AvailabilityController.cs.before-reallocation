@@ -1,0 +1,93 @@
+using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.DTOs.Availability;
+using PPS.LicenseManager.API.Services.Interfaces;
+
+namespace PPS.LicenseManager.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class AvailabilityController : ControllerBase
+{
+    private readonly IAvailabilityService _availabilityService;
+
+    public AvailabilityController(
+        IAvailabilityService availabilityService)
+    {
+        _availabilityService = availabilityService;
+    }
+
+    // GET: /api/Availability/unavailabilities
+    [HttpGet("unavailabilities")]
+    public async Task<IActionResult> GetUnavailabilities()
+    {
+        var records =
+            await _availabilityService
+                .GetUnavailabilitiesAsync();
+
+        return Ok(records);
+    }
+
+    // GET: /api/Availability/unavailabilities/5
+    [HttpGet("unavailabilities/{id:int}")]
+    public async Task<IActionResult> GetUnavailabilityById(
+        int id)
+    {
+        var record =
+            await _availabilityService
+                .GetUnavailabilityByIdAsync(id);
+
+        if (record == null)
+            return NotFound();
+
+        return Ok(record);
+    }
+
+    // POST: /api/Availability/unavailabilities
+    [HttpPost("unavailabilities")]
+    public async Task<IActionResult> CreateUnavailability(
+        CreateUserUnavailabilityRequest request)
+    {
+        var record =
+            await _availabilityService
+                .CreateUnavailabilityAsync(request);
+
+        return CreatedAtAction(
+            nameof(GetUnavailabilityById),
+            new { id = record.Id },
+            record);
+    }
+
+    // POST: /api/Availability/unavailabilities/5/cancel
+    [HttpPost("unavailabilities/{id:int}/cancel")]
+    public async Task<IActionResult> CancelUnavailability(
+        int id,
+        CancelUserUnavailabilityRequest request)
+    {
+        var cancelled =
+            await _availabilityService
+                .CancelUnavailabilityAsync(
+                    id,
+                    request);
+
+        if (!cancelled)
+            return NotFound();
+
+        return Ok(new
+        {
+            Success = true,
+            Message =
+                "Unavailability period cancelled successfully."
+        });
+    }
+
+    // GET: /api/Availability/available-licenses
+    [HttpGet("available-licenses")]
+    public async Task<IActionResult> GetAvailableLicenses()
+    {
+        var records =
+            await _availabilityService
+                .GetAvailableLicenseResourcesAsync();
+
+        return Ok(records);
+    }
+}

@@ -88,6 +88,7 @@ public class AuthService : IAuthService
 
         var response = new LoginResponse
         {
+            UserId = user.Id,
             Token = token,
             Expiration = DateTime.UtcNow.AddMinutes(60),
             FullName = user.FullName,

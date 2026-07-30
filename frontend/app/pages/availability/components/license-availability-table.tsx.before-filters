@@ -1,0 +1,157 @@
+import { KeySquare } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+
+import type { License } from '@/lib/api/licenses.api';
+
+interface LicenseAvailabilityTableProps {
+  licenses: License[];
+  loading: boolean;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleDateString('en-GB');
+}
+
+function getEffectiveStatus(license: License) {
+  if (!license.isActive) {
+    return 'Inactive';
+  }
+
+  const expiry = new Date(license.expiryDate);
+
+  if (
+    !Number.isNaN(expiry.getTime()) &&
+    expiry <= new Date()
+  ) {
+    return 'Expired';
+  }
+
+  return license.status;
+}
+
+function statusVariant(
+  status: string
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status.toLowerCase()) {
+    case 'available':
+      return 'default';
+
+    case 'allocated':
+      return 'secondary';
+
+    case 'expired':
+    case 'inactive':
+      return 'destructive';
+
+    default:
+      return 'outline';
+  }
+}
+
+export function LicenseAvailabilityTable({
+  licenses,
+  loading,
+}: LicenseAvailabilityTableProps) {
+  return (
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>License</TableHead>
+            <TableHead>Software</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Licensed Email</TableHead>
+            <TableHead>Temporary Sharing</TableHead>
+            <TableHead>Max Checkout</TableHead>
+            <TableHead>Expiry Date</TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell
+                colSpan={7}
+                className="py-8 text-center text-sm text-muted-foreground"
+              >
+                Loading license availability...
+              </TableCell>
+            </TableRow>
+          ) : licenses.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={7}
+                className="py-8 text-center text-sm text-muted-foreground"
+              >
+                No licenses found.
+              </TableCell>
+            </TableRow>
+          ) : (
+            licenses.map((license) => {
+              const status = getEffectiveStatus(license);
+
+              return (
+                <TableRow key={license.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2 font-medium">
+                      <KeySquare className="h-4 w-4 text-muted-foreground" />
+
+                      {license.aliasCode}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    {license.softwareName}
+                  </TableCell>
+
+                  <TableCell>
+                    <Badge variant={statusVariant(status)}>
+                      {status}
+                    </Badge>
+                  </TableCell>
+
+                  <TableCell>
+                    {license.licensedEmail || '—'}
+                  </TableCell>
+
+                  <TableCell>
+                    {license.allowTemporaryCheckout
+                      ? 'Allowed'
+                      : 'Not Allowed'}
+                  </TableCell>
+
+                  <TableCell>
+                    {license.allowTemporaryCheckout
+                      ? `${license.maxCheckoutDays} days`
+                      : '—'}
+                  </TableCell>
+
+                  <TableCell>
+                    {formatDate(license.expiryDate)}
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}

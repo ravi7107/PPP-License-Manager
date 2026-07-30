@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
-import { Plus, UserX, PackageSearch, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { useMutateAction } from '@/lib/uibakery';
+import { useAuth } from '@/lib/auth/auth-context';
+import {
+  Plus,
+  UserX,
+  PackageSearch,
+  ClipboardList,
+  CheckCircle2,
+  KeyRound,
+  CircleCheck,
+  UserCheck,
+  CalendarX,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,16 +21,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/layout/kpi-card';
 import { AppRole, canManage, isTeamLeader as checkIsTeamLeader } from '@/lib/auth/roles';
 import loadUnavailabilityPeriods from '@/actions/availability/loadUnavailabilityPeriods';
-import createUnavailabilityPeriod from '@/actions/availability/createUnavailabilityPeriod';
-import cancelUnavailabilityPeriod from '@/actions/availability/cancelUnavailabilityPeriod';
 import loadAvailableResources from '@/actions/availability/loadAvailableResources';
 import loadReallocationRequests from '@/actions/availability/loadReallocationRequests';
-import createReallocationRequest from '@/actions/availability/createReallocationRequest';
-import decideReallocationRequest from '@/actions/availability/decideReallocationRequest';
+
+
 import { recordAvailabilityAudit } from '@/actions/availability/auditLog';
-import { loadUsersForAllocations } from '@/actions/allocations/loadAllocationLookups';
+
 import { MarkUnavailableDialog } from '@/app/pages/availability/components/mark-unavailable-dialog';
 import { AvailableResourcesTable } from '@/app/pages/availability/components/available-resources-table';
+import { LicenseAvailabilityTable } from '@/app/pages/availability/components/license-availability-table';
+import {
+  getLicenses,
+  type License,
+} from '@/lib/api/licenses.api';
+
+import { getUsers } from '@/lib/api/users.api';
+
+import {
+  createUnavailability as createUnavailabilityApi,
+  cancelUnavailability as cancelUnavailabilityApi,
+  createReallocationRequest as createReallocationRequestApi,
+  decideReallocationRequest as decideReallocationRequestApi,
+  returnReallocationToOriginalUser as returnReallocationToOriginalUserApi,
+} from '@/lib/api/availability.api';
 import { ReallocationRequestDialog } from '@/app/pages/availability/components/reallocation-request-dialog';
 import { ReallocationApprovalDialog } from '@/app/pages/availability/components/reallocation-approval-dialog';
 import {
@@ -61,27 +85,105 @@ function requestStatusVariant(status: string): 'default' | 'secondary' | 'destru
 
 export default function AvailabilityPage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
-  const user = useUser();
+  const { user: authenticatedUser } = useAuth();
+
   const canApprove = canManage(roles);
-  const canMarkOrRequest = canManage(roles) || checkIsTeamLeader(roles);
-  const actorName = user?.name ?? 'System';
+  const canMarkOrRequest =
+    canManage(roles) || checkIsTeamLeader(roles);
 
-  const [periods, periodsLoading, , reloadPeriods]: [UnavailabilityPeriod[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadUnavailabilityPeriods, [], {});
-  const [resources, resourcesLoading, , reloadResources]: [AvailableResource[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadAvailableResources, [], {});
-  const [requests, requestsLoading, , reloadRequests]: [ReallocationRequest[], boolean, Error | null, () => Promise<void>] =
-    useLoadAction(loadReallocationRequests, [], {});
-  const [users]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadUsersForAllocations,
-    [],
-    {},
-  );
+  const actorName =
+    authenticatedUser?.fullName ?? 'System';
 
-  const [saveUnavailability, saving] = useMutateAction(createUnavailabilityPeriod);
-  const [cancelPeriod, cancelling] = useMutateAction(cancelUnavailabilityPeriod);
-  const [saveRequest, requesting] = useMutateAction(createReallocationRequest);
-  const [decideRequest, deciding] = useMutateAction(decideReallocationRequest);
+  const actorUserId =
+    authenticatedUser?.userId;
+
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [licensesLoading, setLicensesLoading] = useState(true);
+  const [licensesError, setLicensesError] = useState('');
+
+  const loadLicenseAvailability = async () => {
+    setLicensesLoading(true);
+    setLicensesError('');
+
+    try {
+      const data = await getLicenses();
+
+      setLicenses(
+        Array.isArray(data) ? data : []
+      );
+    } catch (error: any) {
+      console.error(
+        'Unable to load license availability:',
+        error
+      );
+
+      setLicensesError(
+        error?.response?.data?.message ||
+        error?.message ||
+        'Unable to load license availability.'
+      );
+
+      setLicenses([]);
+    } finally {
+      setLicensesLoading(false);
+    }
+  };
+
+  const [periods, setPeriods] =
+    useState<UnavailabilityPeriod[]>([]);
+  const [periodsLoading, setPeriodsLoading] =
+    useState(true);
+
+  const [resources, setResources] =
+    useState<AvailableResource[]>([]);
+  const [resourcesLoading, setResourcesLoading] =
+    useState(true);
+
+  const [requests, setRequests] =
+    useState<ReallocationRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] =
+    useState(true);
+  const [users, setUsers] = useState<LookupOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  const loadAvailabilityUsers = async () => {
+    setUsersLoading(true);
+
+    try {
+      const userData = await getUsers('', 1, 500);
+
+      setUsers(
+        Array.isArray(userData?.items)
+          ? userData.items
+              .filter((u) => u.isActive)
+              .map((u) => ({
+                id: u.id,
+                name: u.fullName,
+              }))
+          : []
+      );
+    } catch (error) {
+      console.error(
+        'Unable to load availability users:',
+        error
+      );
+
+      setUsers([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLicenseAvailability();
+    void loadAvailabilityUsers();
+    void loadAvailabilityData();
+  }, []);
+
+  const [saving, setSaving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [deciding, setDeciding] = useState(false);
   const [logAudit] = useMutateAction(recordAvailabilityAudit);
 
   const [markOpen, setMarkOpen] = useState(false);
@@ -90,47 +192,280 @@ export default function AvailabilityPage() {
   const [selectedResource, setSelectedResource] = useState<AvailableResource | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ReallocationRequest | null>(null);
 
-  const refreshAll = async () => {
-    await Promise.all([reloadPeriods(), reloadResources(), reloadRequests()]);
+  const loadAvailabilityData = async () => {
+    setPeriodsLoading(true);
+    setResourcesLoading(true);
+    setRequestsLoading(true);
+
+    try {
+      const [
+        periodData,
+        resourceData,
+        requestData,
+      ] = await Promise.all([
+        loadUnavailabilityPeriods(),
+        loadAvailableResources(),
+        loadReallocationRequests(),
+      ]);
+
+      setPeriods(
+        Array.isArray(periodData) ? periodData : []
+      );
+
+      setResources(
+        Array.isArray(resourceData) ? resourceData : []
+      );
+
+      setRequests(
+        Array.isArray(requestData) ? requestData : []
+      );
+    } catch (error) {
+      console.error(
+        'Unable to load availability data:',
+        error
+      );
+    } finally {
+      setPeriodsLoading(false);
+      setResourcesLoading(false);
+      setRequestsLoading(false);
+    }
   };
 
-  const activeCount = periods.filter((p) => p.effective_status === 'Active').length;
-  const upcomingCount = periods.filter((p) => p.effective_status === 'Upcoming').length;
-  const pendingRequestCount = requests.filter((r) => r.status === 'Pending').length;
-  const availableResourceCount = resources.length;
+  const refreshAll = async () => {
+    await loadAvailabilityData();
+  };
 
-  const handleMarkUnavailable = async (values: UnavailabilityFormValues) => {
+  const safePeriods = Array.isArray(periods)
+    ? periods
+    : [];
+
+  const safeResources = Array.isArray(resources)
+    ? resources
+    : [];
+
+  const safeRequests = Array.isArray(requests)
+    ? requests
+    : [];
+
+  // Operational view contains only periods requiring
+  // current or future attention.
+  // Reallocation operational queue:
+  // Pending requests and Approved requests whose temporary
+  // allocation is still active.
+  const operationalRequests = safeRequests.filter(
+    (r) =>
+      r.status === 'Pending' ||
+      (
+        r.status === 'Approved' &&
+        r.resulting_allocation_active === true
+      )
+  );
+
+  // Reallocation history:
+  // Returned, Rejected, and old Approved requests whose
+  // resulting allocation is no longer active.
+  const historicalRequests = safeRequests
+    .filter(
+      (r) =>
+        r.status === 'Returned' ||
+        r.status === 'Rejected' ||
+        (
+          r.status === 'Approved' &&
+          r.resulting_allocation_active === false
+        )
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    );
+
+  const operationalPeriods = safePeriods.filter(
+    (p) =>
+      p.effective_status === 'Active' ||
+      p.effective_status === 'Upcoming'
+  );
+
+  // Preserve completed/cancelled records for audit history.
+  // Newest records are shown first.
+  const historicalPeriods = safePeriods
+    .filter(
+      (p) =>
+        p.effective_status === 'Ended' ||
+        p.effective_status === 'Cancelled'
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    );
+
+  const activeCount = safePeriods.filter(
+    (p) => p.effective_status === 'Active'
+  ).length;
+
+  const upcomingCount = safePeriods.filter(
+    (p) => p.effective_status === 'Upcoming'
+  ).length;
+
+  const pendingRequestCount = safeRequests.filter(
+    (r) => r.status === 'Pending'
+  ).length;
+
+  const availableResourceCount = safeResources.length;
+
+  // Central license inventory KPI calculations.
+  // Expired and inactive licenses are excluded from Available/Allocated.
+  const now = new Date();
+
+  const totalLicenseCount = licenses.length;
+
+  const activeLicenseCount = licenses.filter((license) => {
+    const expiry = new Date(license.expiryDate);
+
+    return (
+      license.isActive &&
+      !Number.isNaN(expiry.getTime()) &&
+      expiry > now
+    );
+  }).length;
+
+  const availableLicenseCount = licenses.filter((license) => {
+    const expiry = new Date(license.expiryDate);
+
+    return (
+      license.isActive &&
+      !Number.isNaN(expiry.getTime()) &&
+      expiry > now &&
+      license.status.toLowerCase() === 'available'
+    );
+  }).length;
+
+  const allocatedLicenseCount = licenses.filter((license) => {
+    const expiry = new Date(license.expiryDate);
+
+    return (
+      license.isActive &&
+      !Number.isNaN(expiry.getTime()) &&
+      expiry > now &&
+      license.status.toLowerCase() === 'allocated'
+    );
+  }).length;
+
+  const expiredLicenseCount = licenses.filter((license) => {
+    const expiry = new Date(license.expiryDate);
+
+    return (
+      !Number.isNaN(expiry.getTime()) &&
+      expiry <= now
+    );
+  }).length;
+
+  const renewalAttentionCount = licenses.filter((license) => {
+    if (!license.isActive) {
+      return false;
+    }
+
+    const expiry = new Date(license.expiryDate);
+
+    if (Number.isNaN(expiry.getTime())) {
+      return false;
+    }
+
+    const todayUtc = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate()
+    );
+
+    const expiryUtc = Date.UTC(
+      expiry.getUTCFullYear(),
+      expiry.getUTCMonth(),
+      expiry.getUTCDate()
+    );
+
+    const daysRemaining = Math.ceil(
+      (expiryUtc - todayUtc) / 86400000
+    );
+
+    return daysRemaining <= 30;
+  }).length;
+
+  const handleMarkUnavailable = async (
+    values: UnavailabilityFormValues
+  ) => {
+    if (!actorUserId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
     const payload = {
-      userId: values.userId,
+      userId: Number(values.userId),
       startDate: values.startDate,
       endDate: values.endDate,
-      reason: values.reason,
-      actorName,
+      reason: values.reason.trim(),
+      createdByUserId: actorUserId,
     };
-    await saveUnavailability(payload);
-    await logAudit({
-      tableName: 'user_unavailability_periods',
-      recordId: null,
-      action: 'INSERT',
-      oldValues: null,
-      newValues: JSON.stringify(payload),
-      actorName,
-    });
-    setMarkOpen(false);
-    await refreshAll();
+
+    try {
+      setSaving(true);
+
+      const created =
+        await createUnavailabilityApi(payload);
+
+      await logAudit({
+        tableName: 'UserUnavailabilities',
+        recordId: created.id,
+        action: 'INSERT',
+        oldValues: null,
+        newValues: JSON.stringify(created),
+        actorName,
+      });
+
+      setMarkOpen(false);
+
+      await refreshAll();
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleCancelPeriod = async (period: UnavailabilityPeriod) => {
-    await cancelPeriod({ id: period.id, actorName });
-    await logAudit({
-      tableName: 'user_unavailability_periods',
-      recordId: period.id,
-      action: 'CANCEL',
-      oldValues: JSON.stringify(period),
-      newValues: null,
-      actorName,
-    });
-    await refreshAll();
+  const handleCancelPeriod = async (
+    period: UnavailabilityPeriod
+  ) => {
+    if (!actorUserId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    try {
+      setCancelling(true);
+
+      await cancelUnavailabilityApi(
+        period.id,
+        {
+          cancelledByUserId: actorUserId,
+        }
+      );
+
+      await logAudit({
+        tableName: 'UserUnavailabilities',
+        recordId: period.id,
+        action: 'CANCEL',
+        oldValues: JSON.stringify(period),
+        newValues: JSON.stringify({
+          status: 'Cancelled',
+          cancelledByUserId: actorUserId,
+        }),
+        actorName,
+      });
+
+      await refreshAll();
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const openRequestDialog = (resource: AvailableResource) => {
@@ -138,28 +473,137 @@ export default function AvailabilityPage() {
     setRequestOpen(true);
   };
 
-  const handleCreateRequest = async (values: ReallocationFormValues) => {
-    if (!selectedResource) return;
+  const handleCreateRequest = async (
+    values: ReallocationFormValues
+  ) => {
+    if (!selectedResource) {
+      return;
+    }
+
+    if (!actorUserId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    if (
+      selectedResource.resource_type !== 'License' ||
+      !selectedResource.license_allocation_id
+    ) {
+      throw new Error(
+        'A valid license allocation is required for reallocation.'
+      );
+    }
+
     const payload = {
-      unavailabilityId: selectedResource.unavailability_id,
-      resourceType: selectedResource.resource_type,
-      assetId: selectedResource.resource_type === 'Asset' ? selectedResource.asset_id : null,
-      licenseAllocationId: selectedResource.resource_type === 'License' ? selectedResource.license_allocation_id : null,
-      targetUserId: values.targetUserId,
-      justification: values.justification,
-      actorName,
+      userUnavailabilityId:
+        selectedResource.unavailability_id,
+
+      resourceAllocationId:
+        selectedResource.license_allocation_id,
+
+      targetUserId:
+        Number(values.targetUserId),
+
+      requestedByUserId:
+        actorUserId,
+
+      remarks:
+        values.justification.trim() || null,
     };
-    await saveRequest(payload);
-    await logAudit({
-      tableName: 'reallocation_requests',
-      recordId: null,
-      action: 'INSERT',
-      oldValues: null,
-      newValues: JSON.stringify(payload),
-      actorName,
-    });
-    setRequestOpen(false);
-    await refreshAll();
+
+    try {
+      setRequesting(true);
+
+      const created =
+        await createReallocationRequestApi(payload);
+
+      await logAudit({
+        tableName: 'ResourceReallocationRequests',
+        recordId: created.id,
+        action: 'INSERT',
+        oldValues: null,
+        newValues: JSON.stringify(created),
+        actorName,
+      });
+
+      setRequestOpen(false);
+      setSelectedResource(null);
+
+      await refreshAll();
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  const handleReturnToOriginalUser = async (
+    request: ReallocationRequest
+  ) => {
+    if (!actorUserId) {
+      window.alert(
+        'Unable to identify the logged-in user.'
+      );
+      return;
+    }
+
+    if (
+      request.status !== 'Approved' ||
+      !request.resulting_allocation_id ||
+      request.resulting_allocation_active !== true
+    ) {
+      window.alert(
+        'This temporary allocation cannot be returned.'
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Return ${request.software_name ?? 'this license'} from ` +
+      `${request.target_user_name ?? 'temporary user'} to ` +
+      `${request.source_user_name}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeciding(true);
+
+      const returned =
+        await returnReallocationToOriginalUserApi(
+          request.id,
+          {
+            returnedByUserId: actorUserId,
+            remarks:
+              `Temporary allocation returned to ${request.source_user_name}`,
+          }
+        );
+
+      await logAudit({
+        tableName: 'ResourceReallocationRequests',
+        recordId: request.id,
+        action: 'RETURN',
+        oldValues: JSON.stringify(request),
+        newValues: JSON.stringify(returned),
+        actorName,
+      });
+
+      await refreshAll();
+
+    } catch (error) {
+      console.error(
+        'Unable to return temporary allocation:',
+        error
+      );
+
+      window.alert(
+        'Unable to return the temporary allocation. Please check the API logs.'
+      );
+
+    } finally {
+      setDeciding(false);
+    }
   };
 
   const openApprovalDialog = (request: ReallocationRequest) => {
@@ -167,20 +611,55 @@ export default function AvailabilityPage() {
     setApprovalOpen(true);
   };
 
-  const handleDecide = async (decision: 'Approved' | 'Rejected', values: { decisionNotes: string }) => {
-    if (!selectedRequest) return;
-    const payload = { id: selectedRequest.id, decision, decisionNotes: values.decisionNotes || null, actorName };
-    await decideRequest(payload);
-    await logAudit({
-      tableName: 'reallocation_requests',
-      recordId: selectedRequest.id,
-      action: decision === 'Approved' ? 'APPROVE' : 'REJECT',
-      oldValues: JSON.stringify(selectedRequest),
-      newValues: JSON.stringify(payload),
-      actorName,
-    });
-    setApprovalOpen(false);
-    await refreshAll();
+  const handleDecide = async (
+    decision: 'Approved' | 'Rejected',
+    values: { decisionNotes: string }
+  ) => {
+    if (!selectedRequest) {
+      return;
+    }
+
+    if (!actorUserId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    const payload = {
+      decidedByUserId: actorUserId,
+      approve: decision === 'Approved',
+      decisionRemarks:
+        values.decisionNotes.trim() || null,
+    };
+
+    try {
+      setDeciding(true);
+
+      const decided =
+        await decideReallocationRequestApi(
+          selectedRequest.id,
+          payload
+        );
+
+      await logAudit({
+        tableName: 'ResourceReallocationRequests',
+        recordId: selectedRequest.id,
+        action:
+          decision === 'Approved'
+            ? 'APPROVE'
+            : 'REJECT',
+        oldValues: JSON.stringify(selectedRequest),
+        newValues: JSON.stringify(decided),
+        actorName,
+      });
+
+      setApprovalOpen(false);
+      setSelectedRequest(null);
+
+      await refreshAll();
+    } finally {
+      setDeciding(false);
+    }
   };
 
   return (
@@ -197,6 +676,67 @@ export default function AvailabilityPage() {
           tone={pendingRequestCount > 0 ? 'warning' : 'default'}
         />
       </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="Total Licenses"
+          value={totalLicenseCount}
+          icon={KeyRound}
+          hint={`${activeLicenseCount} currently active`}
+        />
+
+        <KpiCard
+          title="Available Licenses"
+          value={availableLicenseCount}
+          icon={CircleCheck}
+          hint="Ready for allocation"
+        />
+
+        <KpiCard
+          title="Allocated Licenses"
+          value={allocatedLicenseCount}
+          icon={UserCheck}
+          hint="Currently assigned"
+        />
+
+        <KpiCard
+          title="Renewal Attention"
+          value={renewalAttentionCount}
+          icon={CalendarX}
+          hint={
+            expiredLicenseCount > 0
+              ? `${expiredLicenseCount} expired`
+              : 'Expired or due within 30 days'
+          }
+          tone={
+            renewalAttentionCount > 0
+              ? 'warning'
+              : 'default'
+          }
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>License Availability</CardTitle>
+          <CardDescription>
+            Current availability of individual software licenses from the central license inventory.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {licensesError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {licensesError}
+            </div>
+          ) : null}
+
+          <LicenseAvailabilityTable
+            licenses={licenses}
+            loading={licensesLoading}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -220,11 +760,12 @@ export default function AvailabilityPage() {
               <TabsTrigger value="available">Available Resources</TabsTrigger>
               <TabsTrigger value="periods">Unavailability Periods</TabsTrigger>
               <TabsTrigger value="requests">Reallocation Requests</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
 
             <TabsContent value="available" className="mt-4">
               <AvailableResourcesTable
-                resources={resources}
+                resources={safeResources}
                 loading={resourcesLoading}
                 canRequest={canMarkOrRequest}
                 onRequest={openRequestDialog}
@@ -251,14 +792,14 @@ export default function AvailabilityPage() {
                           Loading unavailability periods…
                         </TableCell>
                       </TableRow>
-                    ) : periods.length === 0 ? (
+                    ) : operationalPeriods.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                          No unavailability periods recorded yet.
+                          No active or upcoming unavailability periods.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      periods.map((p) => (
+                      operationalPeriods.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.user_name}</TableCell>
                           <TableCell>{p.department_name ?? '—'}</TableCell>
@@ -284,6 +825,184 @@ export default function AvailabilityPage() {
               </div>
             </TabsContent>
 
+            <TabsContent value="history" className="mt-4">
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Window</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {periodsLoading ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          Loading history…
+                        </TableCell>
+                      </TableRow>
+                    ) : historicalPeriods.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          No unavailability history yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      historicalPeriods.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">
+                            {p.user_name}
+                          </TableCell>
+
+                          <TableCell>
+                            {p.department_name ?? '—'}
+                          </TableCell>
+
+                          <TableCell className="text-sm">
+                            {p.start_date} → {p.end_date}
+                          </TableCell>
+
+                          <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">
+                            {p.reason}
+                          </TableCell>
+
+                          <TableCell>
+                            <Badge
+                              variant={periodStatusVariant(
+                                p.effective_status
+                              )}
+                            >
+                              {p.effective_status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="mt-6">
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold">
+                    Reallocation History
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Returned, rejected, and superseded temporary
+                    license reallocations.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Resource</TableHead>
+                        <TableHead>From</TableHead>
+                        <TableHead>To</TableHead>
+                        <TableHead>Requested By</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {requestsLoading ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
+                            Loading reallocation history…
+                          </TableCell>
+                        </TableRow>
+                      ) : historicalRequests.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
+                            No reallocation history yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        historicalRequests.map((r) => {
+                          const isSuperseded =
+                            r.status === 'Approved' &&
+                            r.resulting_allocation_active === false;
+
+                          const displayStatus =
+                            isSuperseded
+                              ? 'Superseded'
+                              : r.status;
+
+                          return (
+                            <TableRow key={r.id}>
+                              <TableCell>
+                                <div className="font-medium">
+                                  {r.resource_type === 'Asset'
+                                    ? r.asset_tag
+                                    : r.software_name}
+                                </div>
+
+                                <div className="text-xs text-muted-foreground">
+                                  {r.resource_type}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                {r.source_user_name}
+                              </TableCell>
+
+                              <TableCell>
+                                {r.target_user_name ?? '—'}
+                              </TableCell>
+
+                              <TableCell>
+                                {r.requested_by ?? '—'}
+                              </TableCell>
+
+                              <TableCell>
+                                {isSuperseded ? (
+                                  <Badge variant="outline">
+                                    Superseded
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant={requestStatusVariant(
+                                      r.status
+                                    )}
+                                  >
+                                    {displayStatus}
+                                  </Badge>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="text-sm text-muted-foreground">
+                                {r.returned_at ??
+                                  r.decided_at ??
+                                  r.created_at}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="requests" className="mt-4">
               <div className="rounded-lg border">
                 <Table>
@@ -304,14 +1023,14 @@ export default function AvailabilityPage() {
                           Loading reallocation requests…
                         </TableCell>
                       </TableRow>
-                    ) : requests.length === 0 ? (
+                    ) : operationalRequests.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                          No reallocation requests yet.
+                          No pending or active reallocation requests.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      requests.map((r) => (
+                      operationalRequests.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell>
                             <div className="font-medium">
@@ -327,10 +1046,33 @@ export default function AvailabilityPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {canApprove && r.status === 'Pending' ? (
-                              <Button variant="outline" size="sm" onClick={() => openApprovalDialog(r)}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openApprovalDialog(r)}
+                              >
                                 <CheckCircle2 className="mr-2 h-4 w-4" />
                                 Review
                               </Button>
+                            ) : canApprove &&
+                              r.status === 'Approved' &&
+                              r.resulting_allocation_id &&
+                              r.resulting_allocation_active === true ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={deciding}
+                                onClick={() =>
+                                  handleReturnToOriginalUser(r)
+                                }
+                              >
+                                <UserCheck className="mr-2 h-4 w-4" />
+                                Return to {r.source_user_name}
+                              </Button>
+                            ) : r.status === 'Returned' ? (
+                              <Badge variant="outline">
+                                Returned
+                              </Badge>
                             ) : null}
                           </TableCell>
                         </TableRow>

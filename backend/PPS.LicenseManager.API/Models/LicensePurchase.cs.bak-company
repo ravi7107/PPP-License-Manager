@@ -1,0 +1,76 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace PPS.LicenseManager.API.Models;
+
+public class LicensePurchase
+{
+    public int Id { get; set; }
+
+    [Required]
+    public int SoftwareId { get; set; }
+
+    [ForeignKey(nameof(SoftwareId))]
+    public Software Software { get; set; } = null!;
+
+    [Required]
+    [MaxLength(100)]
+    public string Vendor { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(50)]
+    public string LicenseType { get; set; } = string.Empty;
+
+    [MaxLength(500)]
+    public string? LicenseKey { get; set; }
+
+    [Required]
+    public int TotalLicenses { get; set; }
+
+    public DateOnly PurchaseDate { get; set; }
+
+    public DateOnly? ExpiryDate { get; set; }
+
+    public DateOnly? SupportExpiryDate { get; set; }
+
+    public int? DepartmentId { get; set; }
+
+    public int? ClientId { get; set; }
+
+    public Client? Client { get; set; }
+
+    [Required]
+    [MaxLength(20)]
+    public string PurchaseScope { get; set; } = "Organization";
+
+    [MaxLength(50)]
+    public string? PONumber { get; set; }
+
+    [MaxLength(50)]
+    public string? InvoiceNumber { get; set; }
+
+    [MaxLength(50)]
+    public string? ContractNumber { get; set; }
+
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? Cost { get; set; }
+
+    [MaxLength(10)]
+    public string? Currency { get; set; }
+
+    [MaxLength(100)]
+    public string? PurchaseSource { get; set; }
+
+    [MaxLength(500)]
+    public string? Remarks { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public DateTime? UpdatedAt { get; set; }
+
+    // Individual usable licenses created under this purchase.
+    public ICollection<License> Licenses { get; set; } =
+        new List<License>();
+}

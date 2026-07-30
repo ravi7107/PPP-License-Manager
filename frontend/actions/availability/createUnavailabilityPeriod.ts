@@ -1,31 +1,35 @@
-import { action } from '@/lib/uibakery';
+import {
+  createUnavailability,
+} from '@/lib/api/availability.api';
 
-// Team Leader marks a user unavailable for a date range. Any prior Active period for the same
-// user is cancelled in the same statement (CTE) so only one active window exists at a time.
-// This does NOT touch assets/license_allocations - resources are only computed as "available"
-// for display via loadAvailableResources, never auto-reassigned.
-function createUnavailabilityPeriod() {
-  return action('createUnavailabilityPeriod', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      WITH cancel_prior AS (
-        UPDATE user_unavailability_periods
-        SET status = 'Cancelled', updated_by = {{params.actorName}}, updated_at = NOW()
-        WHERE user_id = {{params.userId}}::bigint AND status = 'Active' AND deleted_at IS NULL
-        RETURNING id
-      )
-      INSERT INTO user_unavailability_periods (user_id, start_date, end_date, reason, status, created_by, updated_by)
-      VALUES (
-        {{params.userId}}::bigint,
-        {{params.startDate}}::date,
-        {{params.endDate}}::date,
-        {{params.reason}},
-        'Active',
-        {{params.actorName}},
-        {{params.actorName}}
-      )
-      RETURNING id;
-    `,
+interface CreateUnavailabilityParams {
+  userId: number | string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  createdByUserId: number;
+}
+
+async function createUnavailabilityPeriod(
+  params: CreateUnavailabilityParams
+) {
+  return await createUnavailability({
+    userId: Number(params.userId),
+
+    startDate:
+      params.startDate.includes('T')
+        ? params.startDate
+        : `${params.startDate}T00:00:00Z`,
+
+    endDate:
+      params.endDate.includes('T')
+        ? params.endDate
+        : `${params.endDate}T23:59:59Z`,
+
+    reason: params.reason.trim(),
+
+    createdByUserId:
+      params.createdByUserId,
   });
 }
 

@@ -14,17 +14,35 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AssetFormValues, AssetRecord, AssetType, ASSET_STATUSES, ASSET_TYPES, EMPTY_ASSET_FORM, LookupOption } from '@/app/pages/hardware/types';
+import {
+  AssetFormValues,
+  AssetRecord,
+  AssetType,
+  ASSET_TYPES,
+  EMPTY_ASSET_FORM,
+  LookupOption,
+} from '@/app/pages/hardware/types';
 
 const assetFormSchema = z.object({
   assetTag: z.string().min(1, 'Asset ID is required'),
-  assetType: z.enum(['Desktop', 'Laptop', 'Workstation', 'Server']),
+
+  assetName: z.string().min(1, 'Asset Name is required'),
+
+  assetType: z.enum([
+    'Desktop',
+    'Laptop',
+    'Workstation',
+    'Server',
+  ]),
   computerName: z.string(),
-  hostName: z.string(),
-  serialNumber: z.string(),
   manufacturer: z.string(),
-  model: z.string(),
-  purchaseDate: z.string(),
+model: z.string(),
+serialNumber: z.string(),
+hostName: z.string(),
+
+processor: z.string(),
+ramGb: z.coerce.number().optional(),
+purchaseDate: z.string(),
   warrantyExpiry: z.string(),
   operatingSystem: z.string(),
   location: z.string(),
@@ -50,26 +68,47 @@ interface AssetFormDialogProps {
 
 function toFormValues(asset: AssetRecord | null): AssetFormValues {
   if (!asset) return EMPTY_ASSET_FORM;
+
   return {
-    assetTag: asset.asset_tag ?? '',
-    assetType: (asset.asset_type as AssetType) ?? 'Workstation',
-    computerName: asset.computer_name ?? '',
-    hostName: asset.host_name ?? '',
-    serialNumber: asset.serial_number ?? '',
-    manufacturer: asset.manufacturer ?? '',
-    model: asset.model ?? '',
-    purchaseDate: asset.purchase_date ? asset.purchase_date.slice(0, 10) : '',
-    warrantyExpiry: asset.warranty_expiry ? asset.warranty_expiry.slice(0, 10) : '',
-    operatingSystem: asset.operating_system ?? '',
-    location: asset.location ?? '',
+    assetTag: asset.assetTag ?? "",
+    assetName: asset.assetName ?? "",
+    assetType: (asset.assetType as AssetType) ?? "Workstation",
+
+    computerName: "",
+    hostName: asset.hostName ?? "",
+
+    manufacturer: asset.manufacturer ?? "",
+    model: asset.model ?? "",
+    serialNumber: asset.serialNumber ?? "",
+
+    processor: asset.processor ?? "",
+    ramGb: asset.ramGb,
+
+    purchaseDate: asset.purchaseDate
+      ? asset.purchaseDate.slice(0, 10)
+      : "",
+
+    warrantyExpiry: asset.warrantyExpiry
+      ? asset.warrantyExpiry.slice(0, 10)
+      : "",
+
+    operatingSystem: asset.operatingSystem ?? "",
+
+    location: "",
     status: asset.status,
-    remarks: asset.remarks ?? '',
-    assignedUserId: asset.assigned_user_id ? String(asset.assigned_user_id) : '',
-    departmentId: asset.department_id ? String(asset.department_id) : '',
-    entityId: asset.entity_id ? String(asset.entity_id) : '',
-    clientId: asset.client_id ? String(asset.client_id) : '',
+
+    remarks: asset.remarks ?? "",
+
+    assignedUserId: "",
+    departmentId: asset.departmentId
+      ? String(asset.departmentId)
+      : "",
+
+    entityId: "",
+    clientId: "",
   };
 }
+
 
 export function AssetFormDialog({
   open,
@@ -124,6 +163,23 @@ export function AssetFormDialog({
                 </FormItem>
               )}
             />
+
+            <FormField
+  control={form.control}
+  name="assetName"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Asset Name</FormLabel>
+      <FormControl>
+        <Input
+          placeholder="Dell OptiPlex 7010"
+          {...field}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
             <FormField
               control={form.control}
               name="assetType"
@@ -148,19 +204,7 @@ export function AssetFormDialog({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="computerName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Computer Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            
             <FormField
               control={form.control}
               name="hostName"
@@ -174,6 +218,22 @@ export function AssetFormDialog({
                 </FormItem>
               )}
             />
+            <FormField
+  control={form.control}
+  name="processor"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Processor</FormLabel>
+      <FormControl>
+        <Input
+          placeholder="Intel Core i7-13700"
+          {...field}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
             <FormField
               control={form.control}
               name="serialNumber"
@@ -265,31 +325,7 @@ export function AssetFormDialog({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {ASSET_STATUSES.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
+              <FormField                    
               control={form.control}
               name="assignedUserId"
               render={({ field }) => (

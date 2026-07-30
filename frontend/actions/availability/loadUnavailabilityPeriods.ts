@@ -1,40 +1,54 @@
-import { action } from '@/lib/uibakery';
+import {
+  getUnavailabilities,
+  type UserUnavailabilityApi,
+} from '@/lib/api/availability.api';
 
-// Lists all unavailability periods with computed effective status:
-// Active + within date range => "Active", Active + future start => "Upcoming",
-// Active + end_date passed => "Ended" (display only; a separate action flips stored status).
-function loadUnavailabilityPeriods() {
-  return action('loadUnavailabilityPeriods', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT
-        uup.id,
-        uup.user_id,
-        u.full_name AS user_name,
-        u.department_id,
-        d.name AS department_name,
-        uup.start_date,
-        uup.end_date,
-        uup.reason,
-        uup.status,
-        CASE
-          WHEN uup.status = 'Cancelled' THEN 'Cancelled'
-          WHEN uup.status = 'Active' AND CURRENT_DATE < uup.start_date THEN 'Upcoming'
-          WHEN uup.status = 'Active' AND CURRENT_DATE > uup.end_date THEN 'Ended'
-          WHEN uup.status = 'Active' THEN 'Active'
-          ELSE uup.status
-        END AS effective_status,
-        uup.created_at,
-        uup.updated_at,
-        uup.created_by,
-        uup.updated_by
-      FROM user_unavailability_periods uup
-      JOIN users u ON u.id = uup.user_id
-      LEFT JOIN departments d ON d.id = u.department_id
-      WHERE uup.deleted_at IS NULL
-      ORDER BY uup.start_date DESC;
-    `,
-  });
+function getEffectiveStatus(
+  record: UserUnavailabilityApi
+): 'Active' | 'Cancelled' | 'Ended' | 'Upcoming' {
+  if (record.status.toLowerCase() === 'cancelled') {
+    return 'Cancelled';
+  }
+
+  const now = new Date();
+  const start = new Date(record.startDate);
+  const end = new Date(record.endDate);
+
+  if (now < start) {
+    return 'Upcoming';
+  }
+
+  if (now > end) {
+    return 'Ended';
+  }
+
+  return 'Active';
+}
+
+async function loadUnavailabilityPeriods() {
+  const records = await getUnavailabilities();
+
+  return records.map((record) => ({
+    id: record.id,
+    user_id: record.userId,
+    user_name: record.userName,
+
+    department_id: null,
+    department_name: null,
+
+    start_date: record.startDate,
+    end_date: record.endDate,
+    reason: record.reason,
+
+    status: record.status,
+    effective_status: getEffectiveStatus(record),
+
+    created_at: record.createdAt,
+    updated_at: record.cancelledAt ?? record.createdAt,
+
+    created_by: record.createdBy ?? null,
+    updated_by: record.cancelledBy ?? record.createdBy ?? null,
+  }));
 }
 
 export default loadUnavailabilityPeriods;

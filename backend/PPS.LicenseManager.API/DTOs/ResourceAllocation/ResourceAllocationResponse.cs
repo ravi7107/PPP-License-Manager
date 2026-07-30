@@ -10,6 +10,8 @@ namespace PPS.LicenseManager.API.DTOs.ResourceAllocation
 
         public string LicenseAliasCode { get; set; } = string.Empty;
 
+        public string SoftwareName { get; set; } = string.Empty;
+
         public int UserId { get; set; }
 
         public string UserName { get; set; } = string.Empty;

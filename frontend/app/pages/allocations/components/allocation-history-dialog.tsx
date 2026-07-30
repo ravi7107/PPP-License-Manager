@@ -61,7 +61,7 @@ export function AllocationHistoryDialog({ open, onOpenChange, record }: Allocati
             <p className="py-6 text-center text-sm text-muted-foreground">No audit records for this allocation yet.</p>
           ) : (
             <div className="space-y-3">
-              {entries.map((entry) => (
+              {(Array.isArray(entries) ? entries : []).map((entry) => (
                 <div key={entry.id} className="rounded-lg border p-3">
                   <div className="flex items-center justify-between">
                     <Badge variant={actionVariant(entry.action)}>{entry.action}</Badge>

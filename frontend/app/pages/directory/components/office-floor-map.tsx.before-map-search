@@ -1,0 +1,429 @@
+import {
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import {
+  Map,
+  MapPin,
+  Move,
+} from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+
+import type {
+  OfficeFloor,
+  OfficeSeat,
+} from '@/lib/api/office-locations.api';
+
+interface OfficeFloorMapProps {
+  floor: OfficeFloor;
+  seats: OfficeSeat[];
+  apiBaseUrl?: string;
+  selectedSeatId?: number | null;
+
+  onSeatClick?: (seat: OfficeSeat) => void;
+
+  onSeatMove?: (
+    seat: OfficeSeat,
+    xPosition: number,
+    yPosition: number
+  ) => Promise<void> | void;
+}
+
+function buildMapUrl(
+  path: string | null,
+  apiBaseUrl?: string
+): string | null {
+  if (!path) return null;
+
+  if (
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+
+  const base =
+    apiBaseUrl ??
+    import.meta.env.VITE_API_URL ??
+    '';
+
+  return `${base.replace(/\/api\/?$/, '')}${path}`;
+}
+
+function clamp(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+export default function OfficeFloorMap({
+  floor,
+  seats,
+  apiBaseUrl,
+  selectedSeatId,
+  onSeatClick,
+  onSeatMove,
+}: OfficeFloorMapProps) {
+  const mapRef = useRef<HTMLDivElement | null>(null);
+
+  const [draggingSeatId, setDraggingSeatId] =
+    useState<number | null>(null);
+
+  const [dragPosition, setDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [savingSeatId, setSavingSeatId] =
+    useState<number | null>(null);
+
+  const mapUrl = useMemo(
+    () => buildMapUrl(floor.mapImagePath, apiBaseUrl),
+    [floor.mapImagePath, apiBaseUrl]
+  );
+
+  const positionedSeats = useMemo(
+    () =>
+      seats.filter(
+        (seat) =>
+          seat.isActive &&
+          seat.xPosition !== null &&
+          seat.yPosition !== null
+      ),
+    [seats]
+  );
+
+  const getPosition = (
+    clientX: number,
+    clientY: number
+  ) => {
+    const container = mapRef.current;
+
+    if (!container) return null;
+
+    const rect = container.getBoundingClientRect();
+
+    if (!rect.width || !rect.height) {
+      return null;
+    }
+
+    const x =
+      ((clientX - rect.left) / rect.width) * 100;
+
+    const y =
+      ((clientY - rect.top) / rect.height) * 100;
+
+    return {
+      x: Number(clamp(x).toFixed(3)),
+      y: Number(clamp(y).toFixed(3)),
+    };
+  };
+
+  const startDrag = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    seat: OfficeSeat
+  ) => {
+    if (!onSeatMove) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+
+    setDraggingSeatId(seat.id);
+
+    setDragPosition({
+      x: Number(seat.xPosition ?? 0),
+      y: Number(seat.yPosition ?? 0),
+    });
+  };
+
+  const moveDrag = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (draggingSeatId === null) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const position = getPosition(
+      event.clientX,
+      event.clientY
+    );
+
+    if (position) {
+      setDragPosition(position);
+    }
+  };
+
+  const finishDrag = async (
+    event: React.PointerEvent<HTMLButtonElement>,
+    seat: OfficeSeat
+  ) => {
+    if (
+      draggingSeatId !== seat.id ||
+      !onSeatMove
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const position =
+      getPosition(event.clientX, event.clientY) ??
+      dragPosition;
+
+    setDraggingSeatId(null);
+    setDragPosition(null);
+
+    if (!position) return;
+
+    const oldX = Number(seat.xPosition);
+    const oldY = Number(seat.yPosition);
+
+    const moved =
+      Math.abs(position.x - oldX) > 0.01 ||
+      Math.abs(position.y - oldY) > 0.01;
+
+    if (!moved) {
+      onSeatClick?.(seat);
+      return;
+    }
+
+    try {
+      setSavingSeatId(seat.id);
+
+      await onSeatMove(
+        seat,
+        position.x,
+        position.y
+      );
+    } finally {
+      setSavingSeatId(null);
+    }
+  };
+
+  if (!mapUrl) {
+    return (
+      <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+        <Map className="mb-3 h-10 w-10 text-muted-foreground" />
+
+        <p className="font-medium">
+          No floor map uploaded
+        </p>
+
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">
+          Upload a JPG or PNG floor plan to display
+          workstation positions visually.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-medium">
+            {floor.floorName} Map
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            {floor.mapOriginalFileName ??
+              'Floor plan'}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Badge variant="outline">
+            {positionedSeats.length} workstations
+          </Badge>
+
+          <Badge variant="secondary">
+            {seats.length} total
+          </Badge>
+        </div>
+      </div>
+
+      {onSeatMove && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          <Move className="h-4 w-4" />
+          Drag a green workstation dot to reposition it.
+          The new position is saved automatically.
+        </div>
+      )}
+
+      <div className="overflow-auto rounded-lg border bg-muted/20 p-2">
+        <div
+          ref={mapRef}
+          className="relative mx-auto w-full overflow-hidden rounded-md bg-background"
+          style={{
+            maxWidth: '1400px',
+            touchAction: 'none',
+          }}
+        >
+          <img
+            src={mapUrl}
+            alt={`${floor.floorName} floor plan`}
+            className="pointer-events-none block h-auto w-full select-none"
+            draggable={false}
+          />
+
+          {positionedSeats.map((seat) => {
+            const storedX = clamp(
+              Number(seat.xPosition)
+            );
+
+            const storedY = clamp(
+              Number(seat.yPosition)
+            );
+
+            const isDragging =
+              draggingSeatId === seat.id;
+
+            const x =
+              isDragging && dragPosition
+                ? dragPosition.x
+                : storedX;
+
+            const y =
+              isDragging && dragPosition
+                ? dragPosition.y
+                : storedY;
+
+            const selected =
+              selectedSeatId === seat.id;
+
+            const saving =
+              savingSeatId === seat.id;
+
+            return (
+              <button
+                key={seat.id}
+                type="button"
+                onPointerDown={(event) =>
+                  startDrag(event, seat)
+                }
+                onPointerMove={moveDrag}
+                onPointerUp={(event) =>
+                  void finishDrag(event, seat)
+                }
+                onPointerCancel={() => {
+                  setDraggingSeatId(null);
+                  setDragPosition(null);
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+
+                  if (!onSeatMove) {
+                    onSeatClick?.(seat);
+                  }
+                }}
+                className={[
+                  'group absolute -translate-x-1/2 -translate-y-1/2',
+                  'focus:outline-none',
+                  'select-none touch-none',
+                  onSeatMove
+                    ? 'cursor-grab active:cursor-grabbing'
+                    : 'cursor-pointer',
+                  isDragging
+                    ? 'z-50'
+                    : selected
+                      ? 'z-40'
+                      : 'z-30',
+                ].join(' ')}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                }}
+                aria-label={
+                  seat.hostName ??
+                  seat.assetTag ??
+                  seat.seatCode
+                }
+              >
+                <span
+                  className={[
+                    'block rounded-full bg-green-500 shadow-md',
+                    'border-2 border-white',
+                    'transition-transform',
+                    isDragging
+                      ? 'h-5 w-5 scale-125 ring-4 ring-green-500/30'
+                      : selected
+                        ? 'h-5 w-5 scale-125 ring-4 ring-green-500/25'
+                        : 'h-4 w-4 group-hover:scale-125',
+                    saving
+                      ? 'animate-pulse'
+                      : '',
+                  ].join(' ')}
+                />
+
+                {!isDragging && (
+                  <span
+                    className={[
+                      'pointer-events-none absolute',
+                      'left-1/2 top-6',
+                      '-translate-x-1/2',
+                      'min-w-[190px]',
+                      'rounded-md border',
+                      'bg-background px-3 py-2',
+                      'text-left text-xs shadow-lg',
+                      selected
+                        ? 'block'
+                        : 'hidden group-hover:block',
+                    ].join(' ')}
+                  >
+                    <span className="mb-1 block font-semibold">
+                      {seat.userName ??
+                        'Unassigned user'}
+                    </span>
+
+                    <span className="block">
+                      <span className="text-muted-foreground">
+                        Hostname:{' '}
+                      </span>
+
+                      {seat.hostName ?? '—'}
+                    </span>
+
+                    <span className="block">
+                      <span className="text-muted-foreground">
+                        Department:{' '}
+                      </span>
+
+                      {seat.departmentName ?? '—'}
+                    </span>
+
+                    <span className="block">
+                      <span className="text-muted-foreground">
+                        Asset:{' '}
+                      </span>
+
+                      {seat.assetTag ?? '—'}
+                    </span>
+
+                    <span className="mt-1 block text-[10px] text-muted-foreground">
+                      {seat.seatCode}
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {positionedSeats.length === 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          <MapPin className="h-4 w-4" />
+          No workstations have been positioned on this
+          floor map yet.
+        </div>
+      )}
+    </div>
+  );
+}

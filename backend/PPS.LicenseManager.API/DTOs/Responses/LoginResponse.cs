@@ -2,6 +2,8 @@ namespace PPS.LicenseManager.API.DTOs.Responses;
 
 public class LoginResponse
 {
+    public int UserId { get; set; }
+
     public string Token { get; set; } = string.Empty;
 
     public DateTime Expiration { get; set; }

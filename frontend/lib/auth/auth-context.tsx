@@ -10,6 +10,7 @@ import { login as loginApi } from "@/lib/api/auth.api";
 import { AuthStorage } from "./auth-storage";
 
 interface User {
+  userId: number;
   fullName: string;
   email: string;
   role: string;
@@ -58,6 +59,7 @@ export function AuthProvider({
     });
 
     const authenticatedUser: User = {
+      userId: response.userId,
       fullName: response.fullName,
       email: response.email,
       role: response.role,

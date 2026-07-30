@@ -1,0 +1,277 @@
+export type AppRole =
+  | 'Super Admin'
+  | 'IT Admin'
+  | 'Team Lead'
+  | 'Manager'
+  | 'Employee';
+
+export type ModuleKey =
+  | 'dashboard'
+  | 'hardware'
+  | 'licenses'
+  | 'allocations'
+  | 'availability'
+  | 'approvals'
+  | 'reports'
+  | 'myRequests'
+  | 'search'
+  | 'executive'
+  | 'users'
+  | 'departments'
+  | 'entities'
+  | 'clients'
+  | 'officeLocations'
+  | 'accessManagement';
+
+/*
+ * Default module permissions.
+ *
+ * IMPORTANT:
+ * These role names must match the ASP.NET/PostgreSQL Roles table:
+ *
+ * Super Admin
+ * IT Admin
+ * Team Lead
+ * Manager
+ * Employee
+ */
+const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
+  dashboard: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+    'Employee',
+  ],
+
+  hardware: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+  ],
+
+  licenses: [
+    'Super Admin',
+    'IT Admin',
+    'Manager',
+  ],
+
+  allocations: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+  ],
+
+  availability: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+  ],
+
+  approvals: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  myRequests: [
+    'Team Lead',
+    'Employee',
+  ],
+
+  reports: [
+    'Super Admin',
+    'IT Admin',
+    'Manager',
+  ],
+
+  search: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+  ],
+
+  executive: [
+    'Super Admin',
+    'Manager',
+  ],
+
+  users: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  departments: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  entities: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  clients: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  officeLocations: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  accessManagement: [
+    'Super Admin',
+  ],
+};
+
+const KNOWN_ROLES: AppRole[] = [
+  'Super Admin',
+  'IT Admin',
+  'Team Lead',
+  'Manager',
+  'Employee',
+];
+
+/*
+ * Converts any legacy UI Bakery role names to the new backend role names.
+ *
+ * This keeps older parts of the frontend compatible while the application
+ * is migrated from UI Bakery authentication to the ASP.NET API.
+ */
+function normalizeRole(role: string): AppRole | null {
+  const normalized = role.trim().toLowerCase();
+
+  switch (normalized) {
+    case 'super admin':
+    case 'super administrator':
+      return 'Super Admin';
+
+    case 'it admin':
+    case 'it administrator':
+      return 'IT Admin';
+
+    case 'team lead':
+    case 'team leader':
+      return 'Team Lead';
+
+    case 'manager':
+    case 'management':
+      return 'Manager';
+
+    case 'employee':
+      return 'Employee';
+
+    default:
+      return null;
+  }
+}
+
+/*
+ * Resolve current user's roles into the application's known role set.
+ */
+export function resolveAppRoles(
+  userRoles: string[] | undefined | null
+): AppRole[] {
+  const resolved = (userRoles ?? [])
+    .map(normalizeRole)
+    .filter((role): role is AppRole => role !== null);
+
+  return Array.from(new Set(resolved));
+}
+
+export function hasAnyRole(
+  userRoles: AppRole[],
+  allowed: AppRole[]
+): boolean {
+  return userRoles.some((role) => allowed.includes(role));
+}
+
+export type RoleModuleAccessRow = {
+  role_name: string;
+  module_key: string;
+  is_allowed: boolean;
+};
+
+/*
+ * Build role/module permissions returned by the database.
+ *
+ * Legacy role names are normalized so older DB rows don't immediately
+ * break authorization during migration.
+ */
+export function buildAccessOverride(
+  rows: RoleModuleAccessRow[] | undefined | null
+): Record<string, AppRole[]> | null {
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  const map: Record<string, AppRole[]> = {};
+
+  for (const row of rows) {
+    if (!row.is_allowed) {
+      continue;
+    }
+
+    const role = normalizeRole(row.role_name);
+
+    if (!role) {
+      continue;
+    }
+
+    if (!map[row.module_key]) {
+      map[row.module_key] = [];
+    }
+
+    if (!map[row.module_key].includes(role)) {
+      map[row.module_key].push(role);
+    }
+  }
+
+  return map;
+}
+
+export function canAccessModule(
+  userRoles: AppRole[],
+  module: ModuleKey,
+  override?: Record<string, AppRole[]> | null
+): boolean {
+  const allowed = override?.[module] ?? MODULE_ACCESS[module];
+
+  return hasAnyRole(userRoles, allowed);
+}
+
+export function getDefaultModuleAccess(): Record<
+  ModuleKey,
+  AppRole[]
+> {
+  return MODULE_ACCESS;
+}
+
+export function isSuperAdmin(userRoles: AppRole[]): boolean {
+  return userRoles.includes('Super Admin');
+}
+
+export function isITAdmin(userRoles: AppRole[]): boolean {
+  return userRoles.includes('IT Admin');
+}
+
+export function isTeamLeader(userRoles: AppRole[]): boolean {
+  return userRoles.includes('Team Lead');
+}
+
+export function isManagement(userRoles: AppRole[]): boolean {
+  return userRoles.includes('Manager');
+}
+
+export function isEmployee(userRoles: AppRole[]): boolean {
+  return userRoles.includes('Employee');
+}
+
+/*
+ * Users allowed to create/edit/delete operational records.
+ */
+export function canManage(userRoles: AppRole[]): boolean {
+  return isSuperAdmin(userRoles) || isITAdmin(userRoles);
+}

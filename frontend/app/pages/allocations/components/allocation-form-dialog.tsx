@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+
 import {
   Dialog,
   DialogContent,
@@ -10,323 +11,376 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import {
-  AllocationFormValues,
-  ALLOCATION_TYPES,
-  EMPTY_ALLOCATION_FORM,
-  SoftwareAvailabilityOption,
-  LookupOption,
-} from '@/app/pages/allocations/types';
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from '@/components/ui/form';
 
-const allocationFormSchema = z
-  .object({
-    licenseInventoryId: z.string().min(1, 'Select a software license pool'),
-    allocationType: z.enum(['User', 'Computer', 'Entity', 'Client']),
-    userId: z.string(),
-    assetId: z.string(),
-    entityId: z.string(),
-    clientId: z.string(),
-    allocationDate: z.string().min(1, 'Allocation date is required'),
-    isTemporary: z.boolean(),
-    shareEndDate: z.string(),
-    notes: z.string(),
-  })
-  .superRefine((values, ctx) => {
-    if (values.allocationType === 'User' && !values.userId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a user', path: ['userId'] });
-    }
-    if (values.allocationType === 'Computer' && !values.assetId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a computer', path: ['assetId'] });
-    }
-    if (values.allocationType === 'Entity' && !values.entityId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select an entity', path: ['entityId'] });
-    }
-    if (values.allocationType === 'Client' && !values.clientId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a client', path: ['clientId'] });
-    }
-    if (values.isTemporary && !values.shareEndDate) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Share end date is required for temporary allocations', path: ['shareEndDate'] });
-    }
-  }) satisfies z.ZodType<AllocationFormValues>;
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-interface AllocationFormDialogProps {
+import type { License } from '@/lib/api/licenses.api';
+import type { User } from '@/lib/api/users.api';
+import type { Asset } from '@/lib/api/assets.api';
+
+const schema = z.object({
+  licenseId: z.string().min(1, 'Select a license'),
+  userId: z.string().min(1, 'Select an employee'),
+  assetId: z.string(),
+  expectedReturnDate: z.string(),
+  remarks: z.string(),
+});
+
+export type ApiAllocationFormValues = z.infer<typeof schema>;
+
+interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   saving: boolean;
-  softwareOptions: SoftwareAvailabilityOption[];
-  users: LookupOption[];
-  computers: LookupOption[];
-  entities: LookupOption[];
-  clients: LookupOption[];
-  onSubmit: (values: AllocationFormValues) => Promise<void>;
+
+  licenses: License[];
+  users: User[];
+  assets: Asset[];
+
+  onSubmit: (
+    values: ApiAllocationFormValues
+  ) => Promise<void>;
 }
 
 export function AllocationFormDialog({
   open,
   onOpenChange,
   saving,
-  softwareOptions,
+  licenses,
   users,
-  computers,
-  entities,
-  clients,
+  assets,
   onSubmit,
-}: AllocationFormDialogProps) {
-  const form = useForm<AllocationFormValues>({
-    resolver: zodResolver(allocationFormSchema),
-    defaultValues: EMPTY_ALLOCATION_FORM,
+}: Props) {
+  const form = useForm<ApiAllocationFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      licenseId: '',
+      userId: '',
+      assetId: 'none',
+      expectedReturnDate: '',
+      remarks: '',
+    },
   });
 
   useEffect(() => {
     if (open) {
-      form.reset(EMPTY_ALLOCATION_FORM);
+      form.reset({
+        licenseId: '',
+        userId: '',
+        assetId: 'none',
+        expectedReturnDate: '',
+        remarks: '',
+      });
     }
-  }, [open]);
+  }, [open, form]);
 
-  const allocationType = form.watch('allocationType');
-  const isTemporary = form.watch('isTemporary');
+  const selectedLicenseId = form.watch('licenseId');
+
+  const selectedLicense = licenses.find(
+    (license) =>
+      String(license.id) === selectedLicenseId
+  );
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return '—';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+
+    return date.toLocaleDateString('en-IN');
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Allocate License</DialogTitle>
-          <DialogDescription>Assign a license seat to a user, computer, entity, or client.</DialogDescription>
+          <DialogTitle>
+            Allocate License
+          </DialogTitle>
+
+          <DialogDescription>
+            Assign an available software license
+            to an employee.
+          </DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
-          <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit(onSubmit)}>
+          <form
+            className="space-y-5"
+            onSubmit={form.handleSubmit(onSubmit)}
+          >
             <FormField
               control={form.control}
-              name="licenseInventoryId"
+              name="licenseId"
               render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Software</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                <FormItem>
+                  <FormLabel>
+                    Available License *
+                  </FormLabel>
+
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select software license pool" />
+                        <SelectValue placeholder="Select available license" />
                       </SelectTrigger>
                     </FormControl>
+
                     <SelectContent>
-                      {softwareOptions.map((s) => (
+                      {licenses.map((license) => (
                         <SelectItem
-                          key={s.license_inventory_id}
-                          value={String(s.license_inventory_id)}
-                          disabled={s.available_licenses <= 0}
+                          key={license.id}
+                          value={String(license.id)}
                         >
-                          {s.software_name} ({s.vendor}) — {s.available_licenses}/{s.total_seats} available
+                          {license.aliasCode}
+                          {' — '}
+                          {license.softwareName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {licenses.length === 0 ? (
+                    <FormDescription>
+                      No active and available licenses
+                      are currently available.
+                    </FormDescription>
+                  ) : null}
+
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {selectedLicense ? (
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <div className="text-muted-foreground">
+                      Software
+                    </div>
+                    <div className="font-medium">
+                      {selectedLicense.softwareName}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-muted-foreground">
+                      Alias Code
+                    </div>
+                    <div className="font-medium">
+                      {selectedLicense.aliasCode}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-muted-foreground">
+                      Licensed Email
+                    </div>
+                    <div className="font-medium">
+                      {selectedLicense.licensedEmail || '—'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-muted-foreground">
+                      Expiry Date
+                    </div>
+                    <div className="font-medium">
+                      {formatDate(
+                        selectedLicense.expiryDate
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <FormField
               control={form.control}
-              name="allocationType"
+              name="userId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocate To</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <FormLabel>
+                    Employee *
+                  </FormLabel>
+
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select allocation type" />
+                        <SelectValue placeholder="Select employee" />
                       </SelectTrigger>
                     </FormControl>
+
                     <SelectContent>
-                      {ALLOCATION_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
+                      {users.map((user) => (
+                        <SelectItem
+                          key={user.id}
+                          value={String(user.id)}
+                        >
+                          {user.fullName}
+                          {user.email
+                            ? ` — ${user.email}`
+                            : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
-              name="allocationDate"
+              name="assetId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocation Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <FormLabel>
+                    Computer / Asset
+                  </FormLabel>
 
-            {allocationType === 'User' ? (
-              <FormField
-                control={form.control}
-                name="userId"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>User</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select user" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {users.map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
-
-            {allocationType === 'Computer' ? (
-              <FormField
-                control={form.control}
-                name="assetId"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Computer</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select computer/asset" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {computers.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {c.name} {c.asset_tag ? `(${c.asset_tag})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
-
-            {allocationType === 'Entity' ? (
-              <FormField
-                control={form.control}
-                name="entityId"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Entity</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select entity" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {entities.map((e) => (
-                          <SelectItem key={e.id} value={String(e.id)}>
-                            {e.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
-
-            {allocationType === 'Client' ? (
-              <FormField
-                control={form.control}
-                name="clientId"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Client</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select client" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {clients.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
-
-            <FormField
-              control={form.control}
-              name="isTemporary"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between rounded-lg border p-3 sm:col-span-2">
-                  <div className="space-y-0.5">
-                    <FormLabel>Temporary Share</FormLabel>
-                    <FormDescription>Automatically scheduled for release on the share end date.</FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            {isTemporary ? (
-              <FormField
-                control={form.control}
-                name="shareEndDate"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Share End Date</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Optional computer/asset" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
 
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Optional context for this allocation…" {...field} />
-                  </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        No computer / asset
+                      </SelectItem>
+
+                      {assets.map((asset) => (
+                        <SelectItem
+                          key={asset.id}
+                          value={String(asset.id)}
+                        >
+                          {asset.assetTag}
+                          {asset.assetName
+                            ? ` — ${asset.assetName}`
+                            : ''}
+                          {asset.hostName
+                            ? ` (${asset.hostName})`
+                            : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <FormDescription>
+                    Optional. Select the computer
+                    where this license will be used.
+                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <DialogFooter className="col-span-full mt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <FormField
+              control={form.control}
+              name="expectedReturnDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Expected Return Date
+                  </FormLabel>
+
+                  <FormControl>
+                    <Input
+                      type="date"
+                      {...field}
+                    />
+                  </FormControl>
+
+                  <FormDescription>
+                    Optional for permanent allocations.
+                  </FormDescription>
+
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="remarks"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Remarks
+                  </FormLabel>
+
+                  <FormControl>
+                    <Textarea
+                      placeholder="Optional allocation remarks..."
+                      {...field}
+                    />
+                  </FormControl>
+
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  onOpenChange(false)
+                }
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Allocating…' : 'Allocate License'}
+
+              <Button
+                type="submit"
+                disabled={
+                  saving ||
+                  licenses.length === 0
+                }
+              >
+                {saving
+                  ? 'Allocating...'
+                  : 'Allocate License'}
               </Button>
             </DialogFooter>
           </form>

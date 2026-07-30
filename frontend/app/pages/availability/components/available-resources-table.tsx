@@ -50,10 +50,12 @@ export function AvailableResourcesTable({ resources, loading, canRequest, onRequ
                       ) : (
                         <KeySquare className="h-4 w-4 text-muted-foreground" />
                       )}
-                      {r.resource_type === 'Asset' ? r.resource_label : r.software_name}
+                      {r.resource_label}
                     </div>
                     {r.resource_subtype ? (
-                      <div className="text-xs text-muted-foreground">{r.resource_subtype}</div>
+                      <div className="ml-6 text-xs text-muted-foreground">
+                        {r.resource_subtype}
+                      </div>
                     ) : null}
                   </TableCell>
                   <TableCell>

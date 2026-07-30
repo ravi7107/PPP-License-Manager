@@ -1,0 +1,395 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.DTOs.OfficeLocation;
+using PPS.LicenseManager.API.Interfaces;
+
+namespace PPS.LicenseManager.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class OfficeLocationController : BaseController
+{
+    private readonly IOfficeLocationService _service;
+    private readonly IWebHostEnvironment _environment;
+
+    public OfficeLocationController(
+        IOfficeLocationService service,
+        IWebHostEnvironment environment)
+    {
+        _service = service;
+        _environment = environment;
+    }
+
+    // =========================================================
+    // LOCATIONS
+    // =========================================================
+
+    [HttpGet]
+    public async Task<IActionResult> GetLocations()
+    {
+        var result = await _service.GetLocationsAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetLocation(int id)
+    {
+        var result = await _service.GetLocationByIdAsync(id);
+
+        if (result == null)
+            return NotFound(new
+            {
+                message = "Office location not found."
+            });
+
+        return Ok(result);
+    }
+
+    [HttpGet("company/{companyId:int}")]
+    public async Task<IActionResult> GetLocationsByCompany(
+        int companyId)
+    {
+        var result =
+            await _service.GetLocationsByCompanyAsync(companyId);
+
+        return Ok(result);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> CreateLocation(
+        [FromBody] CreateOfficeLocationRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.CreateLocationAsync(request);
+
+            return CreatedAtAction(
+                nameof(GetLocation),
+                new { id = result.Id },
+                result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> UpdateLocation(
+        int id,
+        [FromBody] UpdateOfficeLocationRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.UpdateLocationAsync(id, request);
+
+            if (result == null)
+                return NotFound(new
+                {
+                    message = "Office location not found."
+                });
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> DeleteLocation(int id)
+    {
+        var result =
+            await _service.DeleteLocationAsync(id);
+
+        if (!result)
+            return NotFound(new
+            {
+                message = "Office location not found."
+            });
+
+        return Ok(new
+        {
+            message = "Office location deactivated successfully."
+        });
+    }
+
+    // =========================================================
+    // FLOORS
+    // =========================================================
+
+    [HttpGet("floors")]
+    public async Task<IActionResult> GetFloors()
+    {
+        var result = await _service.GetFloorsAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("floors/{id:int}")]
+    public async Task<IActionResult> GetFloor(int id)
+    {
+        var result = await _service.GetFloorByIdAsync(id);
+
+        if (result == null)
+            return NotFound(new
+            {
+                message = "Office floor not found."
+            });
+
+        return Ok(result);
+    }
+
+    [HttpGet("{locationId:int}/floors")]
+    public async Task<IActionResult> GetFloorsByLocation(
+        int locationId)
+    {
+        var result =
+            await _service.GetFloorsByLocationAsync(locationId);
+
+        return Ok(result);
+    }
+
+    [HttpPost("floors")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> CreateFloor(
+        [FromBody] CreateOfficeFloorRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.CreateFloorAsync(request);
+
+            return CreatedAtAction(
+                nameof(GetFloor),
+                new { id = result.Id },
+                result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("floors/{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> UpdateFloor(
+        int id,
+        [FromBody] UpdateOfficeFloorRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.UpdateFloorAsync(id, request);
+
+            if (result == null)
+                return NotFound(new
+                {
+                    message = "Office floor not found."
+                });
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("floors/{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> DeleteFloor(int id)
+    {
+        var result =
+            await _service.DeleteFloorAsync(id);
+
+        if (!result)
+            return NotFound(new
+            {
+                message = "Office floor not found."
+            });
+
+        return Ok(new
+        {
+            message = "Office floor deactivated successfully."
+        });
+    }
+
+    // =========================================================
+    // FLOOR MAP
+    // =========================================================
+
+    [HttpPost("floors/{id:int}/map")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadFloorMap(
+        int id,
+        [FromForm] IFormFile file)
+    {
+        try
+        {
+            var webRootPath =
+                _environment.WebRootPath
+                ?? Path.Combine(
+                    _environment.ContentRootPath,
+                    "wwwroot");
+
+            var result =
+                await _service.UploadFloorMapAsync(
+                    id,
+                    file,
+                    webRootPath);
+
+            if (result == null)
+                return NotFound(new
+                {
+                    message = "Office floor not found."
+                });
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
+
+
+    [HttpDelete("floors/{id:int}/map")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> RemoveFloorMap(
+        int id)
+    {
+        var webRootPath =
+            _environment.WebRootPath
+            ?? Path.Combine(
+                _environment.ContentRootPath,
+                "wwwroot");
+
+        var result =
+            await _service.RemoveFloorMapAsync(
+                id,
+                webRootPath);
+
+        if (!result)
+            return NotFound(new
+            {
+                message = "Office floor not found."
+            });
+
+        return Ok(new
+        {
+            message = "Floor map removed successfully."
+        });
+    }
+
+
+    // =========================================================
+    // SEATS
+    // =========================================================
+
+    [HttpGet("seats")]
+    public async Task<IActionResult> GetSeats()
+    {
+        var result = await _service.GetSeatsAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("seats/{id:int}")]
+    public async Task<IActionResult> GetSeat(int id)
+    {
+        var result = await _service.GetSeatByIdAsync(id);
+
+        if (result == null)
+            return NotFound(new
+            {
+                message = "Office seat not found."
+            });
+
+        return Ok(result);
+    }
+
+    [HttpGet("floors/{floorId:int}/seats")]
+    public async Task<IActionResult> GetSeatsByFloor(
+        int floorId)
+    {
+        var result =
+            await _service.GetSeatsByFloorAsync(floorId);
+
+        return Ok(result);
+    }
+
+    [HttpPost("seats")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> CreateSeat(
+        [FromBody] CreateOfficeSeatRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.CreateSeatAsync(request);
+
+            return CreatedAtAction(
+                nameof(GetSeat),
+                new { id = result.Id },
+                result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("seats/{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> UpdateSeat(
+        int id,
+        [FromBody] UpdateOfficeSeatRequest request)
+    {
+        try
+        {
+            var result =
+                await _service.UpdateSeatAsync(id, request);
+
+            if (result == null)
+                return NotFound(new
+                {
+                    message = "Office seat not found."
+                });
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("seats/{id:int}")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> DeleteSeat(int id)
+    {
+        var result =
+            await _service.DeleteSeatAsync(id);
+
+        if (!result)
+            return NotFound(new
+            {
+                message = "Office seat not found."
+            });
+
+        return Ok(new
+        {
+            message = "Office seat deactivated successfully."
+        });
+    }
+}

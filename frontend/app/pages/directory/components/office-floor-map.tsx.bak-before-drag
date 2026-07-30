@@ -1,0 +1,190 @@
+import { useMemo } from 'react';
+import { Armchair, Map, MapPin } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import type {
+  OfficeFloor,
+  OfficeSeat,
+} from '@/lib/api/office-locations.api';
+
+interface OfficeFloorMapProps {
+  floor: OfficeFloor;
+  seats: OfficeSeat[];
+  apiBaseUrl?: string;
+  selectedSeatId?: number | null;
+  onSeatClick?: (seat: OfficeSeat) => void;
+}
+
+function buildMapUrl(
+  path: string | null,
+  apiBaseUrl?: string
+): string | null {
+  if (!path) return null;
+
+  if (
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+
+  const base =
+    apiBaseUrl ??
+    import.meta.env.VITE_API_URL ??
+    '';
+
+  return `${base.replace(/\/api\/?$/, '')}${path}`;
+}
+
+export default function OfficeFloorMap({
+  floor,
+  seats,
+  apiBaseUrl,
+  selectedSeatId,
+  onSeatClick,
+}: OfficeFloorMapProps) {
+  const mapUrl = useMemo(
+    () => buildMapUrl(floor.mapImagePath, apiBaseUrl),
+    [floor.mapImagePath, apiBaseUrl]
+  );
+
+  const positionedSeats = useMemo(
+    () =>
+      seats.filter(
+        (seat) =>
+          seat.isActive &&
+          seat.xPosition !== null &&
+          seat.yPosition !== null
+      ),
+    [seats]
+  );
+
+  if (!mapUrl) {
+    return (
+      <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+        <Map className="mb-3 h-10 w-10 text-muted-foreground" />
+
+        <p className="font-medium">
+          No floor map uploaded
+        </p>
+
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">
+          Upload a JPG or PNG floor plan to display workstation
+          positions visually.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-medium">
+            {floor.floorName} Map
+          </p>
+
+          <p className="text-xs text-muted-foreground">
+            {floor.mapOriginalFileName ?? 'Floor plan'}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Badge variant="outline">
+            {positionedSeats.length} positioned
+          </Badge>
+
+          <Badge variant="secondary">
+            {seats.length} total seats
+          </Badge>
+        </div>
+      </div>
+
+      <div className="overflow-auto rounded-lg border bg-muted/20 p-2">
+        <div
+          className="relative mx-auto w-full overflow-hidden rounded-md bg-background"
+          style={{
+            maxWidth: '1400px',
+          }}
+        >
+          <img
+            src={mapUrl}
+            alt={`${floor.floorName} floor plan`}
+            className="block h-auto w-full select-none"
+            draggable={false}
+          />
+
+          {positionedSeats.map((seat) => {
+            const x = Math.max(
+              0,
+              Math.min(100, Number(seat.xPosition))
+            );
+
+            const y = Math.max(
+              0,
+              Math.min(100, Number(seat.yPosition))
+            );
+
+            const selected =
+              selectedSeatId === seat.id;
+
+            return (
+              <button
+                key={seat.id}
+                type="button"
+                title={`${seat.seatCode} - ${seat.seatName}`}
+                onClick={() => onSeatClick?.(seat)}
+                className={[
+                  'group absolute -translate-x-1/2 -translate-y-1/2',
+                  'focus:outline-none',
+                  selected ? 'z-30' : 'z-20',
+                ].join(' ')}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                }}
+              >
+                <span
+                  className={[
+                    'flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-md transition',
+                    selected
+                      ? 'scale-125 border-primary bg-primary text-primary-foreground ring-4 ring-primary/20'
+                      : 'border-background bg-primary text-primary-foreground hover:scale-110',
+                  ].join(' ')}
+                >
+                  <Armchair className="h-4 w-4" />
+                </span>
+
+                <span
+                  className={[
+                    'absolute left-1/2 top-9 -translate-x-1/2 whitespace-nowrap rounded-md border bg-background px-2 py-1 text-xs shadow-md',
+                    selected
+                      ? 'block'
+                      : 'hidden group-hover:block',
+                  ].join(' ')}
+                >
+                  <span className="font-semibold">
+                    {seat.seatCode}
+                  </span>
+
+                  <span className="mx-1">•</span>
+
+                  <span>
+                    {seat.departmentName ?? 'Unassigned'}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {positionedSeats.length === 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          <MapPin className="h-4 w-4" />
+          The map is available, but no seats have map coordinates yet.
+        </div>
+      )}
+    </div>
+  );
+}

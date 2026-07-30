@@ -21,12 +21,28 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetSoftware> AssetSoftwares => Set<AssetSoftware>();
+    public DbSet<AssetAssignment> AssetAssignments =>
+        Set<AssetAssignment>();
+
+    public DbSet<OfficeLocation> OfficeLocations =>
+        Set<OfficeLocation>();
+
+    public DbSet<OfficeFloor> OfficeFloors =>
+        Set<OfficeFloor>();
+
+    public DbSet<OfficeSeat> OfficeSeats =>
+        Set<OfficeSeat>();
 
     public DbSet<License> Licenses => Set<License>();
     public DbSet<LicensePurchase> LicensePurchases => Set<LicensePurchase>();
 
     public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
     public DbSet<AllocationRequest> AllocationRequests => Set<AllocationRequest>();
+
+    public DbSet<UserUnavailability> UserUnavailabilities => Set<UserUnavailability>();
+    public DbSet<ResourceReallocationRequest> ResourceReallocationRequests => Set<ResourceReallocationRequest>();
+
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,10 +72,229 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(u => u.DepartmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // User -> Reporting Manager / Team Lead
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.ReportsToUser)
+            .WithMany(u => u.DirectReports)
+            .HasForeignKey(u => u.ReportsToUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.ReportsToUserId);
+
+        // Asset Assignment
+        modelBuilder.Entity<AssetAssignment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("Assigned")
+                  .IsRequired();
+
+            entity.Property(x => x.Remarks)
+                  .HasMaxLength(500);
+
+            entity.HasIndex(x => x.AssetId);
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.AssignedByUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasIndex(x => x.AssetId)
+                  .IsUnique()
+                  .HasFilter("\"IsActive\" = true");
+
+            entity.HasOne(x => x.Asset)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.User)
+                  .WithMany()
+                  .HasForeignKey(x => x.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.AssignedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssignedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Office Seat -> Asset
+        modelBuilder.Entity<OfficeSeat>()
+            .HasOne(x => x.Asset)
+            .WithMany()
+            .HasForeignKey(x => x.AssetId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OfficeSeat>()
+            .HasIndex(x => x.AssetId);
+
+        // Office Seat -> User
+        modelBuilder.Entity<OfficeSeat>()
+            .HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OfficeSeat>()
+            .HasIndex(x => x.UserId);
+
         // Vendor
         modelBuilder.Entity<Vendor>()
             .HasIndex(v => v.VendorCode)
             .IsUnique();
+
+        // User Unavailability
+        modelBuilder.Entity<UserUnavailability>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Reason)
+                  .HasMaxLength(500)
+                  .IsRequired();
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("Active")
+                  .IsRequired();
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => new
+            {
+                x.UserId,
+                x.StartDate,
+                x.EndDate
+            });
+
+            entity.HasOne(x => x.User)
+                  .WithMany()
+                  .HasForeignKey(x => x.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CancelledByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CancelledByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Resource Reallocation Request
+        modelBuilder.Entity<ResourceReallocationRequest>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.RequestReference)
+                  .IsUnique();
+
+            entity.HasIndex(x => x.UserUnavailabilityId);
+            entity.HasIndex(x => x.ResourceAllocationId);
+            entity.HasIndex(x => x.TargetUserId);
+            entity.HasIndex(x => x.RequestedByUserId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.ResultingAllocationId);
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.Remarks)
+                  .HasMaxLength(500);
+
+            entity.Property(x => x.DecisionRemarks)
+                  .HasMaxLength(500);
+
+            entity.Property(x => x.ReturnRemarks)
+                  .HasMaxLength(500);
+
+            entity.HasIndex(x => x.ReturnedByUserId);
+            entity.HasIndex(x => x.ReturnAllocationId);
+
+            entity.HasOne(x => x.ReturnedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ReturnedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ReturnAllocation)
+                  .WithMany()
+                  .HasForeignKey(x => x.ReturnAllocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UserUnavailability)
+                  .WithMany()
+                  .HasForeignKey(x => x.UserUnavailabilityId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ResourceAllocation)
+                  .WithMany()
+                  .HasForeignKey(x => x.ResourceAllocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TargetUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.TargetUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RequestedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.RequestedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DecidedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.DecidedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ResultingAllocation)
+                  .WithMany()
+                  .HasForeignKey(x => x.ResultingAllocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Notification
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Type)
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(x => x.Title)
+                  .HasMaxLength(200)
+                  .IsRequired();
+
+            entity.Property(x => x.Message)
+                  .HasMaxLength(1000)
+                  .IsRequired();
+
+            entity.Property(x => x.RelatedEntityType)
+                  .HasMaxLength(100);
+
+            entity.Property(x => x.DeduplicationKey)
+                  .HasMaxLength(200);
+
+            entity.Property(x => x.IsRead)
+                  .HasDefaultValue(false);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.IsRead);
+            entity.HasIndex(x => x.CreatedAt);
+
+            entity.HasIndex(x => x.DeduplicationKey)
+                  .IsUnique();
+
+            entity.HasOne(x => x.User)
+                  .WithMany()
+                  .HasForeignKey(x => x.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Seed Roles
         modelBuilder.Entity<Role>().HasData(

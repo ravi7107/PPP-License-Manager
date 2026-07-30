@@ -32,6 +32,14 @@ public class User
     public int? DepartmentId { get; set; }
     public Department? Department { get; set; }
 
+    // Organizational reporting relationship.
+    // Identifies the Team Lead / Manager this user reports to.
+    public int? ReportsToUserId { get; set; }
+
+    public User? ReportsToUser { get; set; }
+
+    public ICollection<User> DirectReports { get; set; } = new List<User>();
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

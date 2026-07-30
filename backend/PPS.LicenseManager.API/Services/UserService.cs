@@ -75,6 +75,9 @@ public class UserService : IUserService
 
         await ValidateRoleAsync(request.RoleId);
 
+        await ValidateReportsToUserAsync(
+            request.ReportsToUserId);
+
         var user = new User
         {
             FullName = request.FullName.Trim(),
@@ -85,6 +88,7 @@ public class UserService : IUserService
             RoleId = request.RoleId,
             CompanyId = request.CompanyId,
             DepartmentId = request.DepartmentId,
+            ReportsToUserId = request.ReportsToUserId,
             IsActive = request.IsActive,
             CreatedAt = DateTime.UtcNow
         };
@@ -138,12 +142,17 @@ public class UserService : IUserService
 
         await ValidateRoleAsync(request.RoleId);
 
+        await ValidateReportsToUserAsync(
+            request.ReportsToUserId,
+            id);
+
         user.FullName = request.FullName.Trim();
         user.EmployeeCode = employeeCode;
         user.Email = email;
         user.RoleId = request.RoleId;
         user.CompanyId = request.CompanyId;
         user.DepartmentId = request.DepartmentId;
+        user.ReportsToUserId = request.ReportsToUserId;
         user.IsActive = request.IsActive;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -228,6 +237,58 @@ public class UserService : IUserService
         }
     }
 
+    private async Task ValidateReportsToUserAsync(
+        int? reportsToUserId,
+        int? currentUserId = null)
+    {
+        // Reporting assignment is optional.
+        if (reportsToUserId == null)
+            return;
+
+        // Prevent a user from reporting to themselves.
+        if (currentUserId.HasValue &&
+            reportsToUserId.Value == currentUserId.Value)
+        {
+            throw new InvalidOperationException(
+                "A user cannot report to themselves.");
+        }
+
+        var reportingUser =
+            await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u =>
+                    u.Id == reportsToUserId.Value);
+
+        if (reportingUser == null)
+        {
+            throw new InvalidOperationException(
+                "Selected reporting user does not exist.");
+        }
+
+        if (!reportingUser.IsActive)
+        {
+            throw new InvalidOperationException(
+                "Selected reporting user is inactive.");
+        }
+
+        var reportingRole =
+            reportingUser.Role?.Name;
+
+        if (!string.Equals(
+                reportingRole,
+                "Team Lead",
+                StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(
+                reportingRole,
+                "Manager",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Selected reporting user must be a Team Lead or Manager.");
+        }
+    }
+
     private async Task ValidateRoleAsync(int roleId)
     {
         var roleExists = await _context.Roles
@@ -259,6 +320,12 @@ public class UserService : IUserService
             DepartmentId = user.DepartmentId,
             DepartmentName =
                 user.Department?.DepartmentName,
+
+            ReportsToUserId =
+                user.ReportsToUserId,
+
+            ReportsToUserName =
+                user.ReportsToUser?.FullName,
 
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt

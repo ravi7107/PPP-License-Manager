@@ -33,11 +33,21 @@ public class LicensePurchase
 
     public DateOnly? SupportExpiryDate { get; set; }
 
+    public int? CompanyId { get; set; }
+
+    public Company? Company { get; set; }
+
     public int? DepartmentId { get; set; }
+
+    public Department? Department { get; set; }
 
     public int? ClientId { get; set; }
 
     public Client? Client { get; set; }
+
+    [Required]
+    [MaxLength(20)]
+    public string PurchasedByType { get; set; } = "Entity";
 
     [Required]
     [MaxLength(20)]

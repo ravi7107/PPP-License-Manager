@@ -57,6 +57,7 @@ interface UserFormValues {
   roleId: number;
   companyId: number | null;
   departmentId: number | null;
+  reportsToUserId: number | null;
   isActive: boolean;
 }
 
@@ -68,6 +69,7 @@ const EMPTY_FORM: UserFormValues = {
   roleId: 5,
   companyId: null,
   departmentId: null,
+  reportsToUserId: null,
   isActive: true,
 };
 
@@ -128,6 +130,22 @@ export default function UsersPage() {
   const activeCompanies = useMemo(
     () => companies.filter((company) => company.isActive),
     [companies]
+  );
+
+  const reportingUsers = useMemo(
+    () =>
+      users
+        .filter(
+          (user) =>
+            user.isActive &&
+            (user.role === 'Team Lead' ||
+              user.role === 'Manager') &&
+            user.id !== selectedUser?.id
+        )
+        .sort((a, b) =>
+          a.fullName.localeCompare(b.fullName)
+        ),
+    [users, selectedUser]
   );
 
   const filteredDepartments = useMemo(() => {
@@ -239,6 +257,7 @@ export default function UsersPage() {
       roleId: role?.id ?? 5,
       companyId: user.companyId,
       departmentId: user.departmentId,
+      reportsToUserId: user.reportsToUserId,
       isActive: user.isActive,
     });
 
@@ -276,6 +295,16 @@ export default function UsersPage() {
       return;
     }
 
+    if (form.companyId === null) {
+      setError('Please select an Entity.');
+      return;
+    }
+
+    if (form.departmentId === null) {
+      setError('Please select a Department.');
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -287,6 +316,7 @@ export default function UsersPage() {
           roleId: form.roleId,
           companyId: form.companyId,
           departmentId: form.departmentId,
+          reportsToUserId: form.reportsToUserId,
           isActive: form.isActive,
         });
 
@@ -300,6 +330,7 @@ export default function UsersPage() {
           roleId: form.roleId,
           companyId: form.companyId,
           departmentId: form.departmentId,
+          reportsToUserId: form.reportsToUserId,
           isActive: form.isActive,
         });
 
@@ -531,6 +562,7 @@ export default function UsersPage() {
                   <TableHead>Role</TableHead>
                   <TableHead>Entity</TableHead>
                   <TableHead>Department</TableHead>
+                  <TableHead>Reports To</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
 
@@ -544,7 +576,7 @@ export default function UsersPage() {
                 {loading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={10}
                       className="py-10 text-center text-sm text-muted-foreground"
                     >
                       Loading users...
@@ -553,7 +585,7 @@ export default function UsersPage() {
                 ) : filteredUsers.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={10}
                       className="py-10 text-center text-sm text-muted-foreground"
                     >
                       No users found.
@@ -586,6 +618,10 @@ export default function UsersPage() {
 
                       <TableCell>
                         {user.departmentName ?? '—'}
+                      </TableCell>
+
+                      <TableCell>
+                        {user.reportsToUserName ?? '—'}
                       </TableCell>
 
                       <TableCell>
@@ -870,6 +906,43 @@ export default function UsersPage() {
                       No active departments are configured for this entity.
                     </p>
                   )}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Reports To
+                </label>
+
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.reportsToUserId ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    setForm((current) => ({
+                      ...current,
+                      reportsToUserId: value
+                        ? Number(value)
+                        : null,
+                    }));
+                  }}
+                >
+                  <option value="">None</option>
+
+                  {reportingUsers.map((user) => (
+                    <option
+                      key={user.id}
+                      value={user.id}
+                    >
+                      {user.fullName} ({user.role})
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Select the Team Lead or Manager responsible
+                  for this user.
+                </p>
               </div>
 
               <label className="flex cursor-pointer items-center gap-2 text-sm">

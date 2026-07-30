@@ -23,6 +23,16 @@ public class ResourceAllocationController : ControllerBase
         return Ok(allocations);
     }
 
+    [HttpGet("license/{licenseId}/history")]
+    public async Task<IActionResult> GetLicenseHistory(int licenseId)
+    {
+        var history =
+            await _resourceAllocationService
+                .GetHistoryByLicenseIdAsync(licenseId);
+
+        return Ok(history);
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -33,6 +43,22 @@ public class ResourceAllocationController : ControllerBase
 
         return Ok(allocation);
     }
+
+[HttpPost("{id}/transfer")]
+public async Task<IActionResult> Transfer(
+    int id,
+    TransferResourceAllocationRequest request)
+{
+    var allocation =
+        await _resourceAllocationService.TransferAsync(
+            id,
+            request);
+
+    if (allocation == null)
+        return NotFound();
+
+    return Ok(allocation);
+}
 
 [HttpPost("{id}/release")]
 public async Task<IActionResult> Release(int id, ReleaseResourceAllocationRequest request)

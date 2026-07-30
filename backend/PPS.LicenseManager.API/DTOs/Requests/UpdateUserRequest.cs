@@ -24,5 +24,7 @@ public class UpdateUserRequest
 
     public int? DepartmentId { get; set; }
 
+    public int? ReportsToUserId { get; set; }
+
     public bool IsActive { get; set; }
 }

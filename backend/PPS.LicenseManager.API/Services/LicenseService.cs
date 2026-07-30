@@ -19,12 +19,19 @@ public class LicenseService : ILicenseService
     {
         return await _context.Licenses
             .Include(l => l.Software)
+            .Include(l => l.LicensePurchase)
             .Select(l => new LicenseResponse
             {
                 Id = l.Id,
                 AliasCode = l.AliasCode,
                 SoftwareId = l.SoftwareId,
                 SoftwareName = l.Software.Name,
+                LicensePurchaseId = l.LicensePurchaseId,
+                PurchaseReference = l.LicensePurchase != null
+                    ? (l.LicensePurchase.PONumber
+                        ?? l.LicensePurchase.InvoiceNumber
+                        ?? $"Purchase #{l.LicensePurchase.Id}")
+                    : null,
                 LicensedEmail = l.LicensedEmail,
                 SubscriptionId = l.SubscriptionId,
                 Status = l.Status,
@@ -43,6 +50,7 @@ public class LicenseService : ILicenseService
     {
         var license = await _context.Licenses
             .Include(l => l.Software)
+            .Include(l => l.LicensePurchase)
             .FirstOrDefaultAsync(l => l.Id == id);
 
         if (license == null)
@@ -54,6 +62,12 @@ public class LicenseService : ILicenseService
             AliasCode = license.AliasCode,
             SoftwareId = license.SoftwareId,
             SoftwareName = license.Software.Name,
+            LicensePurchaseId = license.LicensePurchaseId,
+            PurchaseReference = license.LicensePurchase != null
+                ? (license.LicensePurchase.PONumber
+                    ?? license.LicensePurchase.InvoiceNumber
+                    ?? $"Purchase #{license.LicensePurchase.Id}")
+                : null,
             LicensedEmail = license.LicensedEmail,
             SubscriptionId = license.SubscriptionId,
             Status = license.Status,
@@ -74,17 +88,47 @@ public class LicenseService : ILicenseService
         if (software == null)
             throw new InvalidOperationException("Software not found.");
 
+        if (request.LicensePurchaseId.HasValue)
+        {
+            var purchase = await _context.LicensePurchases
+                .FirstOrDefaultAsync(p =>
+                    p.Id == request.LicensePurchaseId.Value &&
+                    p.IsActive);
+
+            if (purchase == null)
+                throw new InvalidOperationException(
+                    "Selected license purchase does not exist or is inactive.");
+
+            if (purchase.SoftwareId != request.SoftwareId)
+                throw new InvalidOperationException(
+                    "Selected license purchase does not belong to the selected software.");
+
+            var usedSeats = await _context.Licenses
+                .CountAsync(l =>
+                    l.LicensePurchaseId == purchase.Id &&
+                    l.IsActive);
+
+            if (usedSeats >= purchase.TotalLicenses)
+                throw new InvalidOperationException(
+                    $"All {purchase.TotalLicenses} purchased license seats have already been created.");
+        }
+
         var license = new License
         {
             AliasCode = request.AliasCode,
             SoftwareId = request.SoftwareId,
+            LicensePurchaseId = request.LicensePurchaseId,
             LicensedEmail = request.LicensedEmail,
             SubscriptionId = request.SubscriptionId,
             Status = "Available",
             AllowTemporaryCheckout = request.AllowTemporaryCheckout,
             MaxCheckoutDays = request.MaxCheckoutDays,
-            PurchaseDate = request.PurchaseDate,
-            ExpiryDate = request.ExpiryDate,
+            PurchaseDate = DateTime.SpecifyKind(
+                request.PurchaseDate,
+                DateTimeKind.Utc),
+            ExpiryDate = DateTime.SpecifyKind(
+                request.ExpiryDate,
+                DateTimeKind.Utc),
             PurchaseCost = request.PurchaseCost,
             Remarks = request.Remarks,
             IsActive = true
@@ -115,15 +159,50 @@ public class LicenseService : ILicenseService
         if (software == null)
             throw new InvalidOperationException("Software not found.");
 
+        if (request.LicensePurchaseId.HasValue)
+        {
+            var purchase = await _context.LicensePurchases
+                .FirstOrDefaultAsync(p =>
+                    p.Id == request.LicensePurchaseId.Value &&
+                    p.IsActive);
+
+            if (purchase == null)
+                throw new InvalidOperationException(
+                    "Selected license purchase does not exist or is inactive.");
+
+            if (purchase.SoftwareId != request.SoftwareId)
+                throw new InvalidOperationException(
+                    "Selected license purchase does not belong to the selected software.");
+
+            var usedSeatsByOtherLicenses = await _context.Licenses
+                .CountAsync(l =>
+                    l.LicensePurchaseId == purchase.Id &&
+                    l.Id != id &&
+                    l.IsActive);
+
+            if (request.IsActive &&
+                usedSeatsByOtherLicenses >= purchase.TotalLicenses)
+            {
+                throw new InvalidOperationException(
+                    $"All {purchase.TotalLicenses} purchased license seats have already been created.");
+            }
+        }
+
         license.AliasCode = request.AliasCode;
         license.SoftwareId = request.SoftwareId;
+        license.LicensePurchaseId = request.LicensePurchaseId;
         license.LicensedEmail = request.LicensedEmail;
         license.SubscriptionId = request.SubscriptionId;
         license.Status = request.Status;
         license.AllowTemporaryCheckout = request.AllowTemporaryCheckout;
         license.MaxCheckoutDays = request.MaxCheckoutDays;
-        license.PurchaseDate = request.PurchaseDate;
-        license.ExpiryDate = request.ExpiryDate;
+        license.PurchaseDate = DateTime.SpecifyKind(
+            request.PurchaseDate,
+            DateTimeKind.Utc);
+
+        license.ExpiryDate = DateTime.SpecifyKind(
+            request.ExpiryDate,
+            DateTimeKind.Utc);
         license.PurchaseCost = request.PurchaseCost;
         license.Remarks = request.Remarks;
         license.IsActive = request.IsActive;

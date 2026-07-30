@@ -20,6 +20,7 @@ export type ModuleKey =
   | 'departments'
   | 'entities'
   | 'clients'
+  | 'officeLocations'
   | 'accessManagement';
 
 /*
@@ -113,6 +114,13 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   clients: [
     'Super Admin',
     'IT Admin',
+  ],
+
+  officeLocations: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
   ],
 
   accessManagement: [

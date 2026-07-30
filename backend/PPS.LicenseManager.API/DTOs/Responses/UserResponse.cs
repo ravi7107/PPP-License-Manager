@@ -20,6 +20,10 @@ public class UserResponse
 
     public string? DepartmentName { get; set; }
 
+    public int? ReportsToUserId { get; set; }
+
+    public string? ReportsToUserName { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }

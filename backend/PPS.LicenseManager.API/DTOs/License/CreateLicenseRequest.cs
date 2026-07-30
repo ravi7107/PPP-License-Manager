@@ -11,6 +11,9 @@ public class CreateLicenseRequest
     [Required]
     public int SoftwareId { get; set; }
 
+    // Commercial purchase/batch this license belongs to.
+    public int? LicensePurchaseId { get; set; }
+
     [Required]
     [EmailAddress]
     [MaxLength(100)]

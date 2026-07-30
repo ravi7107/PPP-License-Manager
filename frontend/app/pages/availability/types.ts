@@ -1,6 +1,10 @@
 export type UnavailabilityStatus = 'Active' | 'Cancelled' | 'Ended' | 'Upcoming';
 export type ResourceType = 'Asset' | 'License';
-export type ReallocationStatus = 'Pending' | 'Approved' | 'Rejected';
+export type ReallocationStatus =
+  | 'Pending'
+  | 'Approved'
+  | 'Rejected'
+  | 'Returned';
 
 export interface UnavailabilityPeriod {
   id: number;
@@ -31,6 +35,7 @@ export interface AvailableResource {
   resource_label: string;
   resource_subtype: string | null;
   license_allocation_id: number | null;
+  resulting_allocation_id: number | null;
   software_name: string | null;
   pending_request_id: number | null;
   request_status: ReallocationStatus | null;
@@ -45,6 +50,8 @@ export interface ReallocationRequest {
   asset_id: number | null;
   asset_tag: string | null;
   license_allocation_id: number | null;
+  resulting_allocation_id: number | null;
+  resulting_allocation_active: boolean | null;
   software_name: string | null;
   target_user_id: number | null;
   target_user_name: string | null;
@@ -54,6 +61,14 @@ export interface ReallocationRequest {
   decided_by: string | null;
   decided_at: string | null;
   decision_notes: string | null;
+
+
+  returned_at: string | null;
+  returned_by_user_id: number | null;
+  returned_by: string | null;
+  return_remarks: string | null;
+  return_allocation_id: number | null;
+
   created_at: string;
 }
 

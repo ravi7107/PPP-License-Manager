@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { Plus, Search, Download, Upload, Pencil, Trash2, Eye, History, ArrowUpDown, ArrowRightLeft, Undo2 } from 'lucide-react';
@@ -22,13 +22,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AppRole, canManage } from '@/lib/auth/roles';
 import loadAssets from '@/actions/assets/loadAssets';
-import { loadUsers, loadDepartments, loadEntities, loadClients } from '@/actions/assets/loadAssetLookups';
+import { loadUsers, loadDepartments, loadCompanies, loadClients } from '@/actions/assets/loadAssetLookups';
 import createAsset from '@/actions/assets/createAsset';
 import updateAsset from '@/actions/assets/updateAsset';
 import deleteAsset from '@/actions/assets/deleteAsset';
 import { recordAssetAudit } from '@/actions/assets/auditLog';
-import recordAssetAllocation from '@/actions/assets/recordAssetAllocation';
-import returnAssetAllocation from '@/actions/assets/returnAssetAllocation';
+// Hardware ownership lifecycle is managed through AssetAssignment API.
 import { AssetFormDialog } from '@/app/pages/hardware/components/asset-form-dialog';
 import { AssetViewDialog } from '@/app/pages/hardware/components/asset-view-dialog';
 import { AssetDeleteDialog } from '@/app/pages/hardware/components/asset-delete-dialog';
@@ -39,11 +38,19 @@ import { AssetRecord, AssetFormValues, LookupOption } from '@/app/pages/hardware
 import { exportAssetsToExcel } from '@/lib/utils/asset-excel';
 import { ImportedAssetRow } from '@/lib/utils/asset-excel';
 
+import {
+  AssetAssignment,
+  getCurrentAssetAssignments,
+  assignAsset,
+  transferAsset,
+  returnAsset as returnAssetAssignment,
+} from '@/lib/api/asset-assignments.api';
+
 type SortKey = 'asset_tag' | 'computer_name' | 'purchase_date' | 'warranty_expiry' | 'status';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
-    case 'Allocated':
+    case 'Assigned':
       return 'default';
     case 'Maintenance':
       return 'secondary';
@@ -64,17 +71,55 @@ export default function HardwarePage() {
     [],
     {},
   );
-  const [users]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadUsers, [], {});
-  const [departments]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadDepartments, [], {});
-  const [entities]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadEntities, [], {});
-  const [clients]: [LookupOption[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadClients, [], {});
+const [users]: [LookupOption[], boolean, Error | null, () => Promise<void>] =
+  useLoadAction(loadUsers, [], {});
+
+const [departments]: [LookupOption[], boolean, Error | null, () => Promise<void>] =
+  useLoadAction(loadDepartments, [], {});
+
+const [companies]: [LookupOption[], boolean, Error | null, () => Promise<void>] =
+  useLoadAction(loadCompanies, [], {});
+
+const [clients]: [LookupOption[], boolean, Error | null, () => Promise<void>] =
+  useLoadAction(loadClients, [], {});
+
+  // Current hardware assignments are loaded from the
+  // AssetAssignments table, which is the source of truth
+  // for hardware-to-user ownership.
+  const [currentAssignments, setCurrentAssignments] =
+    useState<AssetAssignment[]>([]);
+
+  const [assignmentsLoading, setAssignmentsLoading] =
+    useState(true);
+
+  const loadCurrentAssignments = async () => {
+    try {
+      setAssignmentsLoading(true);
+
+      const result =
+        await getCurrentAssetAssignments();
+
+      setCurrentAssignments(result);
+    } catch (error) {
+      console.error(
+        'Unable to load current hardware assignments:',
+        error
+      );
+
+      setCurrentAssignments([]);
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCurrentAssignments();
+  }, []);
 
   const [saveAsset, saving] = useMutateAction(createAsset);
   const [editAsset, updating] = useMutateAction(updateAsset);
   const [removeAsset, deleting] = useMutateAction(deleteAsset);
   const [logAudit] = useMutateAction(recordAssetAudit);
-  const [allocateAsset, allocating] = useMutateAction(recordAssetAllocation);
-  const [returnAsset, returning] = useMutateAction(returnAssetAllocation);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -101,8 +146,77 @@ export default function HardwarePage() {
     return matchedUser?.department_id ?? null;
   }, [isTeamLeader, users, user?.name]);
 
+  // Normalize API lookup responses before rendering.
+  // This prevents a malformed/non-array API response from
+  // crashing the Hardware page.
+  
+const safeDepartments = Array.isArray(departments)
+  ? departments
+  : [];
+
+const safeUsers = Array.isArray(users)
+  ? users
+  : [];
+
+const safeCompanies = Array.isArray(companies)
+  ? companies
+  : [];
+
+const safeClients = Array.isArray(clients)
+  ? clients
+  : [];
+  const assetsWithAssignments = useMemo(() => {
+    const assignmentByAssetId = new Map(
+      currentAssignments.map((assignment) => [
+        assignment.assetId,
+        assignment,
+      ])
+    );
+
+    const safeAssets = Array.isArray(assets)
+      ? assets
+      : [];
+
+    return safeAssets.map((asset) => {
+      const assignment =
+        assignmentByAssetId.get(asset.id);
+
+      if (!assignment) {
+        return {
+          ...asset,
+          assigned_user_id: null,
+          assigned_user_name: null,
+          current_assignment_id: null,
+        };
+      }
+
+      return {
+        ...asset,
+
+        assigned_user_id:
+          assignment.userId,
+
+        assigned_user_name:
+          assignment.userName,
+
+        department_id:
+          assignment.departmentId ??
+          asset.department_id,
+
+        department_name:
+          assignment.departmentName ??
+          asset.department_name,
+
+        current_assignment_id:
+          assignment.id,
+
+        status: 'Assigned',
+      };
+    });
+  }, [assets, currentAssignments]);
+
   const filteredAssets = useMemo(() => {
-    let list = [...assets];
+    let list = [...assetsWithAssignments];
 
     if (isTeamLeader && myDepartmentId) {
       list = list.filter((a) => a.department_id === myDepartmentId);
@@ -133,7 +247,16 @@ export default function HardwarePage() {
     });
 
     return list;
-  }, [assets, search, statusFilter, departmentFilter, sortKey, sortDir, isTeamLeader, myDepartmentId]);
+  }, [
+    assetsWithAssignments,
+    search,
+    statusFilter,
+    departmentFilter,
+    sortKey,
+    sortDir,
+    isTeamLeader,
+    myDepartmentId,
+  ]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -174,132 +297,189 @@ export default function HardwarePage() {
     setTransferOpen(true);
   };
 
-  const handleTransfer = async (values: AssetTransferFormValues) => {
+  const handleTransfer = async (
+    values: AssetTransferFormValues
+  ) => {
     if (!selectedAsset) return;
-    const userId = values.allocationType === 'User' ? values.userId || null : null;
-    const entityId = values.allocationType === 'Entity' ? values.entityId || null : null;
-    const clientId = values.allocationType === 'Client' ? values.clientId || null : null;
-    const actionType = selectedAsset.assigned_user_id || selectedAsset.entity_id || selectedAsset.client_id ? 'Transfer' : 'Allocate';
-    await allocateAsset({
-      assetId: selectedAsset.id,
-      userId,
-      departmentId: null,
-      entityId,
-      clientId,
-      allocationType: values.allocationType,
-      actionType,
-      notes: values.notes || null,
-      actorName,
-    });
-    await editAsset({
-      id: selectedAsset.id,
-      assetTag: selectedAsset.asset_tag,
-      assetType: selectedAsset.asset_type,
-      computerName: selectedAsset.computer_name,
-      hostName: selectedAsset.host_name,
-      serialNumber: selectedAsset.serial_number,
-      manufacturer: selectedAsset.manufacturer,
-      model: selectedAsset.model,
-      purchaseDate: selectedAsset.purchase_date,
-      warrantyExpiry: selectedAsset.warranty_expiry,
-      operatingSystem: selectedAsset.operating_system,
-      location: selectedAsset.location,
-      status: 'Allocated',
-      remarks: selectedAsset.remarks,
-      assignedUserId: userId,
-      departmentId: selectedAsset.department_id,
-      entityId,
-      clientId,
-      actorName,
-    });
-    await logAudit({
-      recordId: selectedAsset.id,
-      action: 'UPDATE',
-      oldValues: JSON.stringify({ status: selectedAsset.status, assigned_user_id: selectedAsset.assigned_user_id }),
-      newValues: JSON.stringify({ status: 'Allocated', allocationType: values.allocationType, userId, entityId, clientId }),
-      actorName,
-    });
-    setTransferOpen(false);
-    await reload();
-  };
 
-  const handleReturn = async (asset: AssetRecord) => {
-    await returnAsset({ assetId: asset.id, notes: 'Returned via Hardware page', actorName });
-    await editAsset({
-      id: asset.id,
-      assetTag: asset.asset_tag,
-      assetType: asset.asset_type,
-      computerName: asset.computer_name,
-      hostName: asset.host_name,
-      serialNumber: asset.serial_number,
-      manufacturer: asset.manufacturer,
-      model: asset.model,
-      purchaseDate: asset.purchase_date,
-      warrantyExpiry: asset.warranty_expiry,
-      operatingSystem: asset.operating_system,
-      location: asset.location,
-      status: 'Available',
-      remarks: asset.remarks,
-      assignedUserId: null,
-      departmentId: null,
-      entityId: null,
-      clientId: null,
-      actorName,
-    });
-    await logAudit({
-      recordId: asset.id,
-      action: 'UPDATE',
-      oldValues: JSON.stringify({ status: asset.status, assigned_user_id: asset.assigned_user_id }),
-      newValues: JSON.stringify({ status: 'Available' }),
-      actorName,
-    });
-    await reload();
-  };
+    // AssetAssignment currently represents
+    // hardware-to-user ownership.
+    if (values.allocationType !== 'User') {
+      throw new Error(
+        'The new Hardware Assignment workflow currently supports user assignments only.'
+      );
+    }
 
-  const handleSubmit = async (values: AssetFormValues) => {
-    const payload = {
-      assetTag: values.assetTag,
-      assetType: values.assetType,
-      computerName: values.computerName || null,
-      hostName: values.hostName || null,
-      serialNumber: values.serialNumber || null,
-      manufacturer: values.manufacturer || null,
-      model: values.model || null,
-      purchaseDate: values.purchaseDate || null,
-      warrantyExpiry: values.warrantyExpiry || null,
-      operatingSystem: values.operatingSystem || null,
-      location: values.location || null,
-      status: values.status,
-      remarks: values.remarks || null,
-      assignedUserId: values.assignedUserId || null,
-      departmentId: values.departmentId || null,
-      entityId: values.entityId || null,
-      clientId: values.clientId || null,
-      actorName,
-    };
+    if (!values.userId) {
+      throw new Error('Please select a user.');
+    }
 
-    if (selectedAsset) {
-      await editAsset({ ...payload, id: selectedAsset.id });
-      await logAudit({
-        recordId: selectedAsset.id,
-        action: 'UPDATE',
-        oldValues: JSON.stringify(selectedAsset),
-        newValues: JSON.stringify(payload),
-        actorName,
-      });
+    const newUserId = Number(values.userId);
+
+    if (!Number.isFinite(newUserId)) {
+      throw new Error('Invalid user selection.');
+    }
+
+    const currentAssignment =
+      currentAssignments.find(
+        (assignment) =>
+          assignment.assetId === selectedAsset.id
+      );
+
+    if (currentAssignment) {
+      // Existing hardware owner -> transfer.
+      await transferAsset(
+        currentAssignment.id,
+        {
+          newUserId,
+          remarks:
+            values.notes ||
+            'Transferred via Hardware page',
+        }
+      );
     } else {
-      await saveAsset(payload);
-      await logAudit({
-        recordId: null,
-        action: 'INSERT',
-        oldValues: null,
-        newValues: JSON.stringify(payload),
-        actorName,
+      // Available hardware -> first assignment.
+      await assignAsset({
+        assetId: selectedAsset.id,
+        userId: newUserId,
+        remarks:
+          values.notes ||
+          'Assigned via Hardware page',
       });
     }
-    setFormOpen(false);
-    await reload();
+
+    await logAudit({
+      recordId: selectedAsset.id,
+      action: currentAssignment
+        ? 'TRANSFER'
+        : 'ASSIGN',
+      oldValues: JSON.stringify({
+        assignmentId:
+          currentAssignment?.id ?? null,
+        userId:
+          currentAssignment?.userId ?? null,
+      }),
+      newValues: JSON.stringify({
+        userId: newUserId,
+      }),
+      actorName,
+    });
+
+    setTransferOpen(false);
+
+    await Promise.all([
+      reload(),
+      loadCurrentAssignments(),
+    ]);
   };
+
+  const handleReturn = async (
+    asset: AssetRecord
+  ) => {
+    const currentAssignment =
+      currentAssignments.find(
+        (assignment) =>
+          assignment.assetId === asset.id
+      );
+
+    if (!currentAssignment) {
+      throw new Error(
+        'No active hardware assignment was found for this asset.'
+      );
+    }
+
+    await returnAssetAssignment(
+      currentAssignment.id,
+      {
+        remarks:
+          'Returned via Hardware page',
+      }
+    );
+
+    await logAudit({
+      recordId: asset.id,
+      action: 'RETURN',
+      oldValues: JSON.stringify({
+        assignmentId:
+          currentAssignment.id,
+        userId:
+          currentAssignment.userId,
+      }),
+      newValues: JSON.stringify({
+        assignmentId: null,
+        userId: null,
+      }),
+      actorName,
+    });
+
+    await Promise.all([
+      reload(),
+      loadCurrentAssignments(),
+    ]);
+  };
+
+const handleSubmit = async (values: AssetFormValues) => {
+  const payload = {
+    assetTag: values.assetTag,
+    assetName: values.assetName,
+    assetType: values.assetType,
+
+    manufacturer: values.manufacturer || null,
+    model: values.model || null,
+    serialNumber: values.serialNumber || null,
+
+    hostName: values.hostName || null,
+
+    processor: values.processor || null,
+    ramGb: values.ramGb ?? null,
+
+    storageGb: null,
+    graphicsCard: null,
+
+    operatingSystem: values.operatingSystem || null,
+
+    departmentId: values.departmentId
+      ? Number(values.departmentId)
+      : 0,
+
+    purchaseDate: values.purchaseDate || null,
+    warrantyExpiry: values.warrantyExpiry || null,
+
+    remarks: values.remarks || null,
+  };
+
+  if (selectedAsset) {
+    await editAsset({
+      ...payload,
+      id: selectedAsset.id,
+      status: selectedAsset.status,
+      isReadyForAssignment:
+        selectedAsset.isReadyForAssignment,
+      isActive: selectedAsset.isActive,
+    });
+
+    await logAudit({
+      recordId: selectedAsset.id,
+      action: "UPDATE",
+      oldValues: JSON.stringify(selectedAsset),
+      newValues: JSON.stringify(payload),
+      actorName,
+    });
+  } else {
+    await saveAsset(payload);
+
+    await logAudit({
+      recordId: null,
+      action: "INSERT",
+      oldValues: null,
+      newValues: JSON.stringify(payload),
+      actorName,
+    });
+  }
+
+  setFormOpen(false);
+  await reload();
+};
 
   const handleDelete = async () => {
     if (!selectedAsset) return;
@@ -393,7 +573,7 @@ export default function HardwarePage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Allocated">Allocated</SelectItem>
+                <SelectItem value="Assigned">Assigned</SelectItem>
                 <SelectItem value="Available">Available</SelectItem>
                 <SelectItem value="Maintenance">Maintenance</SelectItem>
                 <SelectItem value="Scrap">Scrap</SelectItem>
@@ -406,7 +586,10 @@ export default function HardwarePage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
-                  {(departments as unknown as LookupOption[]).map((d) => (
+                  {(Array.isArray(departments)
+                      ? departments
+                      : []
+                    ).map((d: LookupOption) => (
                     <SelectItem key={d.id} value={String(d.id)}>
                       {d.name}
                     </SelectItem>
@@ -449,7 +632,7 @@ export default function HardwarePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {loading || assignmentsLoading ? (
                   <TableRow>
                     <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                       Loading assets…
@@ -497,9 +680,9 @@ export default function HardwarePage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openTransfer(asset)}>
                                   <ArrowRightLeft className="mr-2 h-4 w-4" />
-                                  {asset.assigned_user_id || asset.entity_id || asset.client_id ? 'Transfer' : 'Allocate'}
+                                  {asset.current_assignment_id ? 'Transfer' : 'Assign'}
                                 </DropdownMenuItem>
-                                {asset.assigned_user_id || asset.entity_id || asset.client_id ? (
+                                {asset.current_assignment_id ? (
                                   <DropdownMenuItem onClick={() => handleReturn(asset)}>
                                     <Undo2 className="mr-2 h-4 w-4" /> Return
                                   </DropdownMenuItem>
@@ -522,16 +705,16 @@ export default function HardwarePage() {
       </Card>
 
       <AssetFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        asset={selectedAsset}
-        users={users as unknown as LookupOption[]}
-        departments={departments as unknown as LookupOption[]}
-        entities={entities as unknown as LookupOption[]}
-        clients={clients as unknown as LookupOption[]}
-        saving={saving || updating}
-        onSubmit={handleSubmit}
-      />
+  open={formOpen}
+  onOpenChange={setFormOpen}
+  asset={selectedAsset}
+  users={safeUsers}
+  departments={safeDepartments}
+  entities={safeCompanies}
+  clients={safeClients}
+  saving={updating}
+  onSubmit={handleSubmit}
+/>
       <AssetViewDialog open={viewOpen} onOpenChange={setViewOpen} asset={selectedAsset} />
       <AssetDeleteDialog
         open={deleteOpen}
@@ -547,16 +730,16 @@ export default function HardwarePage() {
         importing={saving}
         onImport={handleImport}
       />
-      <AssetTransferDialog
-        open={transferOpen}
-        onOpenChange={setTransferOpen}
-        asset={selectedAsset}
-        users={users as unknown as LookupOption[]}
-        entities={entities as unknown as LookupOption[]}
-        clients={clients as unknown as LookupOption[]}
-        saving={allocating || updating}
-        onSubmit={handleTransfer}
-      />
+     <AssetTransferDialog
+  open={transferOpen}
+  onOpenChange={setTransferOpen}
+  asset={selectedAsset}
+  users={safeUsers}
+  entities={safeCompanies}
+  clients={safeClients}
+  saving={updating}
+  onSubmit={handleTransfer}
+/>
     </div>
   );
 }

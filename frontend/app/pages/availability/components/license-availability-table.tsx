@@ -1,0 +1,483 @@
+import { useMemo, useState } from 'react';
+import { KeySquare, Search } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+
+import type { License } from '@/lib/api/licenses.api';
+
+interface LicenseAvailabilityTableProps {
+  licenses: License[];
+  loading: boolean;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleDateString('en-GB');
+}
+
+function getExpiryHealth(
+  value: string | null | undefined
+) {
+  if (!value) {
+    return {
+      label: 'No expiry date',
+      variant: 'outline' as const,
+    };
+  }
+
+  const expiry = new Date(value);
+
+  if (Number.isNaN(expiry.getTime())) {
+    return {
+      label: 'Invalid date',
+      variant: 'outline' as const,
+    };
+  }
+
+  const now = new Date();
+
+  // Compare calendar days rather than hours.
+  const todayUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+
+  const expiryUtc = Date.UTC(
+    expiry.getUTCFullYear(),
+    expiry.getUTCMonth(),
+    expiry.getUTCDate()
+  );
+
+  const daysRemaining = Math.ceil(
+    (expiryUtc - todayUtc) / 86400000
+  );
+
+  if (daysRemaining < 0) {
+    return {
+      label: 'Expired',
+      variant: 'destructive' as const,
+    };
+  }
+
+  if (daysRemaining === 0) {
+    return {
+      label: 'Expires today',
+      variant: 'destructive' as const,
+    };
+  }
+
+  if (daysRemaining <= 30) {
+    return {
+      label: `Expires in ${daysRemaining} day${
+        daysRemaining === 1 ? '' : 's'
+      }`,
+      variant: 'destructive' as const,
+    };
+  }
+
+  if (daysRemaining <= 90) {
+    return {
+      label: `Expires in ${daysRemaining} days`,
+      variant: 'secondary' as const,
+    };
+  }
+
+  return {
+    label: 'Healthy',
+    variant: 'outline' as const,
+  };
+}
+
+function getEffectiveStatus(license: License) {
+  if (!license.isActive) {
+    return 'Inactive';
+  }
+
+  const expiry = new Date(license.expiryDate);
+
+  if (
+    !Number.isNaN(expiry.getTime()) &&
+    expiry <= new Date()
+  ) {
+    return 'Expired';
+  }
+
+  return license.status;
+}
+
+function statusVariant(
+  status: string
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status.toLowerCase()) {
+    case 'available':
+      return 'default';
+
+    case 'allocated':
+      return 'secondary';
+
+    case 'expired':
+    case 'inactive':
+      return 'destructive';
+
+    default:
+      return 'outline';
+  }
+}
+
+export function LicenseAvailabilityTable({
+  licenses,
+  loading,
+}: LicenseAvailabilityTableProps) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [softwareFilter, setSoftwareFilter] = useState('all');
+  const [expiryFilter, setExpiryFilter] = useState('all');
+
+  const safeLicenses = Array.isArray(licenses)
+    ? licenses
+    : [];
+
+  const softwareOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        safeLicenses
+          .map((license) => license.softwareName)
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [safeLicenses]);
+
+  const filteredLicenses = useMemo(() => {
+    let list = [...safeLicenses];
+
+    const query = search.trim().toLowerCase();
+
+    if (query) {
+      list = list.filter((license) =>
+        [
+          license.aliasCode,
+          license.softwareName,
+          license.licensedEmail,
+          getEffectiveStatus(license),
+        ]
+          .filter(Boolean)
+          .some((value) =>
+            String(value).toLowerCase().includes(query)
+          )
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      list = list.filter(
+        (license) =>
+          getEffectiveStatus(license).toLowerCase() ===
+          statusFilter.toLowerCase()
+      );
+    }
+
+    if (softwareFilter !== 'all') {
+      list = list.filter(
+        (license) =>
+          license.softwareName === softwareFilter
+      );
+    }
+
+    if (expiryFilter !== 'all') {
+      list = list.filter((license) => {
+        const expiry = new Date(license.expiryDate);
+
+        if (Number.isNaN(expiry.getTime())) {
+          return false;
+        }
+
+        const now = new Date();
+
+        const todayUtc = Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        );
+
+        const expiryUtc = Date.UTC(
+          expiry.getUTCFullYear(),
+          expiry.getUTCMonth(),
+          expiry.getUTCDate()
+        );
+
+        const daysRemaining = Math.ceil(
+          (expiryUtc - todayUtc) / 86400000
+        );
+
+        switch (expiryFilter) {
+          case 'expired':
+            return daysRemaining < 0;
+
+          case '30':
+            return (
+              daysRemaining >= 0 &&
+              daysRemaining <= 30
+            );
+
+          case '90':
+            return (
+              daysRemaining > 30 &&
+              daysRemaining <= 90
+            );
+
+          case 'healthy':
+            return daysRemaining > 90;
+
+          default:
+            return true;
+        }
+      });
+    }
+
+    return list;
+  }, [
+    safeLicenses,
+    search,
+    statusFilter,
+    softwareFilter,
+    expiryFilter,
+  ]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+
+          <Input
+            placeholder="Search license, software or email..."
+            className="pl-8"
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+          />
+        </div>
+
+        <Select
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="all">
+              All Statuses
+            </SelectItem>
+
+            <SelectItem value="available">
+              Available
+            </SelectItem>
+
+            <SelectItem value="allocated">
+              Allocated
+            </SelectItem>
+
+            <SelectItem value="expired">
+              Expired
+            </SelectItem>
+
+            <SelectItem value="inactive">
+              Inactive
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={softwareFilter}
+          onValueChange={setSoftwareFilter}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Software" />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="all">
+              All Software
+            </SelectItem>
+
+            {softwareOptions.map((software) => (
+              <SelectItem
+                key={software}
+                value={software}
+              >
+                {software}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={expiryFilter}
+          onValueChange={setExpiryFilter}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Expiry" />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="all">
+              All Expiry
+            </SelectItem>
+
+            <SelectItem value="expired">
+              Expired
+            </SelectItem>
+
+            <SelectItem value="30">
+              Due ≤30 Days
+            </SelectItem>
+
+            <SelectItem value="90">
+              Due 31–90 Days
+            </SelectItem>
+
+            <SelectItem value="healthy">
+              Healthy
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <span className="text-sm text-muted-foreground">
+          {filteredLicenses.length} license(s)
+        </span>
+      </div>
+
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>License</TableHead>
+              <TableHead>Software</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Licensed Email</TableHead>
+              <TableHead>Temporary Sharing</TableHead>
+              <TableHead>Max Checkout</TableHead>
+              <TableHead>Expiry Date</TableHead>
+              <TableHead>Expiry Health</TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  Loading license availability...
+                </TableCell>
+              </TableRow>
+            ) : safeLicenses.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No licenses found.
+                </TableCell>
+              </TableRow>
+            ) : filteredLicenses.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No licenses match the selected filters.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredLicenses.map((license) => {
+                const status =
+                  getEffectiveStatus(license);
+
+                const expiryHealth =
+                  getExpiryHealth(license.expiryDate);
+
+                return (
+                  <TableRow key={license.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2 font-medium">
+                        <KeySquare className="h-4 w-4 text-muted-foreground" />
+
+                        {license.aliasCode}
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      {license.softwareName}
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        variant={statusVariant(status)}
+                      >
+                        {status}
+                      </Badge>
+                    </TableCell>
+
+                    <TableCell>
+                      {license.licensedEmail || '—'}
+                    </TableCell>
+
+                    <TableCell>
+                      {license.allowTemporaryCheckout
+                        ? 'Allowed'
+                        : 'Not Allowed'}
+                    </TableCell>
+
+                    <TableCell>
+                      {license.allowTemporaryCheckout
+                        ? `${license.maxCheckoutDays} days`
+                        : '—'}
+                    </TableCell>
+
+                    <TableCell>
+                      {formatDate(license.expiryDate)}
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge variant={expiryHealth.variant}>
+                        {expiryHealth.label}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}

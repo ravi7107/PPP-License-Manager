@@ -35,4 +35,12 @@ public class AssetResponse
     public DateTime? WarrantyExpiry { get; set; }
 
     public bool IsActive { get; set; }
+
+   public string? SerialNumber { get; set; }
+
+public int DepartmentId { get; set; }
+
+public DateTime? PurchaseDate { get; set; }
+
+public string? Remarks { get; set; }
 }

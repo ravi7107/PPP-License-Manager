@@ -5,6 +5,7 @@ export interface License {
   aliasCode: string;
   softwareId: number;
   softwareName: string;
+  licensePurchaseId: number | null;
   licensedEmail: string;
   subscriptionId: string | null;
   status: string;
@@ -20,6 +21,7 @@ export interface License {
 export interface CreateLicenseRequest {
   aliasCode: string;
   softwareId: number;
+  licensePurchaseId?: number | null;
   licensedEmail: string;
   subscriptionId?: string | null;
   allowTemporaryCheckout: boolean;
@@ -33,6 +35,7 @@ export interface CreateLicenseRequest {
 export interface UpdateLicenseRequest {
   aliasCode: string;
   softwareId: number;
+  licensePurchaseId?: number | null;
   licensedEmail: string;
   subscriptionId?: string | null;
   status: string;

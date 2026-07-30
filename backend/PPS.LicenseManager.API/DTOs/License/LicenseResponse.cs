@@ -10,6 +10,10 @@ public class LicenseResponse
 
     public string SoftwareName { get; set; } = string.Empty;
 
+    public int? LicensePurchaseId { get; set; }
+
+    public string? PurchaseReference { get; set; }
+
     public string LicensedEmail { get; set; } = string.Empty;
 
     public string? SubscriptionId { get; set; }

@@ -13,6 +13,9 @@ export interface User {
   departmentId: number | null;
   departmentName: string | null;
 
+  reportsToUserId: number | null;
+  reportsToUserName: string | null;
+
   isActive: boolean;
   createdAt: string;
 }
@@ -41,6 +44,7 @@ export interface CreateUserRequest {
 
   companyId: number | null;
   departmentId: number | null;
+  reportsToUserId: number | null;
 
   isActive: boolean;
 }
@@ -53,6 +57,7 @@ export interface UpdateUserRequest {
 
   companyId: number | null;
   departmentId: number | null;
+  reportsToUserId: number | null;
 
   isActive: boolean;
 }

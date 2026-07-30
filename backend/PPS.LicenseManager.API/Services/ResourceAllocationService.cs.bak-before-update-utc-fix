@@ -1,0 +1,236 @@
+using Microsoft.EntityFrameworkCore;
+using PPS.LicenseManager.API.Data;
+using PPS.LicenseManager.API.DTOs.ResourceAllocation;
+using PPS.LicenseManager.API.Models;
+using PPS.LicenseManager.API.Services.Interfaces;
+
+namespace PPS.LicenseManager.API.Services;
+
+public class ResourceAllocationService : IResourceAllocationService
+{
+    private readonly ApplicationDbContext _context;
+
+    public ResourceAllocationService(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<IEnumerable<ResourceAllocationResponse>> GetAllAsync()
+    {
+        return await _context.ResourceAllocations
+            .Include(r => r.License)
+            .Include(r => r.User)
+            .Include(r => r.Asset)
+            .Include(r => r.AllocatedByUser)
+            .Select(r => new ResourceAllocationResponse
+            {
+                Id = r.Id,
+                AllocationReference = r.AllocationReference,
+                LicenseId = r.LicenseId,
+                LicenseAliasCode = r.License.AliasCode,
+                UserId = r.UserId,
+                UserName = r.User.FullName,
+                AssetId = r.AssetId,
+                AssetName = r.Asset != null ? r.Asset.AssetName : null,
+                AllocatedByUserId = r.AllocatedByUserId,
+                AllocatedBy = r.AllocatedByUser.FullName,
+                AllocatedOn = r.AllocatedOn,
+                ExpectedReturnDate = r.ExpectedReturnDate,
+                ActualReturnDate = r.ActualReturnDate,
+                Status = r.Status,
+                Remarks = r.Remarks,
+                IsActive = r.IsActive,
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<ResourceAllocationResponse?> GetByIdAsync(int id)
+    {
+        var allocation = await _context.ResourceAllocations
+            .Include(r => r.License)
+            .Include(r => r.User)
+            .Include(r => r.Asset)
+            .Include(r => r.AllocatedByUser)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+        if (allocation == null)
+            return null;
+
+        return new ResourceAllocationResponse
+        {
+            Id = allocation.Id,
+            AllocationReference = allocation.AllocationReference,
+            LicenseId = allocation.LicenseId,
+            LicenseAliasCode = allocation.License.AliasCode,
+            UserId = allocation.UserId,
+            UserName = allocation.User.FullName,
+            AssetId = allocation.AssetId,
+            AssetName = allocation.Asset != null ? allocation.Asset.AssetName : null,
+            AllocatedByUserId = allocation.AllocatedByUserId,
+            AllocatedBy = allocation.AllocatedByUser.FullName,
+            AllocatedOn = allocation.AllocatedOn,
+            ExpectedReturnDate = allocation.ExpectedReturnDate,
+            ActualReturnDate = allocation.ActualReturnDate,
+            Status = allocation.Status,
+            Remarks = allocation.Remarks,
+            IsActive = allocation.IsActive,
+            CreatedAt = allocation.CreatedAt
+        };
+    }
+
+    public async Task<ResourceAllocationResponse> CreateAsync(CreateResourceAllocationRequest request)
+    {
+        var license = await _context.Licenses.FindAsync(request.LicenseId);
+
+        if (license == null)
+            throw new InvalidOperationException("License not found.");
+
+        if (!license.IsActive)
+            throw new InvalidOperationException(
+                "Inactive licenses cannot be allocated.");
+
+        if (license.ExpiryDate <= DateTime.UtcNow)
+            throw new InvalidOperationException(
+                "Expired licenses cannot be allocated.");
+
+        if (!string.Equals(
+                license.Status,
+                "Available",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"License {license.AliasCode} is not available for allocation.");
+        }
+
+        var user = await _context.Users.FindAsync(request.UserId);
+
+        if (user == null)
+            throw new InvalidOperationException("User not found.");
+
+        var allocatedBy = await _context.Users.FindAsync(request.AllocatedByUserId);
+
+        if (allocatedBy == null)
+            throw new InvalidOperationException("Allocated By user not found.");
+
+        if (request.AssetId.HasValue)
+        {
+            var asset = await _context.Assets.FindAsync(request.AssetId.Value);
+
+            if (asset == null)
+                throw new InvalidOperationException("Asset not found.");
+        }
+
+        var alreadyAllocated = await _context.ResourceAllocations
+            .AnyAsync(r => r.LicenseId == request.LicenseId && r.IsActive);
+
+        if (alreadyAllocated)
+            throw new InvalidOperationException("This license is already allocated.");
+
+        var allocation = new ResourceAllocation
+        {
+            LicenseId = request.LicenseId,
+            UserId = request.UserId,
+            AssetId = request.AssetId,
+            AllocatedByUserId = request.AllocatedByUserId,
+            ExpectedReturnDate = request.ExpectedReturnDate.HasValue
+                ? DateTime.SpecifyKind(
+                    request.ExpectedReturnDate.Value,
+                    DateTimeKind.Utc)
+                : null,
+            Remarks = request.Remarks,
+            Status = "Allocated",
+            IsActive = true
+        };
+
+        _context.ResourceAllocations.Add(allocation);
+
+        // Keep the individual license lifecycle synchronized
+        // with its active resource allocation.
+        license.Status = "Allocated";
+
+        await _context.SaveChangesAsync();
+
+        var createdAllocation = await GetByIdAsync(allocation.Id);
+
+        if (createdAllocation == null)
+            throw new InvalidOperationException("Allocation was created but could not be retrieved.");
+
+        return createdAllocation;
+    }
+
+    public async Task<ResourceAllocationResponse?> UpdateAsync(int id, UpdateResourceAllocationRequest request)
+    {
+        var allocation = await _context.ResourceAllocations.FindAsync(id);
+
+        if (allocation == null)
+            return null;
+
+        var user = await _context.Users.FindAsync(request.UserId);
+
+        if (user == null)
+            throw new InvalidOperationException("User not found.");
+
+        if (request.AssetId.HasValue)
+        {
+            var asset = await _context.Assets.FindAsync(request.AssetId.Value);
+
+            if (asset == null)
+                throw new InvalidOperationException("Asset not found.");
+        }
+
+        allocation.UserId = request.UserId;
+        allocation.AssetId = request.AssetId;
+        allocation.ExpectedReturnDate = request.ExpectedReturnDate;
+        allocation.ActualReturnDate = request.ActualReturnDate;
+        allocation.Status = request.Status;
+        allocation.Remarks = request.Remarks;
+        allocation.IsActive = request.IsActive;
+
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(id);
+    }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var allocation = await _context.ResourceAllocations.FindAsync(id);
+
+        if (allocation == null)
+            return false;
+
+        _context.ResourceAllocations.Remove(allocation);
+
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
+
+public async Task<bool> ReleaseAsync(int id, ReleaseResourceAllocationRequest request)
+{
+    var allocation = await _context.ResourceAllocations
+        .Include(r => r.License)
+        .FirstOrDefaultAsync(r => r.Id == id);
+
+    if (allocation == null)
+        return false;
+
+    if (!allocation.IsActive)
+        throw new InvalidOperationException("Allocation is already released.");
+
+    allocation.IsActive = false;
+    allocation.Status = "Released";
+    allocation.ActualReturnDate = DateTime.UtcNow;
+
+    if (!string.IsNullOrWhiteSpace(request.Remarks))
+    {
+        allocation.Remarks = request.Remarks;
+    }
+
+    allocation.License.Status = "Available";
+
+    await _context.SaveChangesAsync();
+
+    return true;
+}
+}
