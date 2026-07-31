@@ -1,0 +1,4 @@
+public IEnumerable<RecentAssetResponse> RecentAssets { get; set; }
+    = Enumerable.Empty<RecentAssetResponse>();
+
+GetDashboardOverviewAsync()
