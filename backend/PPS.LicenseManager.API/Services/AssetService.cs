@@ -77,6 +77,172 @@ public class AssetService : IAssetService
         };
     }
 
+public async Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10)
+{
+    return await _context.Assets
+        .Include(a => a.Department)
+        .Where(a => a.IsActive)
+        .OrderByDescending(a => a.CreatedAt)
+        .Take(count)
+        .Select(a => new RecentAssetResponse
+        {
+            Id = a.Id,
+            AssetTag = a.AssetTag,
+            AssetName = a.AssetName,
+            AssetType = a.AssetType,
+            DepartmentName = a.Department != null
+                ? a.Department.DepartmentName
+                : "Unknown",
+            Status = a.Status,
+            CreatedAt = a.CreatedAt
+        })
+        .ToListAsync();
+}
+
+public async Task<AssetDashboardOverviewResponse> GetDashboardOverviewAsync()
+{
+    return new AssetDashboardOverviewResponse
+    {
+        Kpis = await GetDashboardAsync(),
+        DepartmentSummary = await GetDepartmentSummaryAsync(),
+        ManufacturerSummary = await GetManufacturerSummaryAsync(),
+        AssetTypeSummary = await GetAssetTypeSummaryAsync(),
+        Warranty = await GetWarrantySummaryAsync()
+    };
+}
+
+public async Task<WarrantySummaryResponse> GetWarrantySummaryAsync()
+{
+    var today = DateTime.UtcNow.Date;
+
+    var assets = _context.Assets.Where(a => a.IsActive);
+
+    return new WarrantySummaryResponse
+    {
+        TotalAssets = await assets.CountAsync(),
+
+        UnderWarranty = await assets.CountAsync(a =>
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry >= today),
+
+        ExpiredWarranty = await assets.CountAsync(a =>
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry < today),
+
+        ExpiringIn30Days = await assets.CountAsync(a =>
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry >= today &&
+            a.WarrantyExpiry <= today.AddDays(30)),
+
+        ExpiringIn60Days = await assets.CountAsync(a =>
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry > today.AddDays(30) &&
+            a.WarrantyExpiry <= today.AddDays(60)),
+
+        ExpiringIn90Days = await assets.CountAsync(a =>
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry > today.AddDays(60) &&
+            a.WarrantyExpiry <= today.AddDays(90)),
+
+        NoWarranty = await assets.CountAsync(a =>
+            a.WarrantyExpiry == null)
+    };
+}
+
+public async Task<IEnumerable<ManufacturerSummaryResponse>> GetManufacturerSummaryAsync()
+{
+    return await _context.Assets
+        .Where(a => a.IsActive)
+        .GroupBy(a => a.Manufacturer)
+        .Select(g => new ManufacturerSummaryResponse
+        {
+            Manufacturer = string.IsNullOrWhiteSpace(g.Key)
+                ? "Unknown"
+                : g.Key,
+            AssetCount = g.Count()
+        })
+        .OrderByDescending(x => x.AssetCount)
+        .ToListAsync();
+}
+
+
+public async Task<IEnumerable<AssetTypeSummaryResponse>> GetAssetTypeSummaryAsync()
+{
+    return await _context.Assets
+        .Where(a => a.IsActive)
+        .GroupBy(a => a.AssetType)
+        .Select(g => new AssetTypeSummaryResponse
+        {
+            AssetType = g.Key,
+            AssetCount = g.Count()
+        })
+        .OrderByDescending(x => x.AssetCount)
+        .ToListAsync();
+}
+
+public async Task<IEnumerable<DepartmentAssetSummary>> GetDepartmentSummaryAsync()
+{
+    return await _context.Assets
+        .Where(a => a.IsActive)
+        .GroupBy(a => new
+        {
+            a.DepartmentId,
+            DepartmentName = a.Department != null
+                ? a.Department.DepartmentName
+                : "Unknown"
+        })
+        .Select(g => new DepartmentAssetSummary
+        {
+            DepartmentId = g.Key.DepartmentId,
+            DepartmentName = g.Key.DepartmentName,
+            AssetCount = g.Count()
+        })
+        .OrderByDescending(x => x.AssetCount)
+        .ToListAsync();
+}
+
+public async Task<AssetDashboardResponse> GetDashboardAsync()
+{
+    var today = DateTime.UtcNow.Date;
+
+    return new AssetDashboardResponse
+    {
+        TotalAssets = await _context.Assets.CountAsync(a => a.IsActive),
+
+        AvailableAssets = await _context.Assets.CountAsync(a =>
+            a.IsActive && a.Status == "Available"),
+
+        AssignedAssets = await _context.Assets.CountAsync(a =>
+            a.IsActive && a.Status == "Assigned"),
+
+        MaintenanceAssets = await _context.Assets.CountAsync(a =>
+            a.IsActive && a.Status == "Maintenance"),
+
+        RetiredAssets = await _context.Assets.CountAsync(a =>
+            a.IsActive && a.Status == "Retired"),
+
+        WarrantyExpired = await _context.Assets.CountAsync(a =>
+            a.IsActive &&
+            a.WarrantyExpiry != null &&
+            a.WarrantyExpiry < today),
+
+        Warranty30Days = await _context.Assets.CountAsync(a =>
+            a.IsActive &&
+            a.WarrantyExpiry >= today &&
+            a.WarrantyExpiry <= today.AddDays(30)),
+
+        Warranty60Days = await _context.Assets.CountAsync(a =>
+            a.IsActive &&
+            a.WarrantyExpiry > today.AddDays(30) &&
+            a.WarrantyExpiry <= today.AddDays(60)),
+
+        Warranty90Days = await _context.Assets.CountAsync(a =>
+            a.IsActive &&
+            a.WarrantyExpiry > today.AddDays(60) &&
+            a.WarrantyExpiry <= today.AddDays(90))
+    };
+}
+
     public async Task<AssetResponse> CreateAsync(CreateAssetRequest request)
     {
         if (await _context.Assets.AnyAsync(a => a.AssetTag == request.AssetTag))

@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-
+using PPS.LicenseManager.API.Enums;
 namespace PPS.LicenseManager.API.Models;
 
 public class AssetAssignment
@@ -38,4 +38,10 @@ public class AssetAssignment
     public User User { get; set; } = null!;
 
     public User AssignedByUser { get; set; } = null!;
+
+    public AssignmentType AssignmentType { get; set; } = AssignmentType.Permanent;
+
+public DateTime? ExpectedReturnDate { get; set; }
+
+public int? OriginalAssignmentId { get; set; }
 }

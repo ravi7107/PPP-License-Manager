@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PPS.LicenseManager.API.Data;
@@ -11,9 +12,11 @@ using PPS.LicenseManager.API.Data;
 namespace PPS.LicenseManager.API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731182530_AddTemporaryAssignmentFields")]
+    partial class AddTemporaryAssignmentFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -266,67 +269,6 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("AssetAssignments");
                 });
 
-            modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetPoolRequest", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("ApprovedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Purpose")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("RejectionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("RequestedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RequestedForUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("RequiredFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("RequiredUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TemporaryPoolId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ApprovedByUserId");
-
-                    b.HasIndex("RequestedByUserId");
-
-                    b.HasIndex("RequestedForUserId");
-
-                    b.HasIndex("RequiredFrom");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TemporaryPoolId");
-
-                    b.ToTable("AssetPoolRequests");
-                });
-
             modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetSoftware", b =>
                 {
                     b.Property<int>("Id")
@@ -380,57 +322,6 @@ namespace PPS.LicenseManager.API.Migrations
                         .IsUnique();
 
                     b.ToTable("AssetSoftwares");
-                });
-
-            modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetTemporaryPool", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("AvailableFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("AvailableUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CurrentAssignmentId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("ReleasedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetId");
-
-                    b.HasIndex("AvailableUntil");
-
-                    b.HasIndex("CurrentAssignmentId");
-
-                    b.HasIndex("ReleasedByUserId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("AssetTemporaryPools");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.AuditLog", b =>
@@ -1549,40 +1440,6 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetPoolRequest", b =>
-                {
-                    b.HasOne("PPS.LicenseManager.API.Models.User", "ApprovedByUser")
-                        .WithMany()
-                        .HasForeignKey("ApprovedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("PPS.LicenseManager.API.Models.User", "RequestedByUser")
-                        .WithMany()
-                        .HasForeignKey("RequestedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PPS.LicenseManager.API.Models.User", "RequestedForUser")
-                        .WithMany()
-                        .HasForeignKey("RequestedForUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PPS.LicenseManager.API.Models.AssetTemporaryPool", "TemporaryPool")
-                        .WithMany()
-                        .HasForeignKey("TemporaryPoolId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ApprovedByUser");
-
-                    b.Navigation("RequestedByUser");
-
-                    b.Navigation("RequestedForUser");
-
-                    b.Navigation("TemporaryPool");
-                });
-
             modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetSoftware", b =>
                 {
                     b.HasOne("PPS.LicenseManager.API.Models.Asset", "Asset")
@@ -1600,33 +1457,6 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("Asset");
 
                     b.Navigation("Software");
-                });
-
-            modelBuilder.Entity("PPS.LicenseManager.API.Models.AssetTemporaryPool", b =>
-                {
-                    b.HasOne("PPS.LicenseManager.API.Models.Asset", "Asset")
-                        .WithMany()
-                        .HasForeignKey("AssetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PPS.LicenseManager.API.Models.AssetAssignment", "CurrentAssignment")
-                        .WithMany()
-                        .HasForeignKey("CurrentAssignmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PPS.LicenseManager.API.Models.User", "ReleasedByUser")
-                        .WithMany()
-                        .HasForeignKey("ReleasedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Asset");
-
-                    b.Navigation("CurrentAssignment");
-
-                    b.Navigation("ReleasedByUser");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.Department", b =>

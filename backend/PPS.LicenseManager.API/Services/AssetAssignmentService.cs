@@ -3,6 +3,7 @@ using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.AssetAssignment;
 using PPS.LicenseManager.API.Models;
 using PPS.LicenseManager.API.Services.Interfaces;
+using PPS.LicenseManager.API.Enums;
 
 namespace PPS.LicenseManager.API.Services;
 
@@ -150,6 +151,24 @@ public class AssetAssignmentService : IAssetAssignmentService
             throw new InvalidOperationException(
                 $"Asset {asset.AssetTag} is not available for assignment.");
         }
+
+var activeAssignment = await _context.AssetAssignments
+    .FirstOrDefaultAsync(a =>
+        a.AssetId == request.AssetId &&
+        a.IsActive);
+
+if (activeAssignment != null)
+{
+    throw new InvalidOperationException(
+        "This asset is already assigned.");
+}
+
+if (request.AssignmentType == AssignmentType.Temporary &&
+    request.ExpectedReturnDate == null)
+{
+    throw new InvalidOperationException(
+        "Expected return date is required for temporary assignments.");
+}
 
         var user = await _context.Users
             .FirstOrDefaultAsync(

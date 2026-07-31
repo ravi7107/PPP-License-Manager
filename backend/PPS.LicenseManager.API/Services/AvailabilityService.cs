@@ -3,14 +3,22 @@ using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.Availability;
 using PPS.LicenseManager.API.DTOs.ResourceAllocation;
 using PPS.LicenseManager.API.Services.Interfaces;
+using PPS.LicenseManager.API.DTOs.AssetPool;
 
 namespace PPS.LicenseManager.API.Services;
+
 
 public class AvailabilityService : IAvailabilityService
 {
     private readonly ApplicationDbContext _context;
     private readonly IResourceAllocationService _resourceAllocationService;
     private readonly INotificationService _notificationService;
+
+public async Task<bool> ReleaseAssetToPoolAsync(
+    ReleaseAssetToPoolRequest request)
+{
+    throw new NotImplementedException();
+}
 
     public AvailabilityService(
         ApplicationDbContext context,
@@ -20,7 +28,31 @@ public class AvailabilityService : IAvailabilityService
         _context = context;
         _resourceAllocationService = resourceAllocationService;
         _notificationService = notificationService;
-    }
+}    
+public async Task<IEnumerable<AvailableAssetResponse>> GetAvailableAssetsAsync()
+{
+    return await Task.FromResult(Enumerable.Empty<AvailableAssetResponse>());
+}
+
+public async Task<AssetPoolRequestResponse> CreateAssetPoolRequestAsync(
+    CreateAssetPoolRequest request)
+{
+    throw new NotImplementedException();
+}
+
+public async Task<AssetPoolRequestResponse?> DecideAssetPoolRequestAsync(
+    int id,
+    DecideAssetPoolRequest request)
+{
+    throw new NotImplementedException();
+}
+
+public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
+    int id,
+    ReturnAssetPoolRequest request)
+{
+    throw new NotImplementedException();
+}
 
     public async Task<IEnumerable<UserUnavailabilityResponse>>
         GetUnavailabilitiesAsync()

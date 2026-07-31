@@ -1,4 +1,5 @@
 using PPS.LicenseManager.API.DTOs.Availability;
+using PPS.LicenseManager.API.DTOs.AssetPool;
 
 namespace PPS.LicenseManager.API.Services.Interfaces;
 
@@ -38,4 +39,22 @@ public interface IAvailabilityService
         ReturnReallocationToOriginalUserAsync(
             int id,
             ReturnResourceReallocationRequest request);
+Task<IEnumerable<AvailableAssetResponse>>
+    GetAvailableAssetsAsync();
+
+Task<AssetPoolRequestResponse>
+    CreateAssetPoolRequestAsync(
+        CreateAssetPoolRequest request);
+
+Task<AssetPoolRequestResponse?>
+    DecideAssetPoolRequestAsync(
+        int id,
+        DecideAssetPoolRequest request);
+
+Task<AssetPoolRequestResponse?>
+    ReturnAssetToOriginalUserAsync(
+        int id,
+        ReturnAssetPoolRequest request);
+Task<bool> ReleaseAssetToPoolAsync(
+    ReleaseAssetToPoolRequest request);
 }

@@ -24,7 +24,56 @@ public class AssetController : ControllerBase
         return Ok(assets);
     }
 
-    [HttpGet("{id:int}")]
+[HttpGet("dashboard/overview")]
+public async Task<IActionResult> DashboardOverview()
+{
+    var result = await _assetService.GetDashboardOverviewAsync();
+    return Ok(result);
+}
+
+[HttpGet("dashboard/recent-assets")]
+public async Task<IActionResult> RecentAssets([FromQuery] int count = 10)
+{
+    var result = await _assetService.GetRecentAssetsAsync(count);
+    return Ok(result);
+}
+
+[HttpGet("dashboard/manufacturer-summary")]
+public async Task<IActionResult> ManufacturerSummary()
+{
+    var result = await _assetService.GetManufacturerSummaryAsync();
+    return Ok(result);
+}
+
+[HttpGet("dashboard/department-summary")]
+public async Task<IActionResult> DepartmentSummary()
+{
+    var result = await _assetService.GetDepartmentSummaryAsync();
+    return Ok(result);
+}
+
+[HttpGet("dashboard/asset-type-summary")]
+public async Task<IActionResult> AssetTypeSummary()
+{
+    var result = await _assetService.GetAssetTypeSummaryAsync();
+    return Ok(result);
+}
+
+[HttpGet("dashboard/warranty-summary")]
+public async Task<IActionResult> WarrantySummary()
+{
+    var result = await _assetService.GetWarrantySummaryAsync();
+    return Ok(result);
+}
+
+[HttpGet("dashboard")]
+public async Task<IActionResult> Dashboard()
+{
+    return Ok(await _assetService.GetDashboardAsync());
+}
+  
+
+  [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
         var asset = await _assetService.GetByIdAsync(id);

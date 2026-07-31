@@ -10,11 +10,6 @@ public interface IAssetService
     Task<AssetResponse?> UpdateAsync(int id, UpdateAssetRequest request);
     Task<bool> DeleteAsync(int id);
     Task<AssetDashboardResponse> GetDashboardAsync();
-    Task<IEnumerable<DepartmentAssetSummary>> GetDepartmentSummaryAsync();
-    Task<IEnumerable<AssetTypeSummaryResponse>> GetAssetTypeSummaryAsync();
-    Task<IEnumerable<ManufacturerSummaryResponse>> GetManufacturerSummaryAsync();
-    Task<WarrantySummaryResponse> GetWarrantySummaryAsync();
-    Task<AssetDashboardOverviewResponse> GetDashboardOverviewAsync();
-    Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10);
+
 }
 

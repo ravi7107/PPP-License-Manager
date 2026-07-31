@@ -16,9 +16,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
-
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Software> Software => Set<Software>();
+    public DbSet<AssetTemporaryPool> AssetTemporaryPools => Set<AssetTemporaryPool>();
 
+public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetSoftware> AssetSoftwares => Set<AssetSoftware>();
     public DbSet<AssetAssignment> AssetAssignments =>
