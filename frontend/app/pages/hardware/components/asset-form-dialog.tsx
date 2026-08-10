@@ -599,6 +599,9 @@ export function AssetFormDialog({
                                 {d.departmentName ??
                                   d.name ??
                                   "Unnamed Department"}
+                                {d.companyName
+                                  ? ` (${d.companyName})`
+                                  : ""}
                               </SelectItem>
                             ))
                           )}

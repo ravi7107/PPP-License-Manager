@@ -531,13 +531,17 @@ export default function HardwarePage() {
           assignedUserName:
             assignment.userName,
 
-          departmentId:
-            assignment.departmentId ??
-            asset.departmentId,
-
-          departmentName:
-            assignment.departmentName ??
-            asset.departmentName,
+          // Deliberately NOT overriding departmentId/departmentName with
+          // assignment.departmentId/departmentName here (which reflect the
+          // assigned USER's department, not the asset's own). Doing so
+          // used to shadow the asset's real department everywhere this
+          // record was used - including the Edit dialog, which made a
+          // department change look like it "didn't save" because the
+          // table kept re-displaying the assigned user's department after
+          // reload. The asset's own department (from the ...asset spread
+          // above) is also what the backend's Team-Lead scoping checks
+          // (e.g. reallocation requests) key off, so this keeps the
+          // frontend consistent with that.
 
           currentAssignmentId:
             assignment.id,
