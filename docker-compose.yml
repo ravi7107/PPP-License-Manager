@@ -32,6 +32,11 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    volumes:
+      # Uploaded files (floor maps, etc.) live in wwwroot on the container's
+      # own filesystem. Without this, every rebuild wipes them out even
+      # though the database still references the (now-missing) file.
+      - backend_uploads:/app/wwwroot/uploads
 
   frontend:
     build:
@@ -44,3 +49,4 @@ services:
 
 volumes:
   pgdata:
+  backend_uploads:
