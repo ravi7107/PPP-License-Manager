@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.Asset;
 using PPS.LicenseManager.API.Interfaces;
+using PPS.LicenseManager.API.Common;
 
 namespace PPS.LicenseManager.API.Controllers;
 
@@ -23,6 +24,14 @@ public class AssetController : ControllerBase
         var assets = await _assetService.GetAllAsync();
         return Ok(assets);
     }
+[HttpGet("list")]
+public async Task<IActionResult> GetPaged([FromQuery] AssetFilterRequest request)
+{
+    var result = await _assetService.GetPagedAsync(request);
+
+    return Ok(ApiResponse<PagedResponse<AssetResponse>>.SuccessResponse(result));
+}
+
 
 [HttpGet("dashboard/overview")]
 public async Task<IActionResult> DashboardOverview()

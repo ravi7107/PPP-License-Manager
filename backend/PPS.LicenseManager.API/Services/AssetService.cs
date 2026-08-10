@@ -3,6 +3,8 @@ using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.Asset;
 using PPS.LicenseManager.API.Interfaces;
 using PPS.LicenseManager.API.Models;
+using PPS.LicenseManager.API.Common;
+
 
 namespace PPS.LicenseManager.API.Services;
 
@@ -43,6 +45,70 @@ public class AssetService : IAssetService
             })
             .ToListAsync();
     }
+
+public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest request)
+{
+    var query = _context.Assets
+        .Include(a => a.Department)
+        .Where(a => a.IsActive);
+
+    // Global Search
+    if (!string.IsNullOrWhiteSpace(request.Search))
+    {
+        var search = request.Search.Trim().ToLower();
+
+        query = query.Where(a =>
+            a.AssetTag.ToLower().Contains(search) ||
+            a.AssetName.ToLower().Contains(search) ||
+            (a.SerialNumber != null && a.SerialNumber.ToLower().Contains(search)) ||
+            (a.HostName != null && a.HostName.ToLower().Contains(search)) ||
+            (a.Manufacturer != null && a.Manufacturer.ToLower().Contains(search)) ||
+            (a.Model != null && a.Model.ToLower().Contains(search)));
+    }
+
+    // Department Filter
+    if (request.DepartmentId.HasValue)
+    {
+        query = query.Where(a => a.DepartmentId == request.DepartmentId);
+    }
+
+    // Asset Type
+    if (!string.IsNullOrWhiteSpace(request.AssetType))
+    {
+        query = query.Where(a => a.AssetType == request.AssetType);
+    }
+
+    // Manufacturer
+    if (!string.IsNullOrWhiteSpace(request.Manufacturer))
+    {
+        query = query.Where(a => a.Manufacturer == request.Manufacturer);
+    }
+
+    // Status
+    if (!string.IsNullOrWhiteSpace(request.Status))
+    {
+        query = query.Where(a => a.Status == request.Status);
+    }
+
+    var totalRecords = await query.CountAsync();
+
+    query = request.SortDirection.ToLower() == "desc"
+        ? query.OrderByDescending(a => a.AssetTag)
+        : query.OrderBy(a => a.AssetTag);
+
+    var assets = await query
+        .Skip((request.Page - 1) * request.PageSize)
+        .Take(request.PageSize)
+        .ToListAsync();
+
+    return new PagedResponse<AssetResponse>
+    {
+        Items = assets.Select(MapToResponse).ToList(),
+        Page = request.Page,
+        PageSize = request.PageSize,
+        TotalRecords = totalRecords
+    };
+}
 
     public async Task<AssetResponse?> GetByIdAsync(int id)
     {
@@ -350,5 +416,33 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         await _context.SaveChangesAsync();
 
         return true;
+
     }
+private static AssetResponse MapToResponse(Asset asset)
+{
+    return new AssetResponse
+    {
+        Id = asset.Id,
+        AssetTag = asset.AssetTag,
+        AssetName = asset.AssetName,
+        AssetType = asset.AssetType,
+        Manufacturer = asset.Manufacturer,
+        Model = asset.Model,
+        HostName = asset.HostName,
+        Processor = asset.Processor,
+        RamGb = asset.RamGb,
+        StorageGb = asset.StorageGb,
+        GraphicsCard = asset.GraphicsCard,
+        OperatingSystem = asset.OperatingSystem,
+        SerialNumber = asset.SerialNumber,
+        DepartmentId = asset.DepartmentId,
+        DepartmentName = asset.Department?.DepartmentName ?? "",
+        Status = asset.Status,
+        PurchaseDate = asset.PurchaseDate,
+        WarrantyExpiry = asset.WarrantyExpiry,
+        Remarks = asset.Remarks,
+        IsReadyForAssignment = asset.IsReadyForAssignment,
+        IsActive = asset.IsActive
+    };
+}
 }

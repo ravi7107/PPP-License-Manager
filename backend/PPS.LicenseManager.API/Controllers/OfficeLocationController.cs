@@ -228,9 +228,9 @@ public class OfficeLocationController : BaseController
     [HttpPost("floors/{id:int}/map")]
     [Authorize(Roles = "Super Admin,IT Admin")]
     [RequestSizeLimit(10 * 1024 * 1024)]
-    public async Task<IActionResult> UploadFloorMap(
-        int id,
-        [FromForm] IFormFile file)
+public async Task<IActionResult> UploadFloorMap(
+    int id,
+    IFormFile file)
     {
         try
         {

@@ -1,5 +1,6 @@
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/appsettings.Development.json
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/appsettings.json
+/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.staticwebassets.runtime.json
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.staticwebassets.endpoints.json
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.deps.json
@@ -142,4 +143,3 @@
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/PPS.LicenseManager.API.pdb
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/PPS.LicenseManager.API.genruntimeconfig.cache
 /root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/obj/Debug/net10.0/ref/PPS.LicenseManager.API.dll
-/root/projects/PPP-License-Manager/backend/PPS.LicenseManager.API/bin/Debug/net10.0/PPS.LicenseManager.API.staticwebassets.runtime.json

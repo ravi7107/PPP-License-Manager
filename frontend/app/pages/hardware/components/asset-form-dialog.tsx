@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
 import {
   Dialog,
   DialogContent,
@@ -9,80 +10,177 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+} from "@/components/ui/dialog";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import {
   AssetFormValues,
   AssetRecord,
   AssetType,
-  ASSET_TYPES,
   EMPTY_ASSET_FORM,
   LookupOption,
-} from '@/app/pages/hardware/types';
+} from "@/app/pages/hardware/types";
 
 const assetFormSchema = z.object({
-  assetTag: z.string().min(1, 'Asset ID is required'),
+  assetTag: z.string().min(1, "Asset ID is required"),
 
-  assetName: z.string().min(1, 'Asset Name is required'),
+  assetName: z.string().min(1, "Asset Name is required"),
 
   assetType: z.enum([
-    'Desktop',
-    'Laptop',
-    'Workstation',
-    'Server',
+    "Desktop",
+    "Laptop",
+    "Workstation",
+    "Server",
   ]),
-  computerName: z.string(),
-  manufacturer: z.string(),
-model: z.string(),
-serialNumber: z.string(),
-hostName: z.string(),
 
-processor: z.string(),
-ramGb: z.coerce.number().optional(),
-purchaseDate: z.string(),
-  warrantyExpiry: z.string(),
-  operatingSystem: z.string(),
-  location: z.string(),
-  status: z.enum(['Allocated', 'Available', 'Maintenance', 'Scrap']),
-  remarks: z.string(),
-  assignedUserId: z.string(),
-  departmentId: z.string(),
-  entityId: z.string(),
-  clientId: z.string(),
-}) satisfies z.ZodType<AssetFormValues>;
+  computerName: z.string().default(""),
+
+  manufacturer: z.string().default(""),
+
+  model: z.string().default(""),
+
+  serialNumber: z.string().default(""),
+
+  hostName: z.string().default(""),
+
+  processor: z.string().default(""),
+
+  ramGb: z.coerce.number().optional(),
+
+  purchaseDate: z.string().default(""),
+
+  warrantyExpiry: z.string().default(""),
+
+  operatingSystem: z.string().default(""),
+
+  location: z.string().default(""),
+
+  status: z.enum([
+    "Allocated",
+    "Available",
+    "Maintenance",
+    "Scrap",
+  ]),
+
+  remarks: z.string().default(""),
+
+  assignedUserId: z.string().default(""),
+
+  departmentId: z.string().default(""),
+
+  entityId: z.string().default(""),
+
+  clientId: z.string().default(""),
+});
 
 interface AssetFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+
   asset: AssetRecord | null;
+
   users: LookupOption[];
   departments: LookupOption[];
   entities: LookupOption[];
   clients: LookupOption[];
+
   saving: boolean;
+
   onSubmit: (values: AssetFormValues) => Promise<void>;
 }
 
-function toFormValues(asset: AssetRecord | null): AssetFormValues {
-  if (!asset) return EMPTY_ASSET_FORM;
+/*
+ * Backend DTOs use different property names:
+ *
+ * UserResponse:
+ *   Id
+ *   FullName
+ *
+ * DepartmentResponse:
+ *   Id
+ *   DepartmentName
+ *
+ * Company / Client:
+ *   Id
+ *   Name
+ *
+ * Depending on the frontend LookupOption definition,
+ * TypeScript may not know all these properties.
+ *
+ * This local type lets us safely handle the actual API
+ * response without changing the global LookupOption type.
+ */
+type LookupItem = LookupOption & {
+  id: number | string;
+  name?: string;
+  fullName?: string;
+  departmentName?: string;
+  companyName?: string;
+};
+
+function toFormValues(
+  asset: AssetRecord | null
+): AssetFormValues {
+  if (!asset) {
+    return {
+      ...EMPTY_ASSET_FORM,
+      computerName: EMPTY_ASSET_FORM.computerName ?? "",
+      hostName: EMPTY_ASSET_FORM.hostName ?? "",
+      manufacturer: EMPTY_ASSET_FORM.manufacturer ?? "",
+      model: EMPTY_ASSET_FORM.model ?? "",
+      serialNumber: EMPTY_ASSET_FORM.serialNumber ?? "",
+      processor: EMPTY_ASSET_FORM.processor ?? "",
+      purchaseDate: EMPTY_ASSET_FORM.purchaseDate ?? "",
+      warrantyExpiry: EMPTY_ASSET_FORM.warrantyExpiry ?? "",
+      operatingSystem: EMPTY_ASSET_FORM.operatingSystem ?? "",
+      location: EMPTY_ASSET_FORM.location ?? "",
+      remarks: EMPTY_ASSET_FORM.remarks ?? "",
+      assignedUserId: EMPTY_ASSET_FORM.assignedUserId ?? "",
+      departmentId: EMPTY_ASSET_FORM.departmentId ?? "",
+      entityId: EMPTY_ASSET_FORM.entityId ?? "",
+      clientId: EMPTY_ASSET_FORM.clientId ?? "",
+    };
+  }
 
   return {
     assetTag: asset.assetTag ?? "",
     assetName: asset.assetName ?? "",
-    assetType: (asset.assetType as AssetType) ?? "Workstation",
+
+    assetType:
+      (asset.assetType as AssetType) ?? "Workstation",
 
     computerName: "",
+
     hostName: asset.hostName ?? "",
 
     manufacturer: asset.manufacturer ?? "",
+
     model: asset.model ?? "",
+
     serialNumber: asset.serialNumber ?? "",
 
     processor: asset.processor ?? "",
-    ramGb: asset.ramGb,
+
+    ramGb: asset.ramGb ?? undefined,
 
     purchaseDate: asset.purchaseDate
       ? asset.purchaseDate.slice(0, 10)
@@ -95,20 +193,24 @@ function toFormValues(asset: AssetRecord | null): AssetFormValues {
     operatingSystem: asset.operatingSystem ?? "",
 
     location: "",
-    status: asset.status,
+
+    status:
+      (asset.status as AssetFormValues["status"]) ??
+      "Available",
 
     remarks: asset.remarks ?? "",
 
     assignedUserId: "",
+
     departmentId: asset.departmentId
       ? String(asset.departmentId)
       : "",
 
     entityId: "",
+
     clientId: "",
   };
 }
-
 
 export function AssetFormDialog({
   open,
@@ -123,323 +225,681 @@ export function AssetFormDialog({
 }: AssetFormDialogProps) {
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
-    defaultValues: EMPTY_ASSET_FORM,
+    defaultValues: toFormValues(null),
   });
 
   useEffect(() => {
     if (open) {
       form.reset(toFormValues(asset));
     }
-  }, [open, asset]);
+  }, [open, asset, form]);
 
   const isEditing = Boolean(asset);
 
+  /*
+   * Protect the UI if the API returns an unexpected response.
+   * This prevents:
+   *
+   * users.map is not a function
+   *
+   * from crashing the whole page.
+   */
+  const safeUsers: LookupItem[] = Array.isArray(users)
+    ? (users as LookupItem[])
+    : [];
+
+  const safeDepartments: LookupItem[] = Array.isArray(
+    departments
+  )
+    ? (departments as LookupItem[])
+    : [];
+
+  const safeEntities: LookupItem[] = Array.isArray(
+    entities
+  )
+    ? (entities as LookupItem[])
+    : [];
+
+  const safeClients: LookupItem[] = Array.isArray(clients)
+    ? (clients as LookupItem[])
+    : [];
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[850px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Asset' : 'Add Asset'}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit Asset" : "Add Asset"}
+          </DialogTitle>
+
           <DialogDescription>
-            {isEditing ? 'Update hardware asset details.' : 'Register a new hardware asset in the inventory.'}
+            {isEditing
+              ? "Update the asset information below."
+              : "Enter the asset information below to create a new asset."}
           </DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
           <form
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-            onSubmit={form.handleSubmit(async (values) => {
-              await onSubmit(values);
-            })}
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-6"
           >
-            <FormField
-              control={form.control}
-              name="assetTag"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Asset ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="PPS-WS-1001" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* BASIC INFORMATION */}
 
-            <FormField
-  control={form.control}
-  name="assetName"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Asset Name</FormLabel>
-      <FormControl>
-        <Input
-          placeholder="Dell OptiPlex 7010"
-          {...field}
-        />
-      </FormControl>
-      <FormMessage />
-    </FormItem>
-  )}
-/>
-            <FormField
-              control={form.control}
-              name="assetType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Asset Type</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select asset type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {ASSET_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="hostName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Host Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-  control={form.control}
-  name="processor"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Processor</FormLabel>
-      <FormControl>
-        <Input
-          placeholder="Intel Core i7-13700"
-          {...field}
-        />
-      </FormControl>
-      <FormMessage />
-    </FormItem>
-  )}
-/>
-            <FormField
-              control={form.control}
-              name="serialNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Serial Number</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="manufacturer"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Manufacturer</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="model"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Model</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="operatingSystem"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Operating System</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Windows 11 Pro" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="purchaseDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Purchase Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="warrantyExpiry"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Warranty Expiry</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="location"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Location</FormLabel>
-                  <FormControl>
-                    <Input placeholder="HQ - Floor 3" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-              <FormField                    
-              control={form.control}
-              name="assignedUserId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Current User</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Unassigned" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>
-                          {u.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="departmentId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Department</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {departments.map((d) => (
-                        <SelectItem key={d.id} value={String(d.id)}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="entityId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Entity</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select entity" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {entities.map((e) => (
-                        <SelectItem key={e.id} value={String(e.id)}>
-                          {e.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="clientId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select client" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Basic Information
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="assetTag"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset ID *</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="AST-0001"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="assetName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset Name *</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Dell Latitude 5420"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="assetType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset Type *</FormLabel>
+
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select asset type" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          <SelectItem value="Desktop">
+                            Desktop
+                          </SelectItem>
+
+                          <SelectItem value="Laptop">
+                            Laptop
+                          </SelectItem>
+
+                          <SelectItem value="Workstation">
+                            Workstation
+                          </SelectItem>
+
+                          <SelectItem value="Server">
+                            Server
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status *</FormLabel>
+
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          <SelectItem value="Available">
+                            Available
+                          </SelectItem>
+
+                          <SelectItem value="Allocated">
+                            Allocated
+                          </SelectItem>
+
+                          <SelectItem value="Maintenance">
+                            Maintenance
+                          </SelectItem>
+
+                          <SelectItem value="Scrap">
+                            Scrap
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* HARDWARE INFORMATION */}
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Hardware Information
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="manufacturer"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Manufacturer</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Dell"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="model"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Model</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Latitude 5420"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="serialNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Serial Number</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Serial number"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="hostName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Host Name</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="PPS-LT-001"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="computerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Computer Name</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Computer name"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="processor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Processor</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Intel Core i5"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="ramGb"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>RAM (GB)</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="16"
+                          value={field.value ?? ""}
+                          onChange={(e) => {
+                            const value =
+                              e.target.value;
+
+                            field.onChange(
+                              value === ""
+                                ? undefined
+                                : Number(value)
+                            );
+                          }}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="operatingSystem"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Operating System</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="Windows 11 Pro"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* ASSIGNMENT INFORMATION */}
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Assignment Information
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* CURRENT USER */}
+
+                <FormField
+                  control={form.control}
+                  name="assignedUserId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Current User</FormLabel>
+
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Unassigned" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          {safeUsers.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No users available
+                            </div>
+                          ) : (
+                            safeUsers.map((u) => (
+                              <SelectItem
+                                key={u.id}
+                                value={String(u.id)}
+                              >
+                                {u.fullName ??
+                                  u.name ??
+                                  "Unnamed User"}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* DEPARTMENT */}
+
+                <FormField
+                  control={form.control}
+                  name="departmentId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Department</FormLabel>
+
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          {safeDepartments.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No departments available
+                            </div>
+                          ) : (
+                            safeDepartments.map((d) => (
+                              <SelectItem
+                                key={d.id}
+                                value={String(d.id)}
+                              >
+                                {d.departmentName ??
+                                  d.name ??
+                                  "Unnamed Department"}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* ENTITY */}
+
+                <FormField
+                  control={form.control}
+                  name="entityId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Entity</FormLabel>
+
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select entity" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          {safeEntities.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No entities available
+                            </div>
+                          ) : (
+                            safeEntities.map((e) => (
+                              <SelectItem
+                                key={e.id}
+                                value={String(e.id)}
+                              >
+                                {e.name ??
+                                  e.companyName ??
+                                  "Unnamed Entity"}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* CLIENT */}
+
+                <FormField
+                  control={form.control}
+                  name="clientId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client</FormLabel>
+
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select client" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          {safeClients.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No clients available
+                            </div>
+                          ) : (
+                            safeClients.map((c) => (
+                              <SelectItem
+                                key={c.id}
+                                value={String(c.id)}
+                              >
+                                {c.name ??
+                                  "Unnamed Client"}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* LOCATION */}
+
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          placeholder="HQ - Floor 3"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* PURCHASE / WARRANTY */}
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Purchase & Warranty
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="purchaseDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Purchase Date</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="warrantyExpiry"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warranty Expiry</FormLabel>
+
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* REMARKS */}
+
             <FormField
               control={form.control}
               name="remarks"
               render={({ field }) => (
-                <FormItem className="sm:col-span-2">
+                <FormItem>
                   <FormLabel>Remarks</FormLabel>
+
                   <FormControl>
-                    <Input placeholder="Additional notes about this asset" {...field} />
+                    <textarea
+                      className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      placeholder="Additional remarks..."
+                      {...field}
+                      value={field.value ?? ""}
+                    />
                   </FormControl>
+
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <DialogFooter className="col-span-full mt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+
+            {/* ACTIONS */}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Asset'}
+
+              <Button
+                type="submit"
+                disabled={saving}
+              >
+                {saving
+                  ? "Saving..."
+                  : isEditing
+                    ? "Update Asset"
+                    : "Create Asset"}
               </Button>
             </DialogFooter>
           </form>

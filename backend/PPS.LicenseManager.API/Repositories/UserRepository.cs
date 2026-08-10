@@ -15,14 +15,17 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<User?> GetByEmailAsync(string email)
-    {
-        return await _context.Users
-            .Include(u => u.Role)
-            .Include(u => u.Company)
-            .Include(u => u.Department)
-            .Include(u => u.ReportsToUser)
-            .FirstOrDefaultAsync(u => u.Email == email);
-    }
+{
+    email = email.Trim();
+
+    return await _context.Users
+        .Include(u => u.Role)
+        .Include(u => u.Company)
+        .Include(u => u.Department)
+        .Include(u => u.ReportsToUser)
+        .FirstOrDefaultAsync(u =>
+            u.Email.ToLower() == email.ToLower());
+}
 
     public async Task<User?> GetByIdAsync(int id)
     {

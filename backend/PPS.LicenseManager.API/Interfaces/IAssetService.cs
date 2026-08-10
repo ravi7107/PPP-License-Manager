@@ -1,5 +1,5 @@
 using PPS.LicenseManager.API.DTOs.Asset;
-
+using PPS.LicenseManager.API.Common;
 namespace PPS.LicenseManager.API.Interfaces;
 
 public interface IAssetService
@@ -16,5 +16,6 @@ public interface IAssetService
     Task<WarrantySummaryResponse> GetWarrantySummaryAsync();
     Task<AssetDashboardOverviewResponse> GetDashboardOverviewAsync();
     Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10);
+    Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest request);
 }
 
