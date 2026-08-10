@@ -44,6 +44,7 @@ export interface AssignAssetRequest {
 export interface TransferAssetRequest {
   newUserId: number;
   remarks?: string | null;
+  seatId?: number | null;
 }
 
 export interface ReturnAssetRequest {

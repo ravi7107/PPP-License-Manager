@@ -346,11 +346,10 @@ if (request.AssignmentType == AssignmentType.Temporary &&
             Remarks = request.Remarks,
             IsActive = true,
 
-            // A same-seat reassignment (Phase 2): the physical
-            // workstation/seat doesn't move, only the user occupying it
-            // changes. Moving to a different seat during reassignment is
-            // handled separately.
-            SeatId = current.SeatId,
+            // Reassignment can also move the asset to a different seat
+            // (or unseat it) - request.SeatId always reflects the caller's
+            // final intent for this transfer, not just "keep the old one".
+            SeatId = request.SeatId,
 
             CreatedAt = now
         };
@@ -362,12 +361,30 @@ if (request.AssignmentType == AssignmentType.Temporary &&
         current.Asset.IsReadyForAssignment = false;
         current.Asset.UpdatedAt = now;
 
-        if (current.SeatId.HasValue)
+        // Vacate the old seat first if this transfer is moving the asset
+        // off of it (either to a different seat or to none) - otherwise
+        // the occupancy check below would see the asset as still mapped
+        // to another active seat and reject the new occupancy.
+        if (current.SeatId.HasValue &&
+            current.SeatId != request.SeatId)
         {
             await _officeLocationService.SetSeatOccupantAsync(
                 current.SeatId.Value,
-                current.AssetId,
-                request.NewUserId);
+                null,
+                null);
+        }
+
+        if (request.SeatId.HasValue)
+        {
+            var seatResult = await _officeLocationService
+                .SetSeatOccupantAsync(
+                    request.SeatId.Value,
+                    current.AssetId,
+                    request.NewUserId);
+
+            if (seatResult == null)
+                throw new InvalidOperationException(
+                    "Selected seat was not found.");
         }
 
         await _context.SaveChangesAsync();

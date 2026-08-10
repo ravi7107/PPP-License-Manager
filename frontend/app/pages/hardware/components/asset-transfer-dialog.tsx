@@ -39,6 +39,7 @@ interface AssetTransferDialogProps {
   asset: AssetRecord | null;
   isReassignment: boolean;
   currentUserId?: number | null;
+  currentSeatId?: number | null;
   currentSeatLabel?: string | null;
   users: LookupOption[];
   seats: OfficeSeat[];
@@ -59,6 +60,7 @@ export function AssetTransferDialog({
   asset,
   isReassignment,
   currentUserId,
+  currentSeatId,
   currentSeatLabel,
   users,
   seats,
@@ -72,8 +74,15 @@ export function AssetTransferDialog({
   });
 
   useEffect(() => {
-    if (open) form.reset(EMPTY_TRANSFER_FORM);
-  }, [open]);
+    if (open) {
+      form.reset({
+        ...EMPTY_TRANSFER_FORM,
+        // Reassignment starts out keeping the asset on its current seat
+        // (if any); the user can still pick a different one or clear it.
+        seatId: currentSeatId ? String(currentSeatId) : NO_SEAT_VALUE,
+      });
+    }
+  }, [open, currentSeatId]);
 
   if (!asset) return null;
 
@@ -85,8 +94,11 @@ export function AssetTransferDialog({
     ? safeUsers.filter((u) => u.id !== currentUserId)
     : safeUsers;
 
-  // Only vacant seats can be picked when first allocating an asset.
-  const vacantSeats = safeSeats.filter((s) => !s.assetId && !s.userId);
+  // A seat can be picked if it's vacant, or if it's the seat this asset
+  // already occupies (so reassignment can keep it selected).
+  const selectableSeats = safeSeats.filter(
+    (s) => (!s.assetId && !s.userId) || s.id === currentSeatId,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,50 +152,47 @@ export function AssetTransferDialog({
               )}
             />
 
-            {isReassignment ? (
-              <div>
-                <FormLabel>Seat</FormLabel>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {currentSeatLabel
-                    ? `Stays at the current seat (${currentSeatLabel}). To move this asset to a different seat, use the office floor map.`
-                    : 'This asset isn’t linked to a seat on the office floor map yet.'}
-                </p>
-              </div>
-            ) : (
-              <FormField
-                control={form.control}
-                name="seatId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Seat (optional)</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="No seat" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NO_SEAT_VALUE}>
-                          No seat (won&apos;t show on the office floor map)
-                        </SelectItem>
-                        {vacantSeats.length === 0 ? (
-                          <div className="px-2 py-3 text-sm text-muted-foreground">
-                            No vacant seats set up yet
-                          </div>
-                        ) : (
-                          vacantSeats.map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}>
-                              {seatLabel(s)}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            <FormField
+              control={form.control}
+              name="seatId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Seat (optional)</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="No seat" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NO_SEAT_VALUE}>
+                        No seat (won&apos;t show on the office floor map)
+                      </SelectItem>
+                      {selectableSeats.length === 0 ? (
+                        <div className="px-2 py-3 text-sm text-muted-foreground">
+                          No vacant seats set up yet
+                        </div>
+                      ) : (
+                        selectableSeats.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {seatLabel(s)}
+                            {s.id === currentSeatId ? ' (current)' : ''}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {isReassignment && (
+                    <p className="text-sm text-muted-foreground">
+                      {currentSeatLabel
+                        ? `Currently at ${currentSeatLabel}. Pick a different seat to move it, or "No seat" to unseat it.`
+                        : 'This asset isn’t linked to a seat on the office floor map yet.'}
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

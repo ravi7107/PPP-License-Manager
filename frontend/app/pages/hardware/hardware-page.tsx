@@ -705,6 +705,12 @@ export default function HardwarePage() {
 
     const userId = Number(values.userId);
 
+    const parsedSeatId = Number(values.seatId);
+    const seatId =
+      values.seatId && !Number.isNaN(parsedSeatId)
+        ? parsedSeatId
+        : null;
+
     try {
       if (selectedAsset.currentAssignmentId) {
         await apiTransferAsset(
@@ -712,15 +718,10 @@ export default function HardwarePage() {
           {
             newUserId: userId,
             remarks: values.notes || null,
+            seatId,
           },
         );
       } else {
-        const parsedSeatId = Number(values.seatId);
-        const seatId =
-          values.seatId && !Number.isNaN(parsedSeatId)
-            ? parsedSeatId
-            : undefined;
-
         await apiAssignAsset({
           assetId: selectedAsset.id,
           userId,
@@ -1505,6 +1506,9 @@ const handleSubmit = async (
         )}
         currentUserId={
           selectedAsset?.assignedUserId ?? null
+        }
+        currentSeatId={
+          selectedAsset?.currentSeatId ?? null
         }
         currentSeatLabel={
           selectedAsset?.currentSeatLabel ?? null
