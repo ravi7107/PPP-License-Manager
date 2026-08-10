@@ -9,7 +9,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5432 is already taken by an existing Postgres install
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pps_admin -d pps_license_manager"]
       interval: 5s

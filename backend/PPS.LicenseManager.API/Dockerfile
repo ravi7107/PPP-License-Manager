@@ -12,7 +12,7 @@ RUN dotnet publish "PPS.LicenseManager.API.csproj" -c Release -o /app/publish --
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-RUN useradd --uid 1000 --create-home appuser
+RUN useradd --uid 1500 --create-home appuser
 USER appuser
 
 ENV ASPNETCORE_URLS=http://+:8080 \
