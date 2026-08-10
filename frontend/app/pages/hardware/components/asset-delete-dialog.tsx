@@ -15,10 +15,11 @@ interface AssetDeleteDialogProps {
   onOpenChange: (open: boolean) => void;
   asset: AssetRecord | null;
   deleting: boolean;
+  error?: string | null;
   onConfirm: () => Promise<void>;
 }
 
-export function AssetDeleteDialog({ open, onOpenChange, asset, deleting, onConfirm }: AssetDeleteDialogProps) {
+export function AssetDeleteDialog({ open, onOpenChange, asset, deleting, error, onConfirm }: AssetDeleteDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -27,12 +28,17 @@ export function AssetDeleteDialog({ open, onOpenChange, asset, deleting, onConfi
           <AlertDialogDescription>
             {asset ? (
               <>
-                <span className="font-medium text-foreground">{asset.asset_tag}</span> will be marked as{' '}
-                <span className="font-medium">Decommissioned</span> and removed from the active inventory list. This
-                action can be reviewed later in Audit History.
+                <span className="font-medium text-foreground">{asset.assetTag}</span> will be marked as{' '}
+                <span className="font-medium">Retired</span> and removed from the active inventory list. This
+                action can be reviewed later in the asset's assignment history.
               </>
             ) : null}
           </AlertDialogDescription>
+          {error && (
+            <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {error}
+            </div>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>

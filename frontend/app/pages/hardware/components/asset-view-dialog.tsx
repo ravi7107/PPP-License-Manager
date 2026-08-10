@@ -20,10 +20,8 @@ import {
   Monitor,
   User,
   Building2,
-  MapPin,
   Calendar,
   ShieldCheck,
-  FileText,
   HardDrive,
   Tag,
   Cpu,
@@ -31,23 +29,28 @@ import {
 
 import { AssetRecord } from "@/app/pages/hardware/types";
 
+type ViewableAssetRecord = AssetRecord & {
+  assignedUserName?: string | null;
+};
+
 interface AssetViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  asset: AssetRecord | null;
+  asset: ViewableAssetRecord | null;
 }
 
 function statusVariant(
   status: string
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
-    case "Allocated":
+    case "Assigned":
       return "default";
 
     case "Maintenance":
+    case "Reserved":
       return "secondary";
 
-    case "Scrap":
+    case "Retired":
       return "destructive";
 
     default:
@@ -168,7 +171,7 @@ export function AssetViewDialog({
 
                 <DialogTitle className="text-2xl">
 
-                  {asset.asset_tag}
+                  {asset.assetTag}
 
                 </DialogTitle>
 
@@ -181,7 +184,7 @@ export function AssetViewDialog({
                 <div className="mt-2 flex flex-wrap gap-2">
 
                   <Badge variant="outline">
-                    {asset.asset_type}
+                    {asset.assetType}
                   </Badge>
 
                   <Badge variant={statusVariant(asset.status)}>
@@ -221,15 +224,9 @@ export function AssetViewDialog({
                 <CardContent className="space-y-3">
 
                   <InfoField
-                    icon={<Monitor size={18} />}
-                    label="Computer Name"
-                    value={asset.computer_name}
-                  />
-
-                  <InfoField
                     icon={<Tag size={18} />}
                     label="Host Name"
-                    value={asset.host_name}
+                    value={asset.hostName}
                   />
 
                   <InfoField
@@ -247,13 +244,13 @@ export function AssetViewDialog({
                   <InfoField
                     icon={<Monitor size={18} />}
                     label="Operating System"
-                    value={asset.operating_system}
+                    value={asset.operatingSystem}
                   />
 
                   <InfoField
                     icon={<Tag size={18} />}
                     label="Serial Number"
-                    value={asset.serial_number}
+                    value={asset.serialNumber}
                   />
 
                 </CardContent>
@@ -279,31 +276,13 @@ export function AssetViewDialog({
                   <InfoField
                     icon={<User size={18} />}
                     label="Current User"
-                    value={asset.assigned_user_name}
+                    value={asset.assignedUserName}
                   />
 
                   <InfoField
                     icon={<Building2 size={18} />}
                     label="Department"
-                    value={asset.department_name}
-                  />
-
-                  <InfoField
-                    icon={<Building2 size={18} />}
-                    label="Entity"
-                    value={asset.entity_name}
-                  />
-
-                  <InfoField
-                    icon={<Building2 size={18} />}
-                    label="Client"
-                    value={asset.client_name}
-                  />
-
-                  <InfoField
-                    icon={<MapPin size={18} />}
-                    label="Location"
-                    value={asset.location}
+                    value={asset.departmentName}
                   />
 
                 </CardContent>
@@ -329,13 +308,13 @@ export function AssetViewDialog({
                   <InfoField
                     icon={<Calendar size={18} />}
                     label="Purchase Date"
-                    value={formatDate(asset.purchase_date)}
+                    value={formatDate(asset.purchaseDate)}
                   />
 
                   <InfoField
                     icon={<Calendar size={18} />}
                     label="Warranty Expiry"
-                    value={formatDate(asset.warranty_expiry)}
+                    value={formatDate(asset.warrantyExpiry)}
                   />
 
                   <div className="rounded-lg border p-3">
@@ -346,7 +325,7 @@ export function AssetViewDialog({
 
                     <div className="mt-2">
                       <WarrantyStatus
-                        expiry={asset.warranty_expiry}
+                        expiry={asset.warrantyExpiry}
                       />
                     </div>
 
@@ -371,48 +350,6 @@ export function AssetViewDialog({
                     </div>
 
                   </div>
-
-                </CardContent>
-
-              </Card>
-
-              <Card>
-
-                <CardHeader>
-
-                  <CardTitle className="flex items-center gap-2">
-
-                    <FileText className="h-5 w-5" />
-
-                    Audit Information
-
-                  </CardTitle>
-
-                </CardHeader>
-
-                <CardContent className="space-y-3">
-
-                  <InfoField
-                    icon={<User size={18} />}
-                    label="Created By"
-                    value={asset.created_by}
-                  />
-
-                  <InfoField
-                    icon={<User size={18} />}
-                    label="Last Updated By"
-                    value={asset.updated_by}
-                  />
-
-                  <InfoField
-                    icon={<Calendar size={18} />}
-                    label="Last Updated"
-                    value={
-                      asset.updated_at
-                        ?.slice(0, 19)
-                        .replace("T", " ")
-                    }
-                  />
 
                 </CardContent>
 

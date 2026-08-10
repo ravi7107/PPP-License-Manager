@@ -48,7 +48,7 @@ export function AssetAuditHistoryDialog({ open, onOpenChange, asset }: AssetAudi
       <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>Audit History</DialogTitle>
-          <DialogDescription>{asset ? `Change history for ${asset.asset_tag}` : ''}</DialogDescription>
+          <DialogDescription>{asset ? `Change history for ${asset.assetTag}` : ''}</DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[60vh] pr-4">
           {loading ? (

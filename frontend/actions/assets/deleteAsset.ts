@@ -1,15 +1,7 @@
-import { action } from '@/lib/uibakery';
+import api from '@/lib/api/client';
 
-// Soft delete: mark record as deleted and inactive instead of removing the row.
-function deleteAsset() {
-  return action('deleteAsset', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      UPDATE assets
-      SET deleted_at = NOW(), status = 'Decommissioned', updated_by = {{params.actorName}}, updated_at = NOW()
-      WHERE id = {{params.id}}::bigint;
-    `,
-  });
+// Real delete: DELETE /api/Asset/{id} against the ASP.NET backend.
+export default async function deleteAsset(payload: { id: number }) {
+  const response = await api.delete(`/Asset/${payload.id}`);
+  return response.data;
 }
-
-export default deleteAsset;

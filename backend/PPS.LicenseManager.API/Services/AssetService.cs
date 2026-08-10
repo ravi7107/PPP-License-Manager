@@ -21,6 +21,7 @@ public class AssetService : IAssetService
     {
         return await _context.Assets
             .Include(a => a.Department)
+            .Where(a => a.IsActive)
             .Select(a => new AssetResponse
             {
                 Id = a.Id,
@@ -411,12 +412,27 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         if (asset == null)
             return false;
 
-        _context.Assets.Remove(asset);
+        var hasActiveAssignment = await _context.AssetAssignments
+            .AnyAsync(x => x.AssetId == id && x.IsActive);
+
+        if (hasActiveAssignment)
+            throw new InvalidOperationException(
+                "This asset is currently allocated to a user. Return it before retiring it.");
+
+        // Soft delete rather than a hard row removal: AssetAssignments has
+        // a Restrict FK to Assets (by design, so hardware assignment
+        // history is never lost), so hard-deleting any asset that has ever
+        // been assigned would throw a foreign key violation. Retiring it
+        // instead preserves assignment history and matches the "Retire"
+        // language already used in the UI.
+        asset.IsActive = false;
+        asset.Status = "Retired";
+        asset.IsReadyForAssignment = false;
+        asset.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
         return true;
-
     }
 private static AssetResponse MapToResponse(Asset asset)
 {

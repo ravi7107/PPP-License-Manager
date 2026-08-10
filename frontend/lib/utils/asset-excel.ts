@@ -1,25 +1,26 @@
 import * as XLSX from 'xlsx';
 import { AssetRecord } from '@/app/pages/hardware/types';
 
-const EXPORT_COLUMNS: { key: keyof AssetRecord; header: string }[] = [
-  { key: 'asset_tag', header: 'Asset ID' },
-  { key: 'computer_name', header: 'Computer Name' },
-  { key: 'host_name', header: 'Host Name' },
-  { key: 'serial_number', header: 'Serial Number' },
+// Exportable asset rows are AssetRecord plus the current-assignment fields
+// merged in on the Hardware page (assignedUserName, etc.) — those aren't
+// part of the raw /Asset API response, so they're typed loosely here.
+type ExportableAsset = AssetRecord & Record<string, unknown>;
+
+const EXPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: 'assetTag', header: 'Asset ID' },
+  { key: 'hostName', header: 'Host Name' },
+  { key: 'serialNumber', header: 'Serial Number' },
   { key: 'manufacturer', header: 'Manufacturer' },
   { key: 'model', header: 'Model' },
-  { key: 'purchase_date', header: 'Purchase Date' },
-  { key: 'warranty_expiry', header: 'Warranty Expiry' },
-  { key: 'assigned_user_name', header: 'Current User' },
-  { key: 'department_name', header: 'Department' },
-  { key: 'entity_name', header: 'Entity' },
-  { key: 'client_name', header: 'Client' },
-  { key: 'operating_system', header: 'Operating System' },
+  { key: 'purchaseDate', header: 'Purchase Date' },
+  { key: 'warrantyExpiry', header: 'Warranty Expiry' },
+  { key: 'assignedUserName', header: 'Current User' },
+  { key: 'departmentName', header: 'Department' },
+  { key: 'operatingSystem', header: 'Operating System' },
   { key: 'status', header: 'Status' },
-  { key: 'location', header: 'Location' },
 ];
 
-export function exportAssetsToExcel(assets: AssetRecord[], fileName = 'asset-inventory.xlsx') {
+export function exportAssetsToExcel(assets: ExportableAsset[], fileName = 'asset-inventory.xlsx') {
   const rows = assets.map((asset) => {
     const row: Record<string, unknown> = {};
     EXPORT_COLUMNS.forEach(({ key, header }) => {

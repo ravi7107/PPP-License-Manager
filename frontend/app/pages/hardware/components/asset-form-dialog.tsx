@@ -52,8 +52,6 @@ const assetFormSchema = z.object({
     "Server",
   ]),
 
-  computerName: z.string().default(""),
-
   manufacturer: z.string().default(""),
 
   model: z.string().default(""),
@@ -72,24 +70,17 @@ const assetFormSchema = z.object({
 
   operatingSystem: z.string().default(""),
 
-  location: z.string().default(""),
-
   status: z.enum([
-    "Allocated",
     "Available",
+    "Assigned",
     "Maintenance",
-    "Scrap",
+    "Reserved",
+    "Retired",
   ]),
 
   remarks: z.string().default(""),
 
-  assignedUserId: z.string().default(""),
-
   departmentId: z.string().default(""),
-
-  entityId: z.string().default(""),
-
-  clientId: z.string().default(""),
 });
 
 interface AssetFormDialogProps {
@@ -98,10 +89,9 @@ interface AssetFormDialogProps {
 
   asset: AssetRecord | null;
 
-  users: LookupOption[];
+  isAssigned?: boolean;
+
   departments: LookupOption[];
-  entities: LookupOption[];
-  clients: LookupOption[];
 
   saving: boolean;
 
@@ -145,7 +135,6 @@ function toFormValues(
   if (!asset) {
     return {
       ...EMPTY_ASSET_FORM,
-      computerName: EMPTY_ASSET_FORM.computerName ?? "",
       hostName: EMPTY_ASSET_FORM.hostName ?? "",
       manufacturer: EMPTY_ASSET_FORM.manufacturer ?? "",
       model: EMPTY_ASSET_FORM.model ?? "",
@@ -154,12 +143,8 @@ function toFormValues(
       purchaseDate: EMPTY_ASSET_FORM.purchaseDate ?? "",
       warrantyExpiry: EMPTY_ASSET_FORM.warrantyExpiry ?? "",
       operatingSystem: EMPTY_ASSET_FORM.operatingSystem ?? "",
-      location: EMPTY_ASSET_FORM.location ?? "",
       remarks: EMPTY_ASSET_FORM.remarks ?? "",
-      assignedUserId: EMPTY_ASSET_FORM.assignedUserId ?? "",
       departmentId: EMPTY_ASSET_FORM.departmentId ?? "",
-      entityId: EMPTY_ASSET_FORM.entityId ?? "",
-      clientId: EMPTY_ASSET_FORM.clientId ?? "",
     };
   }
 
@@ -169,8 +154,6 @@ function toFormValues(
 
     assetType:
       (asset.assetType as AssetType) ?? "Workstation",
-
-    computerName: "",
 
     hostName: asset.hostName ?? "",
 
@@ -194,23 +177,15 @@ function toFormValues(
 
     operatingSystem: asset.operatingSystem ?? "",
 
-    location: "",
-
     status:
       (asset.status as AssetFormValues["status"]) ??
       "Available",
 
     remarks: asset.remarks ?? "",
 
-    assignedUserId: "",
-
     departmentId: asset.departmentId
       ? String(asset.departmentId)
       : "",
-
-    entityId: "",
-
-    clientId: "",
   };
 }
 
@@ -218,10 +193,8 @@ export function AssetFormDialog({
   open,
   onOpenChange,
   asset,
-  users,
+  isAssigned = false,
   departments,
-  entities,
-  clients,
   saving,
   onSubmit,
   error,
@@ -243,28 +216,14 @@ export function AssetFormDialog({
    * Protect the UI if the API returns an unexpected response.
    * This prevents:
    *
-   * users.map is not a function
+   * departments.map is not a function
    *
    * from crashing the whole page.
    */
-  const safeUsers: LookupItem[] = Array.isArray(users)
-    ? (users as LookupItem[])
-    : [];
-
   const safeDepartments: LookupItem[] = Array.isArray(
     departments
   )
     ? (departments as LookupItem[])
-    : [];
-
-  const safeEntities: LookupItem[] = Array.isArray(
-    entities
-  )
-    ? (entities as LookupItem[])
-    : [];
-
-  const safeClients: LookupItem[] = Array.isArray(clients)
-    ? (clients as LookupItem[])
     : [];
 
   return (
@@ -395,6 +354,7 @@ export function AssetFormDialog({
                       <Select
                         value={field.value ?? ""}
                         onValueChange={field.onChange}
+                        disabled={isAssigned}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -407,19 +367,31 @@ export function AssetFormDialog({
                             Available
                           </SelectItem>
 
-                          <SelectItem value="Allocated">
-                            Allocated
+                          <SelectItem value="Assigned">
+                            Assigned
                           </SelectItem>
 
                           <SelectItem value="Maintenance">
                             Maintenance
                           </SelectItem>
 
-                          <SelectItem value="Scrap">
-                            Scrap
+                          <SelectItem value="Reserved">
+                            Reserved
+                          </SelectItem>
+
+                          <SelectItem value="Retired">
+                            Retired
                           </SelectItem>
                         </SelectContent>
                       </Select>
+
+                      {isAssigned ? (
+                        <p className="text-xs text-muted-foreground">
+                          This asset is currently allocated to a user, so
+                          its status is managed from the Allocate /
+                          Reassign / Return actions.
+                        </p>
+                      ) : null}
 
                       <FormMessage />
                     </FormItem>
@@ -518,26 +490,6 @@ export function AssetFormDialog({
 
                 <FormField
                   control={form.control}
-                  name="computerName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Computer Name</FormLabel>
-
-                      <FormControl>
-                        <Input
-                          placeholder="Computer name"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
                   name="processor"
                   render={({ field }) => (
                     <FormItem>
@@ -608,60 +560,14 @@ export function AssetFormDialog({
               </div>
             </div>
 
-            {/* ASSIGNMENT INFORMATION */}
+            {/* DEPARTMENT */}
 
             <div>
               <h3 className="mb-3 text-sm font-semibold">
-                Assignment Information
+                Department
               </h3>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {/* CURRENT USER */}
-
-                <FormField
-                  control={form.control}
-                  name="assignedUserId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Current User</FormLabel>
-
-                      <Select
-                        value={field.value || ""}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Unassigned" />
-                          </SelectTrigger>
-                        </FormControl>
-
-                        <SelectContent>
-                          {safeUsers.length === 0 ? (
-                            <div className="px-2 py-3 text-sm text-muted-foreground">
-                              No users available
-                            </div>
-                          ) : (
-                            safeUsers.map((u) => (
-                              <SelectItem
-                                key={u.id}
-                                value={String(u.id)}
-                              >
-                                {u.fullName ??
-                                  u.name ??
-                                  "Unnamed User"}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* DEPARTMENT */}
-
                 <FormField
                   control={form.control}
                   name="departmentId"
@@ -703,116 +609,12 @@ export function AssetFormDialog({
                     </FormItem>
                   )}
                 />
-
-                {/* ENTITY */}
-
-                <FormField
-                  control={form.control}
-                  name="entityId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Entity</FormLabel>
-
-                      <Select
-                        value={field.value || ""}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select entity" />
-                          </SelectTrigger>
-                        </FormControl>
-
-                        <SelectContent>
-                          {safeEntities.length === 0 ? (
-                            <div className="px-2 py-3 text-sm text-muted-foreground">
-                              No entities available
-                            </div>
-                          ) : (
-                            safeEntities.map((e) => (
-                              <SelectItem
-                                key={e.id}
-                                value={String(e.id)}
-                              >
-                                {e.name ??
-                                  e.companyName ??
-                                  "Unnamed Entity"}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* CLIENT */}
-
-                <FormField
-                  control={form.control}
-                  name="clientId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Client</FormLabel>
-
-                      <Select
-                        value={field.value || ""}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select client" />
-                          </SelectTrigger>
-                        </FormControl>
-
-                        <SelectContent>
-                          {safeClients.length === 0 ? (
-                            <div className="px-2 py-3 text-sm text-muted-foreground">
-                              No clients available
-                            </div>
-                          ) : (
-                            safeClients.map((c) => (
-                              <SelectItem
-                                key={c.id}
-                                value={String(c.id)}
-                              >
-                                {c.name ??
-                                  "Unnamed Client"}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* LOCATION */}
-
-                <FormField
-                  control={form.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Location</FormLabel>
-
-                      <FormControl>
-                        <Input
-                          placeholder="HQ - Floor 3"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                To assign this asset to a user, save it first, then use
+                the &quot;Allocate&quot; action from the asset list.
+              </p>
             </div>
 
             {/* PURCHASE / WARRANTY */}
