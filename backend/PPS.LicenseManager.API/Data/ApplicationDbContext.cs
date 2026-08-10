@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PPS.LicenseManager.API.Models;
 
 namespace PPS.LicenseManager.API.Data;
@@ -424,5 +425,45 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasIndex(x => new { x.AssetId, x.SoftwareId })
                   .IsUnique();
         });
+
+        // ------------------------------------------------------------------
+        // PostgreSQL's "timestamp with time zone" columns reject DateTime
+        // values whose Kind isn't Utc. Incoming dates from JSON requests
+        // (e.g. date pickers) deserialize with Kind=Unspecified, which
+        // throws at save time ("Cannot write DateTime with Kind=Unspecified
+        // to PostgreSQL type 'timestamp with time zone'"). Rather than fix
+        // this one field at a time across every module, treat every
+        // DateTime/DateTime? property in the model as UTC globally.
+        // ------------------------------------------------------------------
+        var utcConverter = new ValueConverter<DateTime, DateTime>(
+            v => v.Kind == DateTimeKind.Utc
+                ? v
+                : DateTime.SpecifyKind(v, DateTimeKind.Utc),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        var nullableUtcConverter = new ValueConverter<DateTime?, DateTime?>(
+            v => v.HasValue
+                ? (v.Value.Kind == DateTimeKind.Utc
+                    ? v.Value
+                    : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc))
+                : v,
+            v => v.HasValue
+                ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)
+                : v);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime))
+                {
+                    property.SetValueConverter(utcConverter);
+                }
+                else if (property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(nullableUtcConverter);
+                }
+            }
+        }
     }
 }
