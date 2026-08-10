@@ -40,6 +40,11 @@ interface AssetReallocationRequestDialogProps {
   currentUserId?: number | null;
   currentSeatId?: number | null;
   currentSeatLabel?: string | null;
+  // Used to filter the seat picker down to seats the backend will actually
+  // accept for this asset (same company as the asset's department, and
+  // either department-agnostic or matching the asset's department).
+  assetDepartmentId?: number | null;
+  assetCompanyId?: number | null;
   users: LookupOption[];
   seats: OfficeSeat[];
   saving: boolean;
@@ -60,6 +65,8 @@ export function AssetReallocationRequestDialog({
   currentUserId,
   currentSeatId,
   currentSeatLabel,
+  assetDepartmentId,
+  assetCompanyId,
   users,
   seats,
   saving,
@@ -88,9 +95,23 @@ export function AssetReallocationRequestDialog({
   // Can't request reallocating to the user who already has it.
   const selectableUsers = safeUsers.filter((u) => u.id !== currentUserId);
 
-  const selectableSeats = safeSeats.filter(
-    (s) => (!s.assetId && !s.userId) || s.id === currentSeatId,
-  );
+  // A seat can be picked if:
+  //  - it's vacant, or it's the seat this asset already occupies, AND
+  //  - it belongs to the same company as the asset's department (the
+  //    backend rejects cross-company seat/workstation pairings), AND
+  //  - it's either department-agnostic or matches the asset's department.
+  const selectableSeats = safeSeats.filter((s) => {
+    const isVacantOrCurrent =
+      (!s.assetId && !s.userId) || s.id === currentSeatId;
+
+    const isSameCompany =
+      assetCompanyId == null || s.companyId === assetCompanyId;
+
+    const isCompatibleDepartment =
+      !s.departmentId || s.departmentId === assetDepartmentId;
+
+    return isVacantOrCurrent && isSameCompany && isCompatibleDepartment;
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

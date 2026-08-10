@@ -41,6 +41,11 @@ interface AssetTransferDialogProps {
   currentUserId?: number | null;
   currentSeatId?: number | null;
   currentSeatLabel?: string | null;
+  // Used to filter the seat picker down to seats the backend will actually
+  // accept for this asset (same company as the asset's department, and
+  // either department-agnostic or matching the asset's department).
+  assetDepartmentId?: number | null;
+  assetCompanyId?: number | null;
   users: LookupOption[];
   seats: OfficeSeat[];
   saving: boolean;
@@ -62,6 +67,8 @@ export function AssetTransferDialog({
   currentUserId,
   currentSeatId,
   currentSeatLabel,
+  assetDepartmentId,
+  assetCompanyId,
   users,
   seats,
   saving,
@@ -94,11 +101,24 @@ export function AssetTransferDialog({
     ? safeUsers.filter((u) => u.id !== currentUserId)
     : safeUsers;
 
-  // A seat can be picked if it's vacant, or if it's the seat this asset
-  // already occupies (so reassignment can keep it selected).
-  const selectableSeats = safeSeats.filter(
-    (s) => (!s.assetId && !s.userId) || s.id === currentSeatId,
-  );
+  // A seat can be picked if:
+  //  - it's vacant, or it's the seat this asset already occupies (so
+  //    reassignment can keep it selected), AND
+  //  - it belongs to the same company as the asset's department (the
+  //    backend rejects cross-company seat/workstation pairings), AND
+  //  - it's either department-agnostic or matches the asset's department.
+  const selectableSeats = safeSeats.filter((s) => {
+    const isVacantOrCurrent =
+      (!s.assetId && !s.userId) || s.id === currentSeatId;
+
+    const isSameCompany =
+      assetCompanyId == null || s.companyId === assetCompanyId;
+
+    const isCompatibleDepartment =
+      !s.departmentId || s.departmentId === assetDepartmentId;
+
+    return isVacantOrCurrent && isSameCompany && isCompatibleDepartment;
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

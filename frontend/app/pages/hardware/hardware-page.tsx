@@ -267,6 +267,23 @@ export default function HardwarePage() {
     [loadedDepartments],
   );
 
+  // A seat can only be picked for an asset if the seat's office location
+  // belongs to the same company as the asset's department - the backend
+  // enforces this (ValidateSeatAssignmentAsync), so the seat pickers below
+  // need to pre-filter to it rather than let the user pick an incompatible
+  // seat and only find out on submit.
+  const getDepartmentCompanyId = (
+    departmentId: number | null | undefined,
+  ): number | null => {
+    if (departmentId == null) return null;
+
+    const department = departments.find(
+      (d) => d.id === departmentId,
+    );
+
+    return department?.companyId ?? null;
+  };
+
   /*
    * --------------------------------------------------------------------------
    * CURRENT ASSET ASSIGNMENTS
@@ -1631,6 +1648,12 @@ const handleSubmit = async (
         currentSeatLabel={
           selectedAsset?.currentSeatLabel ?? null
         }
+        assetDepartmentId={
+          selectedAsset?.departmentId ?? null
+        }
+        assetCompanyId={getDepartmentCompanyId(
+          selectedAsset?.departmentId,
+        )}
         users={users}
         seats={seats}
         saving={assignmentSaving}
@@ -1655,6 +1678,12 @@ const handleSubmit = async (
         currentSeatLabel={
           selectedAsset?.currentSeatLabel ?? null
         }
+        assetDepartmentId={
+          selectedAsset?.departmentId ?? null
+        }
+        assetCompanyId={getDepartmentCompanyId(
+          selectedAsset?.departmentId,
+        )}
         users={users}
         seats={seats}
         saving={requestSaving}
