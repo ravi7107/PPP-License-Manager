@@ -1,0 +1,21 @@
+## .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+
+## Node / bun / Vite frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.log
+
+## Editor / OS junk
+*.save
+*.swp
+.DS_Store
+Thumbs.db
+
+## Env / secrets — never commit real secrets
+.env
+.env.*
+!*.env.example
