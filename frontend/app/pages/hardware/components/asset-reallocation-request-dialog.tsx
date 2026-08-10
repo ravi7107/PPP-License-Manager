@@ -95,14 +95,17 @@ export function AssetReallocationRequestDialog({
   // Can't request reallocating to the user who already has it.
   const selectableUsers = safeUsers.filter((u) => u.id !== currentUserId);
 
-  // A seat can be picked if:
-  //  - it's vacant, or it's the seat this asset already occupies, AND
-  //  - it belongs to the same company as the asset's department (the
-  //    backend rejects cross-company seat/workstation pairings), AND
-  //  - it's either department-agnostic or matches the asset's department.
+  // The asset's current seat always stays selectable/visible, even if it
+  // wouldn't pass the compatibility checks below (it's already assigned
+  // there). A *new* seat can only be picked if it's vacant and compatible
+  // with this asset:
+  //  - same company as the asset's department (the backend rejects
+  //    cross-company seat/workstation pairings), AND
+  //  - either department-agnostic or matching the asset's department.
   const selectableSeats = safeSeats.filter((s) => {
-    const isVacantOrCurrent =
-      (!s.assetId && !s.userId) || s.id === currentSeatId;
+    if (s.id === currentSeatId) return true;
+
+    const isVacant = !s.assetId && !s.userId;
 
     const isSameCompany =
       assetCompanyId == null || s.companyId === assetCompanyId;
@@ -110,7 +113,7 @@ export function AssetReallocationRequestDialog({
     const isCompatibleDepartment =
       !s.departmentId || s.departmentId === assetDepartmentId;
 
-    return isVacantOrCurrent && isSameCompany && isCompatibleDepartment;
+    return isVacant && isSameCompany && isCompatibleDepartment;
   });
 
   return (
