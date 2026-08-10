@@ -45,6 +45,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<UserUnavailability> UserUnavailabilities => Set<UserUnavailability>();
     public DbSet<ResourceReallocationRequest> ResourceReallocationRequests => Set<ResourceReallocationRequest>();
 
+    public DbSet<AssetReallocationRequest> AssetReallocationRequests =>
+        Set<AssetReallocationRequest>();
+
     public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -264,6 +267,81 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.ResultingAllocation)
                   .WithMany()
                   .HasForeignKey(x => x.ResultingAllocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Asset Reallocation Request
+        modelBuilder.Entity<AssetReallocationRequest>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.AdminDecision)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.ItDecision)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.Remarks).HasMaxLength(500);
+            entity.Property(x => x.AdminRemarks).HasMaxLength(500);
+            entity.Property(x => x.ItRemarks).HasMaxLength(500);
+
+            entity.HasIndex(x => x.AssetId);
+            entity.HasIndex(x => x.CurrentAssignmentId);
+            entity.HasIndex(x => x.RequestedByUserId);
+            entity.HasIndex(x => x.ProposedUserId);
+            entity.HasIndex(x => x.ProposedSeatId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.ResultingAssignmentId);
+            entity.HasIndex(x => x.AdminDecidedByUserId);
+            entity.HasIndex(x => x.ItDecidedByUserId);
+
+            entity.HasOne(x => x.Asset)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CurrentAssignment)
+                  .WithMany()
+                  .HasForeignKey(x => x.CurrentAssignmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RequestedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.RequestedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProposedUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ProposedUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProposedSeat)
+                  .WithMany()
+                  .HasForeignKey(x => x.ProposedSeatId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.AdminDecidedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.AdminDecidedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ItDecidedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ItDecidedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ResultingAssignment)
+                  .WithMany()
+                  .HasForeignKey(x => x.ResultingAssignmentId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 

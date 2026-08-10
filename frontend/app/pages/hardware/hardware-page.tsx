@@ -56,6 +56,8 @@ import {
   AppRole,
   canManage,
   isTeamLeader as isTeamLeaderRole,
+  isSuperAdmin as isSuperAdminRole,
+  isITAdmin as isITAdminRole,
 } from '@/lib/auth/roles';
 
 import loadAssets from '@/actions/assets/loadAssets';
@@ -82,6 +84,13 @@ import {
   AssetTransferFormValues,
 } from '@/app/pages/hardware/components/asset-transfer-dialog';
 
+import {
+  AssetReallocationRequestDialog,
+  AssetReallocationRequestFormValues,
+} from '@/app/pages/hardware/components/asset-reallocation-request-dialog';
+
+import { ReallocationRequestsPanel } from '@/app/pages/hardware/components/reallocation-requests-panel';
+
 import { AssetImportDialog } from '@/app/pages/hardware/components/asset-import-dialog';
 
 import {
@@ -105,6 +114,10 @@ import {
   OfficeSeat,
   getOfficeSeats,
 } from '@/lib/api/office-locations.api';
+
+import {
+  createReallocationRequest as apiCreateReallocationRequest,
+} from '@/lib/api/asset-reallocation-requests.api';
 
 type SortKey =
   | 'assetTag'
@@ -167,6 +180,8 @@ export default function HardwarePage() {
   const user = useUser();
 
   const canEdit = canManage(roles);
+  const isSuperAdmin = isSuperAdminRole(roles);
+  const isITAdmin = isITAdminRole(roles);
 
   /*
    * --------------------------------------------------------------------------
@@ -384,6 +399,20 @@ export default function HardwarePage() {
 
   const [transferError, setTransferError] =
     useState<string | null>(null);
+
+  const [requestOpen, setRequestOpen] =
+    useState(false);
+
+  const [requestError, setRequestError] =
+    useState<string | null>(null);
+
+  const [requestSaving, setRequestSaving] =
+    useState(false);
+
+  // Bumped after a reallocation request is submitted so the "My
+  // Reallocation Requests" panel below refetches and shows it.
+  const [requestsRefreshToken, setRequestsRefreshToken] =
+    useState(0);
 
   const [selectedAsset, setSelectedAsset] =
     useState<AssetWithAssignment | null>(null);
@@ -681,6 +710,14 @@ export default function HardwarePage() {
     setTransferOpen(true);
   };
 
+  const openRequest = (
+    asset: AssetWithAssignment,
+  ) => {
+    setSelectedAsset(asset);
+    setRequestError(null);
+    setRequestOpen(true);
+  };
+
   /*
    * --------------------------------------------------------------------------
    * ALLOCATE / REASSIGN
@@ -745,6 +782,54 @@ export default function HardwarePage() {
       setTransferError(message);
     } finally {
       setAssignmentSaving(false);
+    }
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * REQUEST REALLOCATION (Team Lead)
+   * --------------------------------------------------------------------------
+   *
+   * Team Leads can't call Assign/Transfer directly - this raises an
+   * AssetReallocationRequest instead, which only takes effect once both a
+   * Super Admin and an IT Admin have approved it.
+   */
+
+  const handleReallocationRequest = async (
+    values: AssetReallocationRequestFormValues,
+  ) => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    setRequestError(null);
+    setRequestSaving(true);
+
+    const parsedSeatId = Number(values.seatId);
+    const seatId =
+      values.seatId && !Number.isNaN(parsedSeatId)
+        ? parsedSeatId
+        : null;
+
+    try {
+      await apiCreateReallocationRequest({
+        assetId: selectedAsset.id,
+        proposedUserId: Number(values.proposedUserId),
+        proposedSeatId: seatId,
+        remarks: values.remarks || null,
+      });
+
+      setRequestOpen(false);
+      setRequestsRefreshToken((n) => n + 1);
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to submit this reallocation request. Please try again.';
+
+      setRequestError(message);
+    } finally {
+      setRequestSaving(false);
     }
   };
 
@@ -1419,6 +1504,21 @@ const handleSubmit = async (
                                   </DropdownMenuItem>
                                 </>
                               ) : null}
+
+                              {!canEdit &&
+                              isTeamLeader &&
+                              asset.assignedUserId ? (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    openRequest(
+                                      asset,
+                                    )
+                                  }
+                                >
+                                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                                  Request Reallocation
+                                </DropdownMenuItem>
+                              ) : null}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -1431,6 +1531,24 @@ const handleSubmit = async (
           </div>
         </CardContent>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* REALLOCATION REQUESTS                                               */}
+      {/* ------------------------------------------------------------------ */}
+
+      {canEdit ? (
+        <ReallocationRequestsPanel
+          mode="pending"
+          isSuperAdmin={isSuperAdmin}
+          isITAdmin={isITAdmin}
+          refreshToken={requestsRefreshToken}
+        />
+      ) : isTeamLeader ? (
+        <ReallocationRequestsPanel
+          mode="mine"
+          refreshToken={requestsRefreshToken}
+        />
+      ) : null}
 
       {/* ------------------------------------------------------------------ */}
       {/* ADD / EDIT ASSET                                                    */}
@@ -1518,6 +1636,30 @@ const handleSubmit = async (
         saving={assignmentSaving}
         error={transferError}
         onSubmit={handleTransfer}
+      />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* REQUEST REALLOCATION (Team Lead)                                    */}
+      {/* ------------------------------------------------------------------ */}
+
+      <AssetReallocationRequestDialog
+        open={requestOpen}
+        onOpenChange={setRequestOpen}
+        asset={selectedAsset}
+        currentUserId={
+          selectedAsset?.assignedUserId ?? null
+        }
+        currentSeatId={
+          selectedAsset?.currentSeatId ?? null
+        }
+        currentSeatLabel={
+          selectedAsset?.currentSeatLabel ?? null
+        }
+        users={users}
+        seats={seats}
+        saving={requestSaving}
+        error={requestError}
+        onSubmit={handleReallocationRequest}
       />
     </div>
   );

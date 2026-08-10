@@ -121,6 +121,10 @@ builder.Services.AddScoped<
     AssetAssignmentService>();
 
 builder.Services.AddScoped<
+    IAssetReallocationRequestService,
+    AssetReallocationRequestService>();
+
+builder.Services.AddScoped<
     IAssetSoftwareService,
     AssetSoftwareService>();
 
