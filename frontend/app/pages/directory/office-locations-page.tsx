@@ -467,7 +467,7 @@ export default function OfficeLocationsPage() {
     const input = document.createElement('input');
 
     input.type = 'file';
-    input.accept = 'image/jpeg,image/png';
+    input.accept = 'image/jpeg,image/png,image/svg+xml,.svg';
 
     input.onchange = () => {
       const file = input.files?.[0];
@@ -477,11 +477,18 @@ export default function OfficeLocationsPage() {
       const allowedTypes = [
         'image/jpeg',
         'image/png',
+        'image/svg+xml',
       ];
 
-      if (!allowedTypes.includes(file.type)) {
+      // Some browsers/OSes report SVG files with an empty or generic
+      // type, so also fall back to checking the file extension.
+      const isAllowed =
+        allowedTypes.includes(file.type) ||
+        file.name.toLowerCase().endsWith('.svg');
+
+      if (!isAllowed) {
         setError(
-          'Please select a JPG or PNG floor-plan image.'
+          'Please select a JPG, PNG, or SVG floor-plan image.'
         );
         return;
       }

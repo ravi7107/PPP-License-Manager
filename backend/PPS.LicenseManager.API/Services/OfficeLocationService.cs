@@ -1,3 +1,5 @@
+using System.Xml;
+using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.OfficeLocation;
@@ -465,56 +467,83 @@ public class OfficeLocationService : IOfficeLocationService
         {
             ".png",
             ".jpg",
-            ".jpeg"
+            ".jpeg",
+            ".svg"
         };
 
         if (!allowedExtensions.Contains(extension))
             throw new InvalidOperationException(
-                "Only PNG and JPEG floor maps are allowed.");
+                "Only PNG, JPEG, and SVG floor maps are allowed.");
 
-        // Verify the actual file signature instead of trusting
-        // only the extension or browser-supplied content type.
-        byte[] header = new byte[8];
+        var isSvg = extension == ".svg";
 
-        using (var stream = file.OpenReadStream())
+        var isPng = false;
+        var isJpeg = false;
+        byte[]? sanitizedSvgBytes = null;
+
+        if (isSvg)
         {
-            var bytesRead =
-                await stream.ReadAsync(
-                    header.AsMemory(0, header.Length));
+            byte[] rawBytes;
 
-            if (bytesRead < 3)
-                throw new InvalidOperationException(
-                    "The uploaded image is invalid.");
+            using (var memory = new MemoryStream())
+            {
+                await file.CopyToAsync(memory);
+                rawBytes = memory.ToArray();
+            }
+
+            // SVG is XML and can carry <script> tags, event-handler
+            // attributes, or embedded HTML via <foreignObject> - all of
+            // which would run if the file were ever rendered inline in
+            // the page. Validate it's well-formed SVG and strip anything
+            // capable of executing script before it's ever written to disk.
+            sanitizedSvgBytes = SanitizeSvg(rawBytes);
         }
+        else
+        {
+            // Verify the actual file signature instead of trusting
+            // only the extension or browser-supplied content type.
+            byte[] header = new byte[8];
 
-        var isPng =
-            header.Length >= 8 &&
-            header[0] == 0x89 &&
-            header[1] == 0x50 &&
-            header[2] == 0x4E &&
-            header[3] == 0x47 &&
-            header[4] == 0x0D &&
-            header[5] == 0x0A &&
-            header[6] == 0x1A &&
-            header[7] == 0x0A;
+            using (var stream = file.OpenReadStream())
+            {
+                var bytesRead =
+                    await stream.ReadAsync(
+                        header.AsMemory(0, header.Length));
 
-        var isJpeg =
-            header[0] == 0xFF &&
-            header[1] == 0xD8 &&
-            header[2] == 0xFF;
+                if (bytesRead < 3)
+                    throw new InvalidOperationException(
+                        "The uploaded image is invalid.");
+            }
 
-        if (!isPng && !isJpeg)
-            throw new InvalidOperationException(
-                "The uploaded file is not a valid PNG or JPEG image.");
+            isPng =
+                header.Length >= 8 &&
+                header[0] == 0x89 &&
+                header[1] == 0x50 &&
+                header[2] == 0x4E &&
+                header[3] == 0x47 &&
+                header[4] == 0x0D &&
+                header[5] == 0x0A &&
+                header[6] == 0x1A &&
+                header[7] == 0x0A;
 
-        if (extension == ".png" && !isPng)
-            throw new InvalidOperationException(
-                "The file extension does not match the image format.");
+            isJpeg =
+                header[0] == 0xFF &&
+                header[1] == 0xD8 &&
+                header[2] == 0xFF;
 
-        if ((extension == ".jpg" || extension == ".jpeg") &&
-            !isJpeg)
-            throw new InvalidOperationException(
-                "The file extension does not match the image format.");
+            if (!isPng && !isJpeg)
+                throw new InvalidOperationException(
+                    "The uploaded file is not a valid PNG or JPEG image.");
+
+            if (extension == ".png" && !isPng)
+                throw new InvalidOperationException(
+                    "The file extension does not match the image format.");
+
+            if ((extension == ".jpg" || extension == ".jpeg") &&
+                !isJpeg)
+                throw new InvalidOperationException(
+                    "The file extension does not match the image format.");
+        }
 
         var uploadDirectory =
             Path.Combine(
@@ -525,7 +554,7 @@ public class OfficeLocationService : IOfficeLocationService
         Directory.CreateDirectory(uploadDirectory);
 
         var storedExtension =
-            isPng ? ".png" : ".jpg";
+            isSvg ? ".svg" : (isPng ? ".png" : ".jpg");
 
         var generatedFileName =
             $"{Guid.NewGuid():N}{storedExtension}";
@@ -542,7 +571,14 @@ public class OfficeLocationService : IOfficeLocationService
                 FileAccess.Write,
                 FileShare.None))
         {
-            await file.CopyToAsync(output);
+            if (isSvg)
+            {
+                await output.WriteAsync(sanitizedSvgBytes!);
+            }
+            else
+            {
+                await file.CopyToAsync(output);
+            }
         }
 
         // Delete the previous physical map only after
@@ -574,7 +610,7 @@ public class OfficeLocationService : IOfficeLocationService
             Path.GetFileName(file.FileName);
 
         floor.MapContentType =
-            isPng ? "image/png" : "image/jpeg";
+            isSvg ? "image/svg+xml" : (isPng ? "image/png" : "image/jpeg");
 
         // Width/height will be populated by the visual map editor
         // from the browser's decoded image dimensions.
@@ -597,6 +633,83 @@ public class OfficeLocationService : IOfficeLocationService
         }
 
         return MapFloor(floor);
+    }
+
+    // Validates that the uploaded bytes are well-formed SVG (an <svg> root
+    // element, no DTD/external entities) and strips anything capable of
+    // executing script - <script> elements, <foreignObject> (can embed
+    // arbitrary HTML), "on*" event-handler attributes, and javascript:
+    // URIs - before the file is ever written to disk.
+    private static byte[] SanitizeSvg(byte[] rawBytes)
+    {
+        XDocument document;
+
+        try
+        {
+            using var input = new MemoryStream(rawBytes);
+
+            var readerSettings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null
+            };
+
+            using var reader = XmlReader.Create(input, readerSettings);
+            document = XDocument.Load(reader, LoadOptions.None);
+        }
+        catch
+        {
+            throw new InvalidOperationException(
+                "The uploaded file is not a valid SVG image.");
+        }
+
+        var root = document.Root;
+
+        if (root == null ||
+            !string.Equals(
+                root.Name.LocalName,
+                "svg",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The uploaded file is not a valid SVG image.");
+        }
+
+        var elementsToStrip = document.Descendants()
+            .Where(e =>
+                string.Equals(
+                    e.Name.LocalName, "script",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    e.Name.LocalName, "foreignObject",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var element in elementsToStrip)
+        {
+            element.Remove();
+        }
+
+        foreach (var element in document.Descendants().ToList())
+        {
+            var attributesToStrip = element.Attributes()
+                .Where(a =>
+                    a.Name.LocalName.StartsWith(
+                        "on", StringComparison.OrdinalIgnoreCase) ||
+                    a.Value.TrimStart().StartsWith(
+                        "javascript:", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var attribute in attributesToStrip)
+            {
+                attribute.Remove();
+            }
+        }
+
+        using var output = new MemoryStream();
+        document.Save(output, SaveOptions.DisableFormatting);
+
+        return output.ToArray();
     }
 
 

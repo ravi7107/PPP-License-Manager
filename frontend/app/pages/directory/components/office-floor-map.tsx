@@ -285,7 +285,7 @@ export default function OfficeFloorMap({
         </p>
 
         <p className="mt-1 max-w-md text-sm text-muted-foreground">
-          Upload a JPG or PNG floor plan to display
+          Upload a JPG, PNG, or SVG floor plan to display
           workstation positions visually.
         </p>
       </div>
