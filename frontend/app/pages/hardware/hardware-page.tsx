@@ -365,6 +365,9 @@ export default function HardwarePage() {
   const [formOpen, setFormOpen] =
     useState(false);
 
+  const [formError, setFormError] =
+    useState<string | null>(null);
+
   const [viewOpen, setViewOpen] =
     useState(false);
 
@@ -619,6 +622,7 @@ export default function HardwarePage() {
 
   const openAdd = () => {
     setSelectedAsset(null);
+    setFormError(null);
     setFormOpen(true);
   };
 
@@ -626,6 +630,7 @@ export default function HardwarePage() {
     asset: AssetRecord,
   ) => {
     setSelectedAsset(asset);
+    setFormError(null);
     setFormOpen(true);
   };
 
@@ -837,6 +842,8 @@ export default function HardwarePage() {
 const handleSubmit = async (
   values: AssetFormValues,
 ) => {
+  setFormError(null);
+
   try {
     const payload = {
       assetTag: values.assetTag,
@@ -927,13 +934,19 @@ const handleSubmit = async (
 
     await reload();
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "Asset save failed:",
       error,
     );
 
-    throw error;
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.errors?.[0] ||
+      error?.message ||
+      "Failed to save asset. Please check the form and try again.";
+
+    setFormError(message);
   }
 };
 
@@ -1461,6 +1474,7 @@ const handleSubmit = async (
         clients={clients}
         saving={saving || updating}
         onSubmit={handleSubmit}
+        error={formError}
       />
 
       {/* ------------------------------------------------------------------ */}

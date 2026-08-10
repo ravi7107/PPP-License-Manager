@@ -106,6 +106,8 @@ interface AssetFormDialogProps {
   saving: boolean;
 
   onSubmit: (values: AssetFormValues) => Promise<void>;
+
+  error?: string | null;
 }
 
 /*
@@ -222,6 +224,7 @@ export function AssetFormDialog({
   clients,
   saving,
   onSubmit,
+  error,
 }: AssetFormDialogProps) {
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
@@ -287,6 +290,12 @@ export function AssetFormDialog({
             onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-6"
           >
+            {error && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
+
             {/* BASIC INFORMATION */}
 
             <div>
