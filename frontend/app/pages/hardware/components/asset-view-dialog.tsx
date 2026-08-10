@@ -25,12 +25,14 @@ import {
   HardDrive,
   Tag,
   Cpu,
+  MapPin,
 } from "lucide-react";
 
 import { AssetRecord } from "@/app/pages/hardware/types";
 
 type ViewableAssetRecord = AssetRecord & {
   assignedUserName?: string | null;
+  currentSeatLabel?: string | null;
 };
 
 interface AssetViewDialogProps {
@@ -283,6 +285,12 @@ export function AssetViewDialog({
                     icon={<Building2 size={18} />}
                     label="Department"
                     value={asset.departmentName}
+                  />
+
+                  <InfoField
+                    icon={<MapPin size={18} />}
+                    label="Seat (Office Floor Map)"
+                    value={asset.currentSeatLabel}
                   />
 
                 </CardContent>

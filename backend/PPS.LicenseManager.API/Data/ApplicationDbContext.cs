@@ -121,6 +121,13 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(x => x.AssignedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.SeatId);
+
+            entity.HasOne(x => x.Seat)
+                  .WithMany()
+                  .HasForeignKey(x => x.SeatId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Office Seat -> Asset

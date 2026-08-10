@@ -101,6 +101,11 @@ import {
   returnAsset as apiReturnAsset,
 } from '@/lib/api/asset-assignments.api';
 
+import {
+  OfficeSeat,
+  getOfficeSeats,
+} from '@/lib/api/office-locations.api';
+
 type SortKey =
   | 'assetTag'
   | 'hostName'
@@ -133,6 +138,8 @@ type AssetWithAssignment = AssetRecord & {
   assignedUserId: number | null;
   assignedUserName: string | null;
   currentAssignmentId: number | null;
+  currentSeatId: number | null;
+  currentSeatLabel: string | null;
 };
 
 function statusVariant(
@@ -279,6 +286,28 @@ export default function HardwarePage() {
 
   useEffect(() => {
     void loadCurrentAssignments();
+  }, []);
+
+  /*
+   * --------------------------------------------------------------------------
+   * OFFICE SEATS (for the Allocate dialog's seat picker)
+   * --------------------------------------------------------------------------
+   */
+
+  const [seats, setSeats] = useState<OfficeSeat[]>([]);
+
+  const loadSeats = async () => {
+    try {
+      const result = await getOfficeSeats();
+      setSeats(result);
+    } catch (error) {
+      console.error('Unable to load office seats:', error);
+      setSeats([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadSeats();
   }, []);
 
   /*
@@ -442,6 +471,8 @@ export default function HardwarePage() {
             assignedUserId: null,
             assignedUserName: null,
             currentAssignmentId: null,
+            currentSeatId: null,
+            currentSeatLabel: null,
           };
         }
 
@@ -464,6 +495,20 @@ export default function HardwarePage() {
 
           currentAssignmentId:
             assignment.id,
+
+          currentSeatId:
+            assignment.seatId ?? null,
+
+          currentSeatLabel:
+            assignment.seatId
+              ? [
+                  assignment.officeLocationName,
+                  assignment.floorName,
+                  assignment.seatCode,
+                ]
+                  .filter(Boolean)
+                  .join(' / ')
+              : null,
 
           status: 'Assigned',
         };
@@ -670,10 +715,17 @@ export default function HardwarePage() {
           },
         );
       } else {
+        const parsedSeatId = Number(values.seatId);
+        const seatId =
+          values.seatId && !Number.isNaN(parsedSeatId)
+            ? parsedSeatId
+            : undefined;
+
         await apiAssignAsset({
           assetId: selectedAsset.id,
           userId,
           remarks: values.notes || null,
+          seatId,
         });
       }
 
@@ -1454,7 +1506,11 @@ const handleSubmit = async (
         currentUserId={
           selectedAsset?.assignedUserId ?? null
         }
+        currentSeatLabel={
+          selectedAsset?.currentSeatLabel ?? null
+        }
         users={users}
+        seats={seats}
         saving={assignmentSaving}
         error={transferError}
         onSubmit={handleTransfer}

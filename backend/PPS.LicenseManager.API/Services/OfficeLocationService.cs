@@ -950,6 +950,36 @@ public class OfficeLocationService : IOfficeLocationService
         return true;
     }
 
+    public async Task<OfficeSeatResponse?>
+        SetSeatOccupantAsync(
+            int seatId,
+            int? assetId,
+            int? userId)
+    {
+        var record = await _context.OfficeSeats
+            .Include(x => x.OfficeFloor)
+                .ThenInclude(x => x.OfficeLocation)
+            .FirstOrDefaultAsync(x => x.Id == seatId);
+
+        if (record == null)
+            return null;
+
+        await ValidateSeatAssignmentAsync(
+            assetId,
+            userId,
+            record.DepartmentId,
+            record.OfficeFloor.OfficeLocation.CompanyId,
+            seatId);
+
+        record.AssetId = assetId;
+        record.UserId = userId;
+        record.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return await GetSeatByIdAsync(seatId);
+    }
+
     // =========================================================
     // VALIDATION
     // =========================================================

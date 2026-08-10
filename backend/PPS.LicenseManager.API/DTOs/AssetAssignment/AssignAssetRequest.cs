@@ -18,4 +18,8 @@ public AssignmentType AssignmentType { get; set; }
 
 public DateTime? ExpectedReturnDate { get; set; }
 
+    // Optional office floor-map seat to occupy for this assignment. When
+    // set, the corresponding OfficeSeat's AssetId/UserId are updated so the
+    // floor map reflects this allocation.
+    public int? SeatId { get; set; }
 }

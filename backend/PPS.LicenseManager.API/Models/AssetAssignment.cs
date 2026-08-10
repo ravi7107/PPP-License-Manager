@@ -44,4 +44,11 @@ public class AssetAssignment
 public DateTime? ExpectedReturnDate { get; set; }
 
 public int? OriginalAssignmentId { get; set; }
+
+    // Office floor-map seat this assignment currently occupies, if any.
+    // Kept in sync with OfficeSeat.AssetId/UserId by AssetAssignmentService
+    // so the floor map always reflects the live assignment.
+    public int? SeatId { get; set; }
+
+    public OfficeSeat? Seat { get; set; }
 }

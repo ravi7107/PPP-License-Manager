@@ -15,9 +15,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AssetRecord, LookupOption } from '@/app/pages/hardware/types';
+import { OfficeSeat } from '@/lib/api/office-locations.api';
+
+const NO_SEAT_VALUE = '__none__';
 
 const transferFormSchema = z.object({
   userId: z.string().min(1, 'Select a user'),
+  seatId: z.string(),
   notes: z.string(),
 });
 
@@ -25,6 +29,7 @@ export type AssetTransferFormValues = z.infer<typeof transferFormSchema>;
 
 const EMPTY_TRANSFER_FORM: AssetTransferFormValues = {
   userId: '',
+  seatId: NO_SEAT_VALUE,
   notes: '',
 };
 
@@ -34,10 +39,18 @@ interface AssetTransferDialogProps {
   asset: AssetRecord | null;
   isReassignment: boolean;
   currentUserId?: number | null;
+  currentSeatLabel?: string | null;
   users: LookupOption[];
+  seats: OfficeSeat[];
   saving: boolean;
   error?: string | null;
   onSubmit: (values: AssetTransferFormValues) => Promise<void>;
+}
+
+function seatLabel(seat: OfficeSeat): string {
+  const parts = [seat.officeLocationName, seat.floorName, seat.seatCode].filter(Boolean);
+  const location = parts.join(' / ');
+  return seat.departmentName ? `${location} (${seat.departmentName})` : location;
 }
 
 export function AssetTransferDialog({
@@ -46,7 +59,9 @@ export function AssetTransferDialog({
   asset,
   isReassignment,
   currentUserId,
+  currentSeatLabel,
   users,
+  seats,
   saving,
   error,
   onSubmit,
@@ -63,11 +78,15 @@ export function AssetTransferDialog({
   if (!asset) return null;
 
   const safeUsers = Array.isArray(users) ? users : [];
+  const safeSeats = Array.isArray(seats) ? seats : [];
 
   // A reassignment can't go to the user who already has the asset.
   const selectableUsers = isReassignment
     ? safeUsers.filter((u) => u.id !== currentUserId)
     : safeUsers;
+
+  // Only vacant seats can be picked when first allocating an asset.
+  const vacantSeats = safeSeats.filter((s) => !s.assetId && !s.userId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,6 +139,51 @@ export function AssetTransferDialog({
                 </FormItem>
               )}
             />
+
+            {isReassignment ? (
+              <div>
+                <FormLabel>Seat</FormLabel>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {currentSeatLabel
+                    ? `Stays at the current seat (${currentSeatLabel}). To move this asset to a different seat, use the office floor map.`
+                    : 'This asset isn’t linked to a seat on the office floor map yet.'}
+                </p>
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="seatId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Seat (optional)</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No seat" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NO_SEAT_VALUE}>
+                          No seat (won&apos;t show on the office floor map)
+                        </SelectItem>
+                        {vacantSeats.length === 0 ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">
+                            No vacant seats set up yet
+                          </div>
+                        ) : (
+                          vacantSeats.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>
+                              {seatLabel(s)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

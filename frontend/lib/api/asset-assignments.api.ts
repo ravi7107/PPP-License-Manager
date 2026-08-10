@@ -25,12 +25,20 @@ export interface AssetAssignment {
   remarks: string | null;
 
   isActive: boolean;
+
+  seatId: number | null;
+  seatCode: string | null;
+  seatName: string | null;
+  officeFloorId: number | null;
+  floorName: string | null;
+  officeLocationName: string | null;
 }
 
 export interface AssignAssetRequest {
   assetId: number;
   userId: number;
   remarks?: string | null;
+  seatId?: number | null;
 }
 
 export interface TransferAssetRequest {

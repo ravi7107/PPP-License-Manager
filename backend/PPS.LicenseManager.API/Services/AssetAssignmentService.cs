@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.AssetAssignment;
+using PPS.LicenseManager.API.Interfaces;
 using PPS.LicenseManager.API.Models;
 using PPS.LicenseManager.API.Services.Interfaces;
 using PPS.LicenseManager.API.Enums;
@@ -10,11 +11,14 @@ namespace PPS.LicenseManager.API.Services;
 public class AssetAssignmentService : IAssetAssignmentService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IOfficeLocationService _officeLocationService;
 
     public AssetAssignmentService(
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        IOfficeLocationService officeLocationService)
     {
         _context = context;
+        _officeLocationService = officeLocationService;
     }
 
 
@@ -29,7 +33,10 @@ public class AssetAssignmentService : IAssetAssignmentService
             .Include(x => x.Asset)
             .Include(x => x.User)
                 .ThenInclude(x => x.Department)
-            .Include(x => x.AssignedByUser);
+            .Include(x => x.AssignedByUser)
+            .Include(x => x.Seat)
+                .ThenInclude(x => x!.OfficeFloor)
+                    .ThenInclude(x => x.OfficeLocation);
     }
 
 
@@ -66,7 +73,15 @@ public class AssetAssignmentService : IAssetAssignmentService
 
             Status = assignment.Status,
             Remarks = assignment.Remarks,
-            IsActive = assignment.IsActive
+            IsActive = assignment.IsActive,
+
+            SeatId = assignment.SeatId,
+            SeatCode = assignment.Seat?.SeatCode,
+            SeatName = assignment.Seat?.SeatName,
+            OfficeFloorId = assignment.Seat?.OfficeFloorId,
+            FloorName = assignment.Seat?.OfficeFloor?.FloorName,
+            OfficeLocationName =
+                assignment.Seat?.OfficeFloor?.OfficeLocation?.LocationName
         };
     }
 
@@ -223,6 +238,21 @@ if (request.AssignmentType == AssignmentType.Temporary &&
         asset.IsReadyForAssignment = false;
         asset.UpdatedAt = now;
 
+        if (request.SeatId.HasValue)
+        {
+            var seatResult = await _officeLocationService
+                .SetSeatOccupantAsync(
+                    request.SeatId.Value,
+                    asset.Id,
+                    user.Id);
+
+            if (seatResult == null)
+                throw new InvalidOperationException(
+                    "Selected seat was not found.");
+
+            assignment.SeatId = request.SeatId;
+        }
+
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
 
@@ -316,6 +346,12 @@ if (request.AssignmentType == AssignmentType.Temporary &&
             Remarks = request.Remarks,
             IsActive = true,
 
+            // A same-seat reassignment (Phase 2): the physical
+            // workstation/seat doesn't move, only the user occupying it
+            // changes. Moving to a different seat during reassignment is
+            // handled separately.
+            SeatId = current.SeatId,
+
             CreatedAt = now
         };
 
@@ -325,6 +361,14 @@ if (request.AssignmentType == AssignmentType.Temporary &&
         current.Asset.Status = "Assigned";
         current.Asset.IsReadyForAssignment = false;
         current.Asset.UpdatedAt = now;
+
+        if (current.SeatId.HasValue)
+        {
+            await _officeLocationService.SetSeatOccupantAsync(
+                current.SeatId.Value,
+                current.AssetId,
+                request.NewUserId);
+        }
 
         await _context.SaveChangesAsync();
 
@@ -369,6 +413,14 @@ if (request.AssignmentType == AssignmentType.Temporary &&
         assignment.Asset.Status = "Available";
         assignment.Asset.IsReadyForAssignment = true;
         assignment.Asset.UpdatedAt = now;
+
+        if (assignment.SeatId.HasValue)
+        {
+            await _officeLocationService.SetSeatOccupantAsync(
+                assignment.SeatId.Value,
+                null,
+                null);
+        }
 
         await _context.SaveChangesAsync();
 

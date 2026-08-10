@@ -26,4 +26,11 @@ public class AssetAssignmentResponse
     public string? Remarks { get; set; }
 
     public bool IsActive { get; set; }
+
+    public int? SeatId { get; set; }
+    public string? SeatCode { get; set; }
+    public string? SeatName { get; set; }
+    public int? OfficeFloorId { get; set; }
+    public string? FloorName { get; set; }
+    public string? OfficeLocationName { get; set; }
 }

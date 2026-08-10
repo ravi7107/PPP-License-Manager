@@ -91,4 +91,16 @@ public interface IOfficeLocationService
 
     Task<bool>
         DeleteSeatAsync(int id);
+
+    // Sets (or clears, when both are null) which asset/user occupy a seat,
+    // reusing the same validation CreateSeatAsync/UpdateSeatAsync apply
+    // (department/company match, no double-booking an asset or user across
+    // seats). Used by AssetAssignmentService to keep the floor map in sync
+    // with real hardware allocations. Returns null if the seat doesn't
+    // exist.
+    Task<OfficeSeatResponse?>
+        SetSeatOccupantAsync(
+            int seatId,
+            int? assetId,
+            int? userId);
 }
