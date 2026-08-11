@@ -10,7 +10,7 @@ public class PurchaseRequisitionPendingApprovalResponse
     public int Id { get; set; }
     public string? PrNumber { get; set; }
     public string Title { get; set; } = string.Empty;
-    public string DepartmentName { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
     public string RequestedByUserName { get; set; } = string.Empty;
     public int StepOrder { get; set; }
     public int RequiredApprovalStageCount { get; set; }

@@ -33,7 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import { Department } from '@/lib/api/departments.api';
+import { Company } from '@/lib/api/companies.api';
 import { Vendor } from '@/lib/api/vendors.api';
 import {
   PurchaseRequisition,
@@ -54,13 +54,15 @@ const lineItemSchema = z.object({
 });
 
 const prFormSchema = z.object({
-  departmentId: z.string().min(1, 'Department is required'),
+  companyId: z.string().min(1, 'Entity is required'),
   // Optional - "" means no vendor selected yet.
   vendorId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
   justification: z.string().optional(),
   currency: z.string().min(1).max(3).default('INR'),
-  taxAmount: z.coerce.number().min(0).optional(),
+  // Default to the standard 9% each (18% combined GST) - changeable.
+  cgstPercent: z.coerce.number().min(0).max(100).default(9),
+  sgstPercent: z.coerce.number().min(0).max(100).default(9),
   lineItems: z.array(lineItemSchema).min(1, 'Add at least one line item'),
 });
 
@@ -76,12 +78,13 @@ const EMPTY_LINE_ITEM: PrFormValues['lineItems'][number] = {
 };
 
 const EMPTY_FORM: PrFormValues = {
-  departmentId: '',
+  companyId: '',
   vendorId: '',
   title: '',
   justification: '',
   currency: 'INR',
-  taxAmount: 0,
+  cgstPercent: 9,
+  sgstPercent: 9,
   lineItems: [EMPTY_LINE_ITEM],
 };
 
@@ -91,12 +94,13 @@ function toFormValues(pr: PurchaseRequisition | null): PrFormValues {
   }
 
   return {
-    departmentId: String(pr.departmentId),
+    companyId: String(pr.companyId),
     vendorId: pr.vendorId ? String(pr.vendorId) : '',
     title: pr.title,
     justification: pr.justification ?? '',
     currency: pr.currency || 'INR',
-    taxAmount: pr.taxAmount,
+    cgstPercent: pr.cgstPercent,
+    sgstPercent: pr.sgstPercent,
     lineItems: pr.lineItems.length
       ? pr.lineItems.map((li) => ({
           itemDescription: li.itemDescription,
@@ -114,7 +118,7 @@ interface PrFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   purchaseRequisition: PurchaseRequisition | null;
-  departments: Department[];
+  entities: Company[];
   vendors: Vendor[];
   saving: boolean;
   error?: string | null;
@@ -125,7 +129,7 @@ export function PrFormDialog({
   open,
   onOpenChange,
   purchaseRequisition,
-  departments,
+  entities,
   vendors,
   saving,
   error,
@@ -150,7 +154,8 @@ export function PrFormDialog({
   const isEditing = Boolean(purchaseRequisition);
 
   const watchedLineItems = form.watch('lineItems');
-  const watchedTax = form.watch('taxAmount');
+  const watchedCgstPercent = form.watch('cgstPercent');
+  const watchedSgstPercent = form.watch('sgstPercent');
 
   const subtotal = useMemo(() => {
     return (watchedLineItems ?? []).reduce((sum, li) => {
@@ -160,16 +165,20 @@ export function PrFormDialog({
     }, 0);
   }, [watchedLineItems]);
 
-  const total = subtotal + (Number(watchedTax) || 0);
+  const cgstAmount = (subtotal * (Number(watchedCgstPercent) || 0)) / 100;
+  const sgstAmount = (subtotal * (Number(watchedSgstPercent) || 0)) / 100;
+  const tax = cgstAmount + sgstAmount;
+  const total = subtotal + tax;
 
   const handleSubmit = async (values: PrFormValues) => {
     const request: SavePurchaseRequisitionRequest = {
-      departmentId: Number(values.departmentId),
+      companyId: Number(values.companyId),
       vendorId: values.vendorId ? Number(values.vendorId) : null,
       title: values.title,
       justification: values.justification || null,
       currency: values.currency || 'INR',
-      taxAmount: values.taxAmount ?? 0,
+      cgstPercent: values.cgstPercent ?? 9,
+      sgstPercent: values.sgstPercent ?? 9,
       lineItems: values.lineItems.map((li) => ({
         itemDescription: li.itemDescription,
         category: li.category || null,
@@ -226,28 +235,29 @@ export function PrFormDialog({
 
               <FormField
                 control={form.control}
-                name="departmentId"
+                name="companyId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Department *</FormLabel>
+                    <FormLabel>Entity *</FormLabel>
                     <Select value={field.value ?? ''} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select department" />
+                          <SelectValue placeholder="Select entity" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {departments.length === 0 ? (
+                        {entities.length === 0 ? (
                           <div className="px-2 py-3 text-sm text-muted-foreground">
-                            No departments available
+                            No entities available
                           </div>
                         ) : (
-                          departments.map((d) => (
-                            <SelectItem key={d.id} value={String(d.id)}>
-                              {d.departmentName}
-                              {d.companyName ? ` (${d.companyName})` : ''}
-                            </SelectItem>
-                          ))
+                          entities
+                            .filter((e) => e.isActive)
+                            .map((e) => (
+                              <SelectItem key={e.id} value={String(e.id)}>
+                                {e.name}
+                              </SelectItem>
+                            ))
                         )}
                       </SelectContent>
                     </Select>
@@ -468,7 +478,7 @@ export function PrFormDialog({
 
             {/* TOTALS */}
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <FormField
                 control={form.control}
                 name="currency"
@@ -493,12 +503,26 @@ export function PrFormDialog({
 
               <FormField
                 control={form.control}
-                name="taxAmount"
+                name="cgstPercent"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tax Amount</FormLabel>
+                    <FormLabel>CGST %</FormLabel>
                     <FormControl>
-                      <Input type="number" step="any" {...field} />
+                      <Input type="number" step="any" min={0} max={100} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sgstPercent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SGST %</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="any" min={0} max={100} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -509,6 +533,10 @@ export function PrFormDialog({
                 <div className="flex justify-between text-muted-foreground">
                   <span>Subtotal</span>
                   <span>{subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Tax (CGST + SGST)</span>
+                  <span>{tax.toFixed(2)}</span>
                 </div>
                 <div className="mt-1 flex justify-between font-semibold">
                   <span>Total</span>

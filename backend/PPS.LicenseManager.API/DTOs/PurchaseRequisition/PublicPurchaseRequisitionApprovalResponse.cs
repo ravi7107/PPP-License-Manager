@@ -20,11 +20,13 @@ public class PublicPurchaseRequisitionApprovalResponse
     public string? PrNumber { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Justification { get; set; }
-    public string DepartmentName { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
     public string RequestedByUserName { get; set; } = string.Empty;
 
     public string Currency { get; set; } = string.Empty;
     public decimal SubtotalAmount { get; set; }
+    public decimal CgstPercent { get; set; }
+    public decimal SgstPercent { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
 

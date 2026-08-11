@@ -139,7 +139,7 @@ export default function PrPublicApprovalPage() {
                 </Badge>
               </CardTitle>
               <CardDescription>
-                Requested by {pr.requestedByUserName} for {pr.departmentName}
+                Requested by {pr.requestedByUserName} for {pr.companyName}
               </CardDescription>
             </CardHeader>
 
@@ -152,7 +152,9 @@ export default function PrPublicApprovalPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Tax</p>
+                  <p className="text-muted-foreground">
+                    Tax (CGST {pr.cgstPercent}% + SGST {pr.sgstPercent}%)
+                  </p>
                   <p className="font-medium">
                     {pr.currency} {pr.taxAmount.toFixed(2)}
                   </p>

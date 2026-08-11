@@ -20,10 +20,12 @@ export interface PublicPurchaseRequisitionApproval {
   prNumber: string | null;
   title: string;
   justification: string | null;
-  departmentName: string;
+  companyName: string;
   requestedByUserName: string;
   currency: string;
   subtotalAmount: number;
+  cgstPercent: number;
+  sgstPercent: number;
   taxAmount: number;
   totalAmount: number;
   stepOrder: number;

@@ -54,8 +54,11 @@ export interface PurchaseRequisition {
   prNumber: string | null;
   companyId: number;
   companyName: string | null;
-  departmentId: number;
-  departmentName: string;
+  // Optional - no longer collected on the New Purchase Requisition form
+  // (Entity/Company above replaces it), null for PRs created after this
+  // change. Kept for PRs created before it.
+  departmentId: number | null;
+  departmentName: string | null;
   // Optional - null when no vendor has been selected for this PR yet.
   vendorId: number | null;
   vendorName: string | null;
@@ -68,6 +71,8 @@ export interface PurchaseRequisition {
   currentApprovalStepOrder: number | null;
   currency: string;
   subtotalAmount: number;
+  cgstPercent: number;
+  sgstPercent: number;
   taxAmount: number;
   totalAmount: number;
   submittedAt: string | null;
@@ -87,7 +92,7 @@ export interface PurchaseRequisitionListItem {
   id: number;
   prNumber: string | null;
   title: string;
-  departmentName: string;
+  companyName: string;
   status: PurchaseRequisitionStatus;
   currency: string;
   totalAmount: number;
@@ -106,14 +111,18 @@ export interface PurchaseRequisitionLineItemRequest {
 }
 
 export interface SavePurchaseRequisitionRequest {
-  departmentId: number;
+  // The Entity (Company) this PR is raised under.
+  companyId: number;
   // Optional - a PR doesn't have to have a single named vendor decided
   // yet (e.g. still gathering quotes).
   vendorId?: number | null;
   title: string;
   justification?: string | null;
   currency?: string | null;
-  taxAmount?: number | null;
+  // Optional - null/omitted defaults to 9% each (18% combined GST) on the
+  // backend, but changeable per PR.
+  cgstPercent?: number | null;
+  sgstPercent?: number | null;
   lineItems: PurchaseRequisitionLineItemRequest[];
 }
 
@@ -137,7 +146,7 @@ export interface PurchaseRequisitionPendingApproval {
   id: number;
   prNumber: string | null;
   title: string;
-  departmentName: string;
+  companyName: string;
   requestedByUserName: string;
   stepOrder: number;
   requiredApprovalStageCount: number;
@@ -244,7 +253,7 @@ export async function submitPurchaseRequisition(
 }
 
 // Scoped to a specific purchase requisition - eligibility depends on the
-// PR's own company (set from the Department selected at Draft creation),
+// PR's own company (the Entity selected at Draft creation),
 // not the requester's personal company, so the candidate list can differ
 // PR-to-PR for the same requester.
 export async function getApproverCandidates(

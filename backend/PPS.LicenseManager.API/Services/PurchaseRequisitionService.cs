@@ -115,6 +115,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             Currency = r.Currency,
             SubtotalAmount = r.SubtotalAmount,
+            CgstPercent = r.CgstPercent,
+            SgstPercent = r.SgstPercent,
             TaxAmount = r.TaxAmount,
             TotalAmount = r.TotalAmount,
 
@@ -183,7 +185,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         GetMineAsync(int requestedByUserId)
     {
         var records = await _context.PurchaseRequisitions
-            .Include(x => x.Department)
+            .Include(x => x.Company)
             .Include(x => x.LineItems)
             .Where(x => x.RequestedByUserId == requestedByUserId)
             .OrderByDescending(x => x.CreatedAt)
@@ -194,7 +196,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             Id = r.Id,
             PrNumber = r.PrNumber,
             Title = r.Title,
-            DepartmentName = r.Department?.DepartmentName ?? string.Empty,
+            CompanyName = r.Company?.Name ?? string.Empty,
             Status = r.Status,
             Currency = r.Currency,
             TotalAmount = r.TotalAmount,
@@ -230,17 +232,17 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // CREATE / UPDATE DRAFT
     // =========================================================
 
-    private async Task<(Department department, Models.Vendor? vendor, decimal subtotal, decimal tax, decimal total)>
+    private async Task<(Company company, Models.Vendor? vendor, decimal subtotal, decimal cgstPercent, decimal sgstPercent, decimal tax, decimal total)>
         ValidateAndComputeAsync(
             SavePurchaseRequisitionRequest request,
             List<PurchaseRequisitionLineItem> lineItems)
     {
-        var department = await _context.Departments
-            .FirstOrDefaultAsync(x => x.Id == request.DepartmentId);
+        var company = await _context.Companies
+            .FirstOrDefaultAsync(x => x.Id == request.CompanyId);
 
-        if (department == null || !department.IsActive)
+        if (company == null || !company.IsActive)
             throw new InvalidOperationException(
-                "Selected department does not exist or is inactive.");
+                "Selected entity does not exist or is inactive.");
 
         Models.Vendor? vendor = null;
 
@@ -281,13 +283,22 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             subtotal += lineTotal;
         }
 
-        var tax = request.TaxAmount.HasValue
-            ? Math.Round(request.TaxAmount.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
+        // CGST + SGST (India's split GST scheme) rather than a single flat
+        // amount - both default to the standard 9% each (18% combined)
+        // when omitted from the request, but are changeable per PR. The
+        // [Range(0, 100)] annotations on the request DTO reject anything
+        // outside a sane percentage before this method even runs.
+        var cgstPercent = request.CgstPercent ?? 9m;
+        var sgstPercent = request.SgstPercent ?? 9m;
+
+        var tax = Math.Round(
+            subtotal * (cgstPercent + sgstPercent) / 100m,
+            2,
+            MidpointRounding.AwayFromZero);
 
         var total = subtotal + tax;
 
-        return (department, vendor, subtotal, tax, total);
+        return (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total);
     }
 
     public async Task<PurchaseRequisitionResponse> CreateDraftAsync(
@@ -303,13 +314,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var lineItems = new List<PurchaseRequisitionLineItem>();
 
-        var (department, vendor, subtotal, tax, total) =
+        var (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
 
         var record = new Models.PurchaseRequisition
         {
-            CompanyId = department.CompanyId,
-            DepartmentId = department.Id,
+            CompanyId = company.Id,
             VendorId = vendor?.Id,
             RequestedByUserId = requestedByUserId,
             Title = request.Title,
@@ -319,6 +329,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 ? "INR"
                 : request.Currency.Trim().ToUpperInvariant(),
             SubtotalAmount = subtotal,
+            CgstPercent = cgstPercent,
+            SgstPercent = sgstPercent,
             TaxAmount = tax,
             TotalAmount = total,
             CreatedAt = DateTime.UtcNow,
@@ -364,11 +376,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var lineItems = new List<PurchaseRequisitionLineItem>();
 
-        var (department, vendor, subtotal, tax, total) =
+        var (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
 
-        record.CompanyId = department.CompanyId;
-        record.DepartmentId = department.Id;
+        record.CompanyId = company.Id;
         record.VendorId = vendor?.Id;
         record.Title = request.Title;
         record.Justification = request.Justification;
@@ -376,6 +387,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             ? "INR"
             : request.Currency.Trim().ToUpperInvariant();
         record.SubtotalAmount = subtotal;
+        record.CgstPercent = cgstPercent;
+        record.SgstPercent = sgstPercent;
         record.TaxAmount = tax;
         record.TotalAmount = total;
         record.UpdatedAt = DateTime.UtcNow;
@@ -807,8 +820,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new UnauthorizedAccessException(
                 "You can only view approver candidates for your own purchase requisitions.");
 
-        // Scope candidates by the purchase requisition's own company - set
-        // from whichever Department was selected at Draft creation (see
+        // Scope candidates by the purchase requisition's own company - the
+        // Entity chosen directly at Draft creation (see
         // CreateDraftAsync/ValidateAndComputeAsync) - rather than the
         // requester's personal CompanyId/Department. Those two can
         // disagree, and a requester with no personal company link at all
@@ -845,7 +858,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         GetPendingApprovalsAsync(int approverUserId)
     {
         var records = await _context.PurchaseRequisitions
-            .Include(x => x.Department)
+            .Include(x => x.Company)
             .Include(x => x.RequestedByUser)
             .Include(x => x.ApprovalSteps)
             .Where(x =>
@@ -862,7 +875,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             Id = r.Id,
             PrNumber = r.PrNumber,
             Title = r.Title,
-            DepartmentName = r.Department?.DepartmentName ?? string.Empty,
+            CompanyName = r.Company?.Name ?? string.Empty,
             RequestedByUserName = r.RequestedByUser?.FullName ?? string.Empty,
             StepOrder = r.CurrentApprovalStepOrder ?? 0,
             RequiredApprovalStageCount = r.RequiredApprovalStageCount,
@@ -1158,7 +1171,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 .ThenInclude(s => s.AssignedApproverUser)
             .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.PurchaseRequisition)
-                    .ThenInclude(r => r.Department)
+                    .ThenInclude(r => r.Company)
             .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.PurchaseRequisition)
                     .ThenInclude(r => r.RequestedByUser)
@@ -1183,11 +1196,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             PrNumber = record.PrNumber,
             Title = record.Title,
             Justification = record.Justification,
-            DepartmentName = record.Department?.DepartmentName ?? string.Empty,
+            CompanyName = record.Company?.Name ?? string.Empty,
             RequestedByUserName = record.RequestedByUser?.FullName ?? string.Empty,
 
             Currency = record.Currency,
             SubtotalAmount = record.SubtotalAmount,
+            CgstPercent = record.CgstPercent,
+            SgstPercent = record.SgstPercent,
             TaxAmount = record.TaxAmount,
             TotalAmount = record.TotalAmount,
 
@@ -1403,6 +1418,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         }
     }
 
+    /*
+     * "Approved but the Download PDF button never appeared" turned out to
+     * always trace back to GenerateAndStorePdfAsync's one-shot attempt at
+     * final approval silently failing (it's deliberately best-effort - a
+     * PDF hiccup must never undo an already-committed approval decision)
+     * and there being no retry. Rather than trying to guess/patch every
+     * possible cause of that one-shot failure, this makes PDF generation
+     * lazy and self-healing: any Approved PR that's missing its file (be
+     * it PdfPath never having been set, or a stored file that's since
+     * gone missing, e.g. a wiped volume) gets one generated here, at
+     * download time, before serving it. Draft/Submitted/InApproval/
+     * Rejected PRs never have a PDF - there's nothing to lazily generate
+     * for those.
+     */
     public async Task<(string PhysicalPath, string FileName)?> GetPdfFileAsync(
         int id,
         int requestingUserId,
@@ -1413,7 +1442,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.ApprovalSteps)
             .FirstOrDefaultAsync(x => x.Id == id);
 
-        if (record == null || string.IsNullOrWhiteSpace(record.PdfPath))
+        if (record == null)
             return null;
 
         var isOwner = record.RequestedByUserId == requestingUserId;
@@ -1424,11 +1453,34 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new UnauthorizedAccessException(
                 "You don't have access to this purchase requisition.");
 
-        var relativePath = record.PdfPath.Replace('/', Path.DirectorySeparatorChar);
-        var physicalPath = Path.Combine(pdfStorageRootPath, relativePath);
-
-        if (!File.Exists(physicalPath))
+        if (record.Status != "Approved")
             return null;
+
+        string? physicalPath = string.IsNullOrWhiteSpace(record.PdfPath)
+            ? null
+            : Path.Combine(
+                pdfStorageRootPath,
+                record.PdfPath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (physicalPath == null || !File.Exists(physicalPath))
+        {
+            // GenerateAndStorePdfAsync re-queries by this same Id on the
+            // same DbContext, so EF's identity map hands back this exact
+            // `record` instance with the extra navigations populated -
+            // mutating its PdfPath is what that call does, no re-fetch
+            // needed here to observe the result.
+            await GenerateAndStorePdfAsync(record, pdfStorageRootPath);
+
+            if (string.IsNullOrWhiteSpace(record.PdfPath))
+                return null; // generation itself failed - see backend logs
+
+            physicalPath = Path.Combine(
+                pdfStorageRootPath,
+                record.PdfPath.Replace('/', Path.DirectorySeparatorChar));
+
+            if (!File.Exists(physicalPath))
+                return null;
+        }
 
         return (physicalPath, Path.GetFileName(physicalPath));
     }

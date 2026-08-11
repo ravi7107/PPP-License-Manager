@@ -25,7 +25,7 @@ import {
 
 import { KpiCard } from '@/components/layout/kpi-card';
 
-import { Department, getDepartments } from '@/lib/api/departments.api';
+import { Company, getCompanies } from '@/lib/api/companies.api';
 import { Vendor, getVendors } from '@/lib/api/vendors.api';
 
 import {
@@ -67,7 +67,7 @@ function statusVariant(
 
 export default function PurchaseRequisitionsPage() {
   const [requisitions, setRequisitions] = useState<PurchaseRequisitionListItem[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [entities, setEntities] = useState<Company[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [approverCandidates, setApproverCandidates] = useState<
     PurchaseRequisitionApproverCandidate[]
@@ -112,9 +112,9 @@ export default function PurchaseRequisitionsPage() {
 
   useEffect(() => {
     void loadList();
-    void getDepartments()
-      .then(setDepartments)
-      .catch(() => setDepartments([]));
+    void getCompanies()
+      .then(setEntities)
+      .catch(() => setEntities([]));
     void getVendors()
       .then(setVendors)
       .catch(() => setVendors([]));
@@ -331,7 +331,7 @@ export default function PurchaseRequisitionsPage() {
               <TableRow>
                 <TableHead>PR Number</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Entity</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Created</TableHead>
@@ -358,7 +358,7 @@ export default function PurchaseRequisitionsPage() {
                       {r.prNumber ?? '—'}
                     </TableCell>
                     <TableCell>{r.title}</TableCell>
-                    <TableCell>{r.departmentName}</TableCell>
+                    <TableCell>{r.companyName}</TableCell>
                     <TableCell>
                       <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
                     </TableCell>
@@ -393,7 +393,7 @@ export default function PurchaseRequisitionsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         purchaseRequisition={editingPr}
-        departments={departments}
+        entities={entities}
         vendors={vendors}
         saving={saving}
         error={formError}

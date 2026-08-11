@@ -147,8 +147,24 @@ export function PrDetailDialog({
 
       URL.revokeObjectURL(url);
     } catch (err: any) {
+      // The request uses responseType: 'blob', so an error response body
+      // (e.g. the backend's friendly 404 "No PDF is available..." message)
+      // arrives as a Blob too, not parsed JSON - has to be read as text
+      // and parsed before err.response.data.message would ever work.
+      let message: string | undefined;
+
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          message = JSON.parse(text)?.message;
+        } catch {
+          // Not JSON - fall through to the generic message below.
+        }
+      }
+
       setDownloadError(
-        err?.message ?? 'Failed to download the PDF.'
+        message ?? err?.message ?? 'Failed to download the PDF.'
       );
     } finally {
       setDownloadingPdf(false);
@@ -164,7 +180,7 @@ export function PrDetailDialog({
             <Badge variant={statusVariant(pr.status)}>{pr.status}</Badge>
           </DialogTitle>
           <DialogDescription>
-            Requested by {pr.requestedByUserName} for {pr.departmentName}
+            Requested by {pr.requestedByUserName} for {pr.companyName}
             {pr.vendorName ? ` · Vendor: ${pr.vendorName}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -177,7 +193,9 @@ export function PrDetailDialog({
             </p>
           </div>
           <div>
-            <p className="text-muted-foreground">Tax</p>
+            <p className="text-muted-foreground">
+              Tax (CGST {pr.cgstPercent}% + SGST {pr.sgstPercent}%)
+            </p>
             <p className="font-medium">
               {pr.currency} {pr.taxAmount.toFixed(2)}
             </p>
@@ -391,7 +409,12 @@ export function PrDetailDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          {pr.pdfPath ? (
+          {pr.status === 'Approved' ? (
+            // Don't gate this on pr.pdfPath - the backend now generates
+            // the PDF lazily on first download if it's missing (see
+            // GetPdfFileAsync), so the button should always be offered
+            // once a PR is Approved, not only after generation has
+            // already happened to succeed once before.
             <Button
               type="button"
               variant="outline"

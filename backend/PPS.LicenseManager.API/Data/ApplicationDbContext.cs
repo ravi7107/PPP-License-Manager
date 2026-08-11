@@ -388,6 +388,8 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .IsRequired();
 
             entity.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.CgstPercent).HasPrecision(5, 2).HasDefaultValue(9m);
+            entity.Property(x => x.SgstPercent).HasPrecision(5, 2).HasDefaultValue(9m);
             entity.Property(x => x.TaxAmount).HasPrecision(18, 2);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
 
@@ -402,10 +404,14 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasForeignKey(x => x.CompanyId)
                   .OnDelete(DeleteBehavior.Restrict);
 
+            // Optional (see PurchaseRequisition.DepartmentId's comment) -
+            // no longer collected on the form, kept only for PRs created
+            // before this change.
             entity.HasOne(x => x.Department)
                   .WithMany()
                   .HasForeignKey(x => x.DepartmentId)
-                  .OnDelete(DeleteBehavior.Restrict);
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .IsRequired(false);
 
             entity.HasOne(x => x.RequestedByUser)
                   .WithMany()

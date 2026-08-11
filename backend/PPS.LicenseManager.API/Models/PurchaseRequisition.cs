@@ -27,10 +27,14 @@ public class PurchaseRequisition
 
     public Company Company { get; set; } = null!;
 
-    [Required]
-    public int DepartmentId { get; set; }
+    // Optional - historically required, but the New Purchase Requisition
+    // form now collects Entity (Company, selected directly below) instead
+    // of Department. Left in place (rather than dropped) so PRs created
+    // before this change keep their department on record; never set on
+    // PRs created going forward.
+    public int? DepartmentId { get; set; }
 
-    public Department Department { get; set; } = null!;
+    public Department? Department { get; set; }
 
     // Optional - not every PR necessarily has a single named vendor yet
     // (e.g. multiple line items from different suppliers, or the vendor
@@ -71,6 +75,16 @@ public class PurchaseRequisition
     // Recomputed server-side from line items on every save - never trusted
     // from the client.
     public decimal SubtotalAmount { get; set; }
+
+    // Tax is modeled as CGST + SGST (India's split GST scheme) rather than
+    // a single flat amount - each defaults to 9% (the standard combined
+    // 18% GST rate) but is editable per PR. TaxAmount below is still the
+    // recomputed total of the two, kept for display/reporting and so the
+    // immutability trigger's existing TaxAmount guard keeps working
+    // unchanged.
+    public decimal CgstPercent { get; set; } = 9m;
+
+    public decimal SgstPercent { get; set; } = 9m;
 
     public decimal TaxAmount { get; set; }
 

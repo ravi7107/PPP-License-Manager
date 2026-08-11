@@ -144,7 +144,7 @@ export default function PendingApprovalsPage() {
                 <TableHead>PR Number</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Requested By</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Entity</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -169,7 +169,7 @@ export default function PendingApprovalsPage() {
                     <TableCell className="font-mono text-xs">{i.prNumber ?? '—'}</TableCell>
                     <TableCell>{i.title}</TableCell>
                     <TableCell>{i.requestedByUserName}</TableCell>
-                    <TableCell>{i.departmentName}</TableCell>
+                    <TableCell>{i.companyName}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">
                         {i.stepOrder} of {i.requiredApprovalStageCount}

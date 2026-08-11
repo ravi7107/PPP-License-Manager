@@ -10,8 +10,11 @@ public class PurchaseRequisitionResponse
     public int CompanyId { get; set; }
     public string? CompanyName { get; set; }
 
-    public int DepartmentId { get; set; }
-    public string DepartmentName { get; set; } = string.Empty;
+    // Optional - no longer collected on the form (Entity/Company above
+    // replaces it), null on every PR created after this change. Kept for
+    // PRs created before it.
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
 
     // Optional - null when no vendor has been selected for this PR yet.
     public int? VendorId { get; set; }
@@ -31,6 +34,8 @@ public class PurchaseRequisitionResponse
 
     public string Currency { get; set; } = string.Empty;
     public decimal SubtotalAmount { get; set; }
+    public decimal CgstPercent { get; set; }
+    public decimal SgstPercent { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
 

@@ -12,8 +12,11 @@ namespace PPS.LicenseManager.API.DTOs.PurchaseRequisition;
  */
 public class SavePurchaseRequisitionRequest
 {
+    // The Entity (Company) this PR is raised under - replaces Department
+    // as the required organizational selector on the New Purchase
+    // Requisition form.
     [Required]
-    public int DepartmentId { get; set; }
+    public int CompanyId { get; set; }
 
     // Optional - a PR doesn't have to have a single named vendor decided
     // yet (e.g. still gathering quotes), but when set it must reference an
@@ -29,11 +32,16 @@ public class SavePurchaseRequisitionRequest
     [MaxLength(3)]
     public string? Currency { get; set; }
 
-    // Optional flat tax amount (this module doesn't model a tax-rate
-    // engine - if the business needs GST computed automatically, that's a
-    // follow-up enhancement). Must be >= 0; null/omitted defaults to 0.
-    [Range(0, double.MaxValue, ErrorMessage = "Tax amount cannot be negative.")]
-    public decimal? TaxAmount { get; set; }
+    // Tax is modeled as CGST + SGST (India's split GST scheme) rather than
+    // a single flat amount. Both are optional in the request - null/
+    // omitted falls back to the standard 9% each (18% combined) in
+    // PurchaseRequisitionService.ValidateAndComputeAsync - but changeable
+    // per PR.
+    [Range(0, 100, ErrorMessage = "CGST % must be between 0 and 100.")]
+    public decimal? CgstPercent { get; set; }
+
+    [Range(0, 100, ErrorMessage = "SGST % must be between 0 and 100.")]
+    public decimal? SgstPercent { get; set; }
 
     [Required]
     [MinLength(1, ErrorMessage = "A purchase requisition must have at least one line item.")]

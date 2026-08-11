@@ -6,12 +6,13 @@ using QuestPDF.Infrastructure;
 namespace PPS.LicenseManager.API.Services;
 
 /*
- * Renders a single Purchase Requisition - header, requester/department
- * summary, line items, totals, full approval history, and any
+ * Renders a single Purchase Requisition - header, requester/entity
+ * summary, line items, CGST/SGST totals, full approval history, and any
  * attachments - as a PDF via QuestPDF's fluent API.
  *
- * Generated exactly once, on final approval (see
- * PurchaseRequisitionService.GenerateAndStorePdfAsync), and stored
+ * Generated on final approval (see
+ * PurchaseRequisitionService.GenerateAndStorePdfAsync) and lazily
+ * (re)generated on download if missing (see GetPdfFileAsync), and stored
  * outside wwwroot so it's reachable only through the authenticated
  * GET /api/PurchaseRequisition/{id}/pdf endpoint - never as a bare
  * static file URL the way attachments are.
@@ -119,8 +120,12 @@ public class PurchaseRequisitionPdfDocument : IDocument
 
                 row.RelativeItem().Column(c =>
                 {
-                    c.Item().Text("Department").FontSize(9).FontColor(Colors.Grey.Darken1);
-                    c.Item().Text(_pr.Department?.DepartmentName ?? "-").Bold();
+                    // Department is no longer collected on new PRs (Entity
+                    // now covers that role) - GSTIN is the more useful
+                    // thing to show here now that tax is broken into
+                    // CGST/SGST below.
+                    c.Item().Text("GSTIN").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_pr.Company?.GSTNumber ?? "-").Bold();
                 });
 
                 row.RelativeItem().Column(c =>
@@ -165,11 +170,22 @@ public class PurchaseRequisitionPdfDocument : IDocument
                         .Text($"{_pr.Currency} {_pr.SubtotalAmount:0.00}");
                 });
 
+                // Shown as CGST + SGST (India's split GST scheme) rather
+                // than a single flat tax line - each percentage is stored
+                // per PR (see PurchaseRequisitionService.
+                // ValidateAndComputeAsync) and can differ PR-to-PR.
                 totals.Item().Row(row =>
                 {
-                    row.RelativeItem().AlignRight().Text("Tax");
+                    row.RelativeItem().AlignRight().Text($"CGST ({_pr.CgstPercent:0.##}%)");
                     row.ConstantItem(110).AlignRight()
-                        .Text($"{_pr.Currency} {_pr.TaxAmount:0.00}");
+                        .Text($"{_pr.Currency} {_pr.SubtotalAmount * _pr.CgstPercent / 100m:0.00}");
+                });
+
+                totals.Item().Row(row =>
+                {
+                    row.RelativeItem().AlignRight().Text($"SGST ({_pr.SgstPercent:0.##}%)");
+                    row.ConstantItem(110).AlignRight()
+                        .Text($"{_pr.Currency} {_pr.SubtotalAmount * _pr.SgstPercent / 100m:0.00}");
                 });
 
                 totals.Item().Row(row =>
