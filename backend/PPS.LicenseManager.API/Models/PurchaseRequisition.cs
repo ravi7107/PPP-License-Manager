@@ -32,6 +32,14 @@ public class PurchaseRequisition
 
     public Department Department { get; set; } = null!;
 
+    // Optional - not every PR necessarily has a single named vendor yet
+    // (e.g. multiple line items from different suppliers, or the vendor
+    // isn't decided until quotes come in), but when set it's used on the
+    // generated PDF's vendor details section.
+    public int? VendorId { get; set; }
+
+    public Vendor? Vendor { get; set; }
+
     [Required]
     public int RequestedByUserId { get; set; }
 

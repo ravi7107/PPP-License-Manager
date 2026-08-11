@@ -165,6 +165,7 @@ export function PrDetailDialog({
           </DialogTitle>
           <DialogDescription>
             Requested by {pr.requestedByUserName} for {pr.departmentName}
+            {pr.vendorName ? ` · Vendor: ${pr.vendorName}` : ''}
           </DialogDescription>
         </DialogHeader>
 

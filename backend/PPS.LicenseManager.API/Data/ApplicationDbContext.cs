@@ -395,6 +395,7 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.RequestedByUserId);
             entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.VendorId);
 
             entity.HasOne(x => x.Company)
                   .WithMany()
@@ -409,6 +410,13 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.RequestedByUser)
                   .WithMany()
                   .HasForeignKey(x => x.RequestedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional - no reverse Vendor.PurchaseRequisitions collection,
+            // this is a one-way lookup for the PDF/detail view.
+            entity.HasOne(x => x.Vendor)
+                  .WithMany()
+                  .HasForeignKey(x => x.VendorId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 

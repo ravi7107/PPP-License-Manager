@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select';
 
 import { Department } from '@/lib/api/departments.api';
+import { Vendor } from '@/lib/api/vendors.api';
 import {
   PurchaseRequisition,
   SavePurchaseRequisitionRequest,
@@ -54,6 +55,8 @@ const lineItemSchema = z.object({
 
 const prFormSchema = z.object({
   departmentId: z.string().min(1, 'Department is required'),
+  // Optional - "" means no vendor selected yet.
+  vendorId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
   justification: z.string().optional(),
   currency: z.string().min(1).max(3).default('INR'),
@@ -74,6 +77,7 @@ const EMPTY_LINE_ITEM: PrFormValues['lineItems'][number] = {
 
 const EMPTY_FORM: PrFormValues = {
   departmentId: '',
+  vendorId: '',
   title: '',
   justification: '',
   currency: 'INR',
@@ -88,6 +92,7 @@ function toFormValues(pr: PurchaseRequisition | null): PrFormValues {
 
   return {
     departmentId: String(pr.departmentId),
+    vendorId: pr.vendorId ? String(pr.vendorId) : '',
     title: pr.title,
     justification: pr.justification ?? '',
     currency: pr.currency || 'INR',
@@ -110,6 +115,7 @@ interface PrFormDialogProps {
   onOpenChange: (open: boolean) => void;
   purchaseRequisition: PurchaseRequisition | null;
   departments: Department[];
+  vendors: Vendor[];
   saving: boolean;
   error?: string | null;
   onSubmit: (values: SavePurchaseRequisitionRequest) => Promise<void>;
@@ -120,6 +126,7 @@ export function PrFormDialog({
   onOpenChange,
   purchaseRequisition,
   departments,
+  vendors,
   saving,
   error,
   onSubmit,
@@ -158,6 +165,7 @@ export function PrFormDialog({
   const handleSubmit = async (values: PrFormValues) => {
     const request: SavePurchaseRequisitionRequest = {
       departmentId: Number(values.departmentId),
+      vendorId: values.vendorId ? Number(values.vendorId) : null,
       title: values.title,
       justification: values.justification || null,
       currency: values.currency || 'INR',
@@ -197,7 +205,7 @@ export function PrFormDialog({
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <FormField
                 control={form.control}
                 name="title"
@@ -241,6 +249,39 @@ export function PrFormDialog({
                             </SelectItem>
                           ))
                         )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vendorId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vendor (optional)</FormLabel>
+                    <Select
+                      value={field.value || 'none'}
+                      onValueChange={(value) =>
+                        field.onChange(value === 'none' ? '' : value)
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No vendor selected" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">No vendor selected</SelectItem>
+                        {vendors
+                          .filter((v) => v.isActive)
+                          .map((v) => (
+                            <SelectItem key={v.id} value={String(v.id)}>
+                              {v.vendorName} ({v.vendorCode})
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

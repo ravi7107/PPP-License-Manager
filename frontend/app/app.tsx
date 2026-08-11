@@ -24,6 +24,7 @@ import UsersPage from '@/app/pages/directory/users-page';
 import DepartmentsPage from '@/app/pages/directory/departments-page';
 import EntitiesPage from '@/app/pages/directory/entities-page';
 import ClientsPage from '@/app/pages/directory/clients-page';
+import VendorsPage from '@/app/pages/directory/vendors-page';
 import OfficeLocationsPage from '@/app/pages/directory/office-locations-page';
 import AccessManagementPage from '@/app/pages/access/access-management-page';
 
@@ -65,6 +66,7 @@ function App() {
           <Route path="departments" element={<DepartmentsPage />} />
           <Route path="entities" element={<EntitiesPage />} />
           <Route path="clients" element={<ClientsPage />} />
+          <Route path="vendors" element={<VendorsPage />} />
           <Route path="office-locations" element={<OfficeLocationsPage />} />
           <Route path="access-management" element={<AccessManagementPage />} />
         </Route>

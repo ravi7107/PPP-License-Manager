@@ -23,7 +23,8 @@ export type ModuleKey =
   | 'officeLocations'
   | 'accessManagement'
   | 'purchaseRequisitions'
-  | 'purchaseRequisitionApprovals';
+  | 'purchaseRequisitionApprovals'
+  | 'vendors';
 
 /*
  * Default module permissions.
@@ -123,6 +124,13 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'IT Admin',
     'Team Lead',
     'Manager',
+  ],
+
+  // Vendor master list administration - same access level as the other
+  // Directory admin modules (Departments/Entities/Clients).
+  vendors: [
+    'Super Admin',
+    'IT Admin',
   ],
 
   accessManagement: [

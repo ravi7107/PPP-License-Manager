@@ -56,6 +56,9 @@ export interface PurchaseRequisition {
   companyName: string | null;
   departmentId: number;
   departmentName: string;
+  // Optional - null when no vendor has been selected for this PR yet.
+  vendorId: number | null;
+  vendorName: string | null;
   requestedByUserId: number;
   requestedByUserName: string;
   title: string;
@@ -104,6 +107,9 @@ export interface PurchaseRequisitionLineItemRequest {
 
 export interface SavePurchaseRequisitionRequest {
   departmentId: number;
+  // Optional - a PR doesn't have to have a single named vendor decided
+  // yet (e.g. still gathering quotes).
+  vendorId?: number | null;
   title: string;
   justification?: string | null;
   currency?: string | null;

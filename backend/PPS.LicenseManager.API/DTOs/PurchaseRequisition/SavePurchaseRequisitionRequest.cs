@@ -15,6 +15,11 @@ public class SavePurchaseRequisitionRequest
     [Required]
     public int DepartmentId { get; set; }
 
+    // Optional - a PR doesn't have to have a single named vendor decided
+    // yet (e.g. still gathering quotes), but when set it must reference an
+    // active Vendor and is shown on the generated PDF's vendor section.
+    public int? VendorId { get; set; }
+
     [Required]
     [MaxLength(200)]
     public string Title { get; set; } = string.Empty;

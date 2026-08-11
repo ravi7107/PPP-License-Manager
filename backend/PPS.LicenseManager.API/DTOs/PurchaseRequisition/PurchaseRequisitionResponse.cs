@@ -13,6 +13,10 @@ public class PurchaseRequisitionResponse
     public int DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
 
+    // Optional - null when no vendor has been selected for this PR yet.
+    public int? VendorId { get; set; }
+    public string? VendorName { get; set; }
+
     public int RequestedByUserId { get; set; }
     public string RequestedByUserName { get; set; } = string.Empty;
 

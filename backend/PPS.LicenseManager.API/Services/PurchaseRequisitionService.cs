@@ -77,6 +77,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.Company)
             .Include(x => x.Department)
             .Include(x => x.RequestedByUser)
+            .Include(x => x.Vendor)
             .Include(x => x.LineItems)
             .Include(x => x.Attachments)
                 .ThenInclude(x => x.UploadedByUser)
@@ -98,6 +99,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             DepartmentId = r.DepartmentId,
             DepartmentName = r.Department?.DepartmentName ?? string.Empty,
+
+            VendorId = r.VendorId,
+            VendorName = r.Vendor?.VendorName,
 
             RequestedByUserId = r.RequestedByUserId,
             RequestedByUserName = r.RequestedByUser?.FullName ?? string.Empty,
@@ -226,7 +230,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // CREATE / UPDATE DRAFT
     // =========================================================
 
-    private async Task<(Department department, decimal subtotal, decimal tax, decimal total)>
+    private async Task<(Department department, Models.Vendor? vendor, decimal subtotal, decimal tax, decimal total)>
         ValidateAndComputeAsync(
             SavePurchaseRequisitionRequest request,
             List<PurchaseRequisitionLineItem> lineItems)
@@ -237,6 +241,18 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         if (department == null || !department.IsActive)
             throw new InvalidOperationException(
                 "Selected department does not exist or is inactive.");
+
+        Models.Vendor? vendor = null;
+
+        if (request.VendorId.HasValue)
+        {
+            vendor = await _context.Vendors
+                .FirstOrDefaultAsync(x => x.Id == request.VendorId.Value);
+
+            if (vendor == null || !vendor.IsActive)
+                throw new InvalidOperationException(
+                    "Selected vendor does not exist or is inactive.");
+        }
 
         lineItems.Clear();
 
@@ -271,7 +287,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var total = subtotal + tax;
 
-        return (department, subtotal, tax, total);
+        return (department, vendor, subtotal, tax, total);
     }
 
     public async Task<PurchaseRequisitionResponse> CreateDraftAsync(
@@ -287,13 +303,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var lineItems = new List<PurchaseRequisitionLineItem>();
 
-        var (department, subtotal, tax, total) =
+        var (department, vendor, subtotal, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
 
         var record = new Models.PurchaseRequisition
         {
             CompanyId = department.CompanyId,
             DepartmentId = department.Id,
+            VendorId = vendor?.Id,
             RequestedByUserId = requestedByUserId,
             Title = request.Title,
             Justification = request.Justification,
@@ -347,11 +364,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var lineItems = new List<PurchaseRequisitionLineItem>();
 
-        var (department, subtotal, tax, total) =
+        var (department, vendor, subtotal, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
 
         record.CompanyId = department.CompanyId;
         record.DepartmentId = department.Id;
+        record.VendorId = vendor?.Id;
         record.Title = request.Title;
         record.Justification = request.Justification;
         record.Currency = string.IsNullOrWhiteSpace(request.Currency)

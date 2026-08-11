@@ -26,6 +26,7 @@ import {
 import { KpiCard } from '@/components/layout/kpi-card';
 
 import { Department, getDepartments } from '@/lib/api/departments.api';
+import { Vendor, getVendors } from '@/lib/api/vendors.api';
 
 import {
   AttachmentType,
@@ -67,6 +68,7 @@ function statusVariant(
 export default function PurchaseRequisitionsPage() {
   const [requisitions, setRequisitions] = useState<PurchaseRequisitionListItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [approverCandidates, setApproverCandidates] = useState<
     PurchaseRequisitionApproverCandidate[]
   >([]);
@@ -113,6 +115,9 @@ export default function PurchaseRequisitionsPage() {
     void getDepartments()
       .then(setDepartments)
       .catch(() => setDepartments([]));
+    void getVendors()
+      .then(setVendors)
+      .catch(() => setVendors([]));
   }, [loadList]);
 
   const filteredRequisitions = useMemo(() => {
@@ -389,6 +394,7 @@ export default function PurchaseRequisitionsPage() {
         onOpenChange={setFormOpen}
         purchaseRequisition={editingPr}
         departments={departments}
+        vendors={vendors}
         saving={saving}
         error={formError}
         onSubmit={handleFormSubmit}

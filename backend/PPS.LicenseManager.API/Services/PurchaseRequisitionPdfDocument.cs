@@ -57,20 +57,35 @@ public class PurchaseRequisitionPdfDocument : IDocument
         {
             column.Item().Row(row =>
             {
-                row.RelativeItem().Column(headerColumn =>
+                // Company letterhead (name + address). No logo image is
+                // wired in yet - once a logo file is available, add it as
+                // its own Item() above the name, e.g.:
+                //   letterheadColumn.Item().Height(40).Image(logoBytes).FitHeight();
+                row.RelativeItem().Column(letterheadColumn =>
                 {
-                    headerColumn.Item()
-                        .Text("Purchase Requisition")
-                        .FontSize(18).Bold();
+                    letterheadColumn.Item()
+                        .Text(_pr.Company?.Name ?? "-")
+                        .FontSize(14).Bold();
 
-                    headerColumn.Item()
-                        .Text(_pr.PrNumber ?? $"Draft #{_pr.Id}")
-                        .FontSize(12).FontColor(Colors.Grey.Darken2);
+                    if (!string.IsNullOrWhiteSpace(_pr.Company?.Address))
+                    {
+                        letterheadColumn.Item()
+                            .Text(_pr.Company!.Address!)
+                            .FontSize(8).FontColor(Colors.Grey.Darken1);
+                    }
                 });
 
-                row.ConstantItem(160).AlignRight().Column(statusColumn =>
+                row.ConstantItem(180).AlignRight().Column(statusColumn =>
                 {
                     statusColumn.Item().AlignRight()
+                        .Text("Purchase Requisition")
+                        .FontSize(12).Bold();
+
+                    statusColumn.Item().AlignRight()
+                        .Text(_pr.PrNumber ?? $"Draft #{_pr.Id}")
+                        .FontSize(10).FontColor(Colors.Grey.Darken2);
+
+                    statusColumn.Item().AlignRight().PaddingTop(4)
                         .Text(_pr.Status)
                         .FontSize(12).Bold()
                         .FontColor(_pr.Status == "Approved" ? Colors.Green.Darken2 : Colors.Black);
@@ -110,8 +125,8 @@ public class PurchaseRequisitionPdfDocument : IDocument
 
                 row.RelativeItem().Column(c =>
                 {
-                    c.Item().Text("Company").FontSize(9).FontColor(Colors.Grey.Darken1);
-                    c.Item().Text(_pr.Company?.Name ?? "-").Bold();
+                    c.Item().Text("Vendor").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_pr.Vendor?.VendorName ?? "-").Bold();
                 });
 
                 row.RelativeItem().Column(c =>
@@ -132,6 +147,11 @@ public class PurchaseRequisitionPdfDocument : IDocument
                     c.Item().Text("Justification").FontSize(9).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(_pr.Justification);
                 });
+            }
+
+            if (_pr.Vendor != null)
+            {
+                column.Item().Element(ComposeVendorDetails);
             }
 
             column.Item().Element(ComposeLineItemsTable);
@@ -166,6 +186,50 @@ public class PurchaseRequisitionPdfDocument : IDocument
             {
                 column.Item().Element(ComposeAttachmentsList);
             }
+        });
+    }
+
+    // Only called when _pr.Vendor is non-null (see ComposeContent) - the
+    // requester picked a vendor from the master Vendor list when creating
+    // or editing the draft (see PurchaseRequisitionService.
+    // ValidateAndComputeAsync).
+    private void ComposeVendorDetails(IContainer container)
+    {
+        var vendor = _pr.Vendor!;
+
+        container.Background(Colors.Grey.Lighten4).Padding(8).Column(column =>
+        {
+            column.Item().Text("Vendor Details").FontSize(11).Bold();
+
+            column.Item().PaddingTop(4).Row(row =>
+            {
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Vendor").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text($"{vendor.VendorName} ({vendor.VendorCode})").Bold();
+
+                    if (!string.IsNullOrWhiteSpace(vendor.Address))
+                    {
+                        c.Item().PaddingTop(2).Text(vendor.Address).FontSize(9);
+                    }
+                });
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Contact").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(vendor.ContactPerson ?? "-").Bold();
+
+                    if (!string.IsNullOrWhiteSpace(vendor.Email))
+                    {
+                        c.Item().PaddingTop(2).Text(vendor.Email).FontSize(9);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(vendor.Phone))
+                    {
+                        c.Item().Text(vendor.Phone).FontSize(9);
+                    }
+                });
+            });
         });
     }
 
