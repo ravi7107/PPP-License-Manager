@@ -13,7 +13,7 @@ import {
   Building,
   Landmark,
   Briefcase,
-  ShieldCheck, MapPinned
+  ShieldCheck, MapPinned, ClipboardList
 } from 'lucide-react';
 import { ModuleKey } from '@/lib/auth/roles';
 
@@ -30,6 +30,7 @@ export const navItems: NavItem[] = [
   { key: 'hardware', label: 'Hardware Assets', path: '/hardware', icon: HardDrive },
   { key: 'licenses', label: 'Software Licenses', path: '/licenses', icon: KeySquare },
   { key: 'allocations', label: 'Allocations', path: '/allocations', icon: Share2 },
+  { key: 'purchaseRequisitions', label: 'Purchase Requisitions', path: '/purchase-requisitions', icon: ClipboardList },
   { key: 'availability', label: 'Resource Availability', path: '/availability', icon: UserX },
   { key: 'approvals', label: 'Approvals', path: '/approvals', icon: ClipboardCheck },
   { key: 'myRequests', label: 'My Requests', path: '/my-requests', icon: FileText },

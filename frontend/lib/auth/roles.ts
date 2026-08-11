@@ -21,7 +21,8 @@ export type ModuleKey =
   | 'entities'
   | 'clients'
   | 'officeLocations'
-  | 'accessManagement';
+  | 'accessManagement'
+  | 'purchaseRequisitions';
 
 /*
  * Default module permissions.
@@ -125,6 +126,16 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
 
   accessManagement: [
     'Super Admin',
+  ],
+
+  // Any employee can raise a purchase requisition - it's not gated to a
+  // specific role the way Hardware/Licenses admin actions are.
+  purchaseRequisitions: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+    'Employee',
   ],
 };
 

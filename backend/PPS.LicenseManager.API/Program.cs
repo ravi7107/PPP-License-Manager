@@ -156,6 +156,10 @@ builder.Services.AddScoped<
     IAllocationRequestService,
     AllocationRequestService>();
 
+builder.Services.AddScoped<
+    IPurchaseRequisitionService,
+    PurchaseRequisitionService>();
+
 var app = builder.Build();
 
 // ===============================
