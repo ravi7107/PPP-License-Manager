@@ -162,6 +162,61 @@ body {
   letter-spacing: var(--tracking-normal);
 }
 
+/* ------------------------------------------------------------------------
+   Hardware page re-skin — Stripe Dashboard / Apple design aesthetic.
+   Scoped to `body.hardware-stripe-theme` (toggled on by hardware-page.tsx
+   on mount, off on unmount) rather than :root, so it only affects the
+   Hardware module and leaves every other page's theme untouched. Since
+   shadcn's Select/Dialog/DropdownMenu content renders through a Radix
+   portal onto <body>, scoping the class to body (not a wrapper div) is
+   what lets those portaled elements pick up the new theme too.
+   ---------------------------------------------------------------------- */
+body.hardware-stripe-theme {
+  --background: rgb(248 250 252); /* #F8FAFC canvas */
+  --foreground: rgb(15 23 42); /* #0F172A ink primary */
+
+  --card: rgb(255 255 255);
+  --card-foreground: rgb(15 23 42);
+  --popover: rgb(255 255 255);
+  --popover-foreground: rgb(15 23 42);
+
+  --primary: rgb(79 70 229); /* #4F46E5 deep indigo */
+  --primary-foreground: rgb(255 255 255);
+
+  --secondary: rgb(241 245 249); /* slate-100 */
+  --secondary-foreground: rgb(15 23 42);
+
+  --muted: rgb(248 250 252);
+  --muted-foreground: rgb(100 116 139); /* #64748B slate gray */
+
+  --accent: rgb(238 242 255); /* indigo-50 hover tint */
+  --accent-foreground: rgb(79 70 229);
+
+  --destructive: rgb(239 68 68);
+  --destructive-foreground: rgb(255 255 255);
+
+  --border: rgb(226 232 240); /* #E2E8F0 hairline */
+  --input: rgb(226 232 240);
+  --ring: rgb(79 70 229 / 0.35);
+
+  --radius: 1rem; /* 16px cards; buttons/inputs land ~10-12px via the existing radius scale */
+
+  --shadow-2xs: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
+  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
+  --shadow-md: 0 4px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 4px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 4px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+}
+
+body.hardware-stripe-theme .hardware-stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
 @layer base {
   :root {
     --sidebar-background: 0 0% 98%;

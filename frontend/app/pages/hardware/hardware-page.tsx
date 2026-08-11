@@ -26,7 +26,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { StatusPill } from '@/app/pages/hardware/components/status-pill';
 
 import {
   Select,
@@ -155,25 +155,6 @@ type AssetWithAssignment = AssetRecord & {
   currentSeatLabel: string | null;
 };
 
-function statusVariant(
-  status: string,
-): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'Assigned':
-      return 'default';
-
-    case 'Maintenance':
-    case 'Reserved':
-      return 'secondary';
-
-    case 'Retired':
-      return 'destructive';
-
-    default:
-      return 'outline';
-  }
-}
-
 export default function HardwarePage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
 
@@ -182,6 +163,18 @@ export default function HardwarePage() {
   const canEdit = canManage(roles);
   const isSuperAdmin = isSuperAdminRole(roles);
   const isITAdmin = isITAdminRole(roles);
+
+  // Scope the Stripe/Apple-style re-skin (index.css) to just this page —
+  // toggling a class on <body> (rather than a wrapper div) so it also
+  // reaches Select/Dialog/DropdownMenu content, which Radix portals onto
+  // <body> outside this component's own DOM subtree.
+  useEffect(() => {
+    document.body.classList.add('hardware-stripe-theme');
+
+    return () => {
+      document.body.classList.remove('hardware-stripe-theme');
+    };
+  }, []);
 
   /*
    * --------------------------------------------------------------------------
@@ -661,6 +654,40 @@ export default function HardwarePage() {
 
   /*
    * --------------------------------------------------------------------------
+   * KPI SUMMARY (Stripe-style stat strip above the table)
+   * --------------------------------------------------------------------------
+   *
+   * Derived entirely from assetsWithAssignments (the same role-scoped list
+   * the table filters from) — no extra API calls, and independent of the
+   * table's own search/status/department filters, same as the demo kit's
+   * "totals stay fixed while you filter the grid below" behavior.
+   */
+
+  const assetStats = useMemo(() => {
+    let inMaintenance = 0;
+    let assigned = 0;
+    let retired = 0;
+
+    assetsWithAssignments.forEach((a) => {
+      if (a.status === 'Maintenance' || a.status === 'Reserved') {
+        inMaintenance++;
+      } else if (a.status === 'Assigned') {
+        assigned++;
+      } else if (a.status === 'Retired') {
+        retired++;
+      }
+    });
+
+    return {
+      total: assetsWithAssignments.length,
+      assigned,
+      inMaintenance,
+      retired,
+    };
+  }, [assetsWithAssignments]);
+
+  /*
+   * --------------------------------------------------------------------------
    * SORT
    * --------------------------------------------------------------------------
    */
@@ -1137,6 +1164,44 @@ const handleSubmit = async (
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="hardware-stat-card p-4">
+          <p className="text-sm font-medium text-muted-foreground">
+            Total Assets
+          </p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
+            {assetStats.total}
+          </p>
+        </div>
+
+        <div className="hardware-stat-card p-4">
+          <p className="text-sm font-medium text-muted-foreground">
+            Assigned
+          </p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
+            {assetStats.assigned}
+          </p>
+        </div>
+
+        <div className="hardware-stat-card p-4">
+          <p className="text-sm font-medium text-muted-foreground">
+            In Maintenance
+          </p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
+            {assetStats.inMaintenance}
+          </p>
+        </div>
+
+        <div className="hardware-stat-card p-4">
+          <p className="text-sm font-medium text-muted-foreground">
+            Retired
+          </p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
+            {assetStats.retired}
+          </p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
@@ -1386,7 +1451,7 @@ const handleSubmit = async (
                       <TableRow
                         key={asset.id}
                       >
-                        <TableCell className="font-medium">
+                        <TableCell className="font-mono text-xs font-medium">
                           {asset.assetTag}
                         </TableCell>
 
@@ -1395,7 +1460,7 @@ const handleSubmit = async (
                             '—'}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
                           {asset.serialNumber ??
                             '—'}
                         </TableCell>
@@ -1426,13 +1491,7 @@ const handleSubmit = async (
                         </TableCell>
 
                         <TableCell>
-                          <Badge
-                            variant={statusVariant(
-                              asset.status,
-                            )}
-                          >
-                            {asset.status}
-                          </Badge>
+                          <StatusPill status={asset.status} />
                         </TableCell>
 
                         <TableCell className="text-right">
