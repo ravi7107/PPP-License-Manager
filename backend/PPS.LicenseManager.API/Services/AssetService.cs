@@ -17,11 +17,31 @@ public class AssetService : IAssetService
         _context = context;
     }
 
-    public async Task<IEnumerable<AssetResponse>> GetAllAsync()
+    public async Task<IEnumerable<AssetResponse>> GetAllAsync(
+        bool isEntityRestricted = false,
+        int? companyId = null)
     {
-        return await _context.Assets
+        // A Team Lead/Manager with no Entity assigned yet sees nothing,
+        // rather than falling back to every entity's hardware - see
+        // EntityScopeHelper for how (isEntityRestricted, companyId) is
+        // resolved from the caller's own JWT claims.
+        if (isEntityRestricted && companyId == null)
+        {
+            return Enumerable.Empty<AssetResponse>();
+        }
+
+        var query = _context.Assets
             .Include(a => a.Department)
-            .Where(a => a.IsActive)
+            .Where(a => a.IsActive);
+
+        if (isEntityRestricted)
+        {
+            query = query.Where(a =>
+                a.Department != null &&
+                a.Department.CompanyId == companyId);
+        }
+
+        return await query
             .Select(a => new AssetResponse
             {
                 Id = a.Id,

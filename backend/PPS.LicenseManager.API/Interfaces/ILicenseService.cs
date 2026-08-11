@@ -4,7 +4,9 @@ namespace PPS.LicenseManager.API.Interfaces;
 
 public interface ILicenseService
 {
-    Task<List<LicenseResponse>> GetAllAsync();
+    Task<List<LicenseResponse>> GetAllAsync(
+        bool isEntityRestricted = false,
+        int? companyId = null);
 
     Task<LicenseResponse?> GetByIdAsync(int id);
 

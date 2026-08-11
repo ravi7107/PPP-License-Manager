@@ -1,11 +1,17 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.Common;
 using PPS.LicenseManager.API.DTOs.LicensePurchase;
 using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
+// Was missing [Authorize] entirely - every other data-bearing controller
+// in this app requires it, and this one exposes purchase costs/vendor
+// details, so this is a straightforward fix rather than a design choice.
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class LicensePurchaseController : ControllerBase
 {
     private readonly ILicensePurchaseService _licensePurchaseService;
@@ -19,8 +25,12 @@ public class LicensePurchaseController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
         var purchases =
-            await _licensePurchaseService.GetAllAsync();
+            await _licensePurchaseService.GetAllAsync(
+                isEntityRestricted,
+                companyId);
 
         return Ok(purchases);
     }

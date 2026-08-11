@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Gauge,
   TrendingUp,
+  Landmark,
 } from 'lucide-react';
 
 import {
@@ -53,6 +54,7 @@ import {
 
 import { AppRole, canAccessModule, canManage } from '@/lib/auth/roles';
 import { getFirstAccessiblePath } from '@/lib/nav-config';
+import { useAuth } from '@/lib/auth/auth-context';
 
 import {
   getAllocationRequests,
@@ -138,6 +140,14 @@ export default function DashboardPage() {
     roles: AppRole[];
     accessOverride: Record<string, AppRole[]> | null;
   }>();
+
+  // Team Lead/Manager accounts only see their own Entity's hardware and
+  // license data (enforced server-side - see EntityScopeHelper in the
+  // backend). Surfacing the entity name here just makes that visible
+  // instead of leaving a TL/Manager wondering why counts look smaller
+  // than a colleague's.
+  const { user } = useAuth();
+  const companyName = user?.companyName;
 
   // This dashboard is scoped to Team Lead/Manager plus the admin roles -
   // an Employee landing on "/" (the index route) gets sent to whatever
@@ -401,6 +411,13 @@ export default function DashboardPage() {
               <Badge variant="secondary">
                 IT Operations
               </Badge>
+
+              {companyName && (
+                <Badge variant="outline" className="gap-1.5">
+                  <Landmark className="h-3 w-3" />
+                  {companyName}
+                </Badge>
+              )}
 
             </div>
 

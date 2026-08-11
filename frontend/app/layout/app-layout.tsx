@@ -66,6 +66,7 @@ export function AppLayout() {
           userName={userName}
           roles={roles}
           pageTitle={currentItem?.label ?? 'Dashboard'}
+          companyName={user?.companyName}
         />
 
         <div className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6">

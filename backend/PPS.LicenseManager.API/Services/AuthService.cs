@@ -93,7 +93,9 @@ public class AuthService : IAuthService
             Expiration = DateTime.UtcNow.AddMinutes(60),
             FullName = user.FullName,
             Email = user.Email,
-            Role = user.Role?.Name ?? string.Empty
+            Role = user.Role?.Name ?? string.Empty,
+            CompanyId = user.CompanyId,
+            CompanyName = user.Company?.Name
         };
 
         Console.WriteLine(

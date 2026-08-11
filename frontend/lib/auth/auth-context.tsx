@@ -14,6 +14,8 @@ interface User {
   fullName: string;
   email: string;
   role: string;
+  companyId: number | null;
+  companyName: string | null;
 }
 
 interface AuthContextType {
@@ -63,6 +65,8 @@ export function AuthProvider({
       fullName: response.fullName,
       email: response.email,
       role: response.role,
+      companyId: response.companyId,
+      companyName: response.companyName,
     };
 
     AuthStorage.set(

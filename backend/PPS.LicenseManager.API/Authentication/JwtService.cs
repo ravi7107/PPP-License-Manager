@@ -27,7 +27,7 @@ public class JwtService : IJwtService
             key,
             SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Email),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
@@ -35,6 +35,16 @@ public class JwtService : IJwtService
             new Claim(ClaimTypes.Role, user.Role?.Name ?? string.Empty),
             new Claim("UserId", user.Id.ToString())
         };
+
+        // Drives Entity-scoped data visibility (hardware/license
+        // endpoints) for Team Lead/Manager - see EntityScopeHelper. Left
+        // out entirely for users with no Entity assigned, rather than
+        // encoding a placeholder, so "no claim" is the only way to
+        // represent that (EntityScopeHelper treats it as CompanyId=null).
+        if (user.CompanyId.HasValue)
+        {
+            claims.Add(new Claim("CompanyId", user.CompanyId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],

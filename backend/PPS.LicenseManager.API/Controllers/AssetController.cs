@@ -21,7 +21,12 @@ public class AssetController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var assets = await _assetService.GetAllAsync();
+        var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
+        var assets = await _assetService.GetAllAsync(
+            isEntityRestricted,
+            companyId);
+
         return Ok(assets);
     }
 [HttpGet("list")]

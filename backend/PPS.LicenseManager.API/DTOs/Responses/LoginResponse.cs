@@ -13,4 +13,11 @@ public class LoginResponse
     public string Email { get; set; } = string.Empty;
 
     public string Role { get; set; } = string.Empty;
+
+    // Null for users with no Entity assigned yet (e.g. system/admin
+    // accounts) - the frontend uses this to show which entity a
+    // Team Lead/Manager's data is scoped to.
+    public int? CompanyId { get; set; }
+
+    public string? CompanyName { get; set; }
 }

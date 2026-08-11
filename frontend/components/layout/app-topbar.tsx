@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, Landmark } from 'lucide-react';
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
@@ -35,12 +35,14 @@ interface AppTopbarProps {
   userName: string | undefined;
   roles: AppRole[];
   pageTitle: string;
+  companyName?: string | null;
 }
 
 export function AppTopbar({
   userName,
   roles,
   pageTitle,
+  companyName,
 }: AppTopbarProps) {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -81,6 +83,7 @@ export function AppTopbar({
 
               <span className="text-[11px] text-muted-foreground">
                 {roles[0] ?? 'No role'}
+                {companyName ? ` · ${companyName}` : ''}
               </span>
             </div>
           </DropdownMenuTrigger>
@@ -112,6 +115,13 @@ export function AppTopbar({
                 </span>
               )}
             </div>
+
+            {companyName && (
+              <div className="flex items-center gap-1.5 px-2 pb-1.5 text-xs text-muted-foreground">
+                <Landmark className="h-3.5 w-3.5" />
+                Entity: {companyName}
+              </div>
+            )}
 
             <DropdownMenuSeparator />
 

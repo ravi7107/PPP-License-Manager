@@ -1,11 +1,15 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.Common;
 using PPS.LicenseManager.API.DTOs.License;
 using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
+// Was missing [Authorize] entirely, same gap as LicensePurchaseController.
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class LicenseController : ControllerBase
 {
     private readonly ILicenseService _licenseService;
@@ -18,7 +22,12 @@ public class LicenseController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var licenses = await _licenseService.GetAllAsync();
+        var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
+        var licenses = await _licenseService.GetAllAsync(
+            isEntityRestricted,
+            companyId);
+
         return Ok(licenses);
     }
 

@@ -15,11 +15,34 @@ public class LicenseService : ILicenseService
         _context = context;
     }
 
-    public async Task<List<LicenseResponse>> GetAllAsync()
+    public async Task<List<LicenseResponse>> GetAllAsync(
+        bool isEntityRestricted = false,
+        int? companyId = null)
     {
-        return await _context.Licenses
+        // A Team Lead/Manager with no Entity assigned yet sees nothing.
+        if (isEntityRestricted && companyId == null)
+        {
+            return new List<LicenseResponse>();
+        }
+
+        var query = _context.Licenses
             .Include(l => l.Software)
             .Include(l => l.LicensePurchase)
+            .AsQueryable();
+
+        if (isEntityRestricted)
+        {
+            // Same rule as LicensePurchaseService: a license with no
+            // purchase batch link at all, or a purchase batch with no
+            // CompanyId, isn't confirmed to belong to a different
+            // entity, so it stays visible rather than being hidden.
+            query = query.Where(l =>
+                l.LicensePurchase == null ||
+                l.LicensePurchase.CompanyId == null ||
+                l.LicensePurchase.CompanyId == companyId);
+        }
+
+        return await query
             .Select(l => new LicenseResponse
             {
                 Id = l.Id,

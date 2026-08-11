@@ -15,10 +15,29 @@ public class LicensePurchaseService : ILicensePurchaseService
         _context = context;
     }
 
-    public async Task<List<LicensePurchaseResponse>> GetAllAsync()
+    public async Task<List<LicensePurchaseResponse>> GetAllAsync(
+        bool isEntityRestricted = false,
+        int? companyId = null)
     {
-        return await _context.LicensePurchases
-            .AsNoTracking()
+        // A Team Lead/Manager with no Entity assigned yet sees nothing.
+        if (isEntityRestricted && companyId == null)
+        {
+            return new List<LicensePurchaseResponse>();
+        }
+
+        var query = _context.LicensePurchases.AsNoTracking();
+
+        if (isEntityRestricted)
+        {
+            // Own entity's purchases, plus purchases with no CompanyId
+            // at all (organization-wide, or client-billed work that
+            // isn't tied to any one PPS entity) - only purchases
+            // confirmed to belong to a DIFFERENT entity are hidden.
+            query = query.Where(p =>
+                p.CompanyId == null || p.CompanyId == companyId);
+        }
+
+        return await query
             .Select(p => new LicensePurchaseResponse
             {
                 Id = p.Id,

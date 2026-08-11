@@ -4,7 +4,9 @@ namespace PPS.LicenseManager.API.Interfaces;
 
 public interface IAssetService
 {
-    Task<IEnumerable<AssetResponse>> GetAllAsync();
+    Task<IEnumerable<AssetResponse>> GetAllAsync(
+        bool isEntityRestricted = false,
+        int? companyId = null);
     Task<AssetResponse?> GetByIdAsync(int id);
     Task<AssetResponse> CreateAsync(CreateAssetRequest request);
     Task<AssetResponse?> UpdateAsync(int id, UpdateAssetRequest request);
