@@ -27,6 +27,11 @@ services:
       Jwt__Issuer: PPS.LicenseManager.API
       Jwt__Audience: PPS.LicenseManager.Client
       Jwt__ExpiryInMinutes: "60"
+      # Base URL secure purchase-requisition approval links are built
+      # from (e.g. "{this}/pr-approval/{token}") - defaults to this
+      # deployment's current address, but can be overridden without a
+      # code change via APP_PUBLIC_BASE_URL in .env if the domain changes.
+      App__PublicBaseUrl: ${APP_PUBLIC_BASE_URL:-http://98.93.56.145:3000}
     depends_on:
       postgres:
         condition: service_healthy

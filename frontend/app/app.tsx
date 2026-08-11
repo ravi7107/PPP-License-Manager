@@ -14,6 +14,7 @@ import ReportsPage from '@/app/pages/reports/reports-page';
 import AllocationsPage from '@/app/pages/allocations/allocations-page';
 import PurchaseRequisitionsPage from '@/app/pages/purchase-requisitions/purchase-requisitions-page';
 import PendingApprovalsPage from '@/app/pages/purchase-requisitions/pending-approvals-page';
+import PrPublicApprovalPage from '@/app/pages/purchase-requisitions/pr-public-approval-page';
 import AvailabilityPage from '@/app/pages/availability/availability-page';
 import ApprovalsPage from '@/app/pages/requests/approvals-page';
 import MyRequestsPage from '@/app/pages/requests/my-requests-page';
@@ -32,6 +33,13 @@ function App() {
       <Routes>
 
         <Route path="/login" element={<LoginPage />} />
+
+        {/*
+          Unauthenticated purchase requisition approval landing page,
+          reached from an email link - deliberately outside
+          ProtectedRoute (see pr-public-approval-page.tsx).
+        */}
+        <Route path="/pr-approval/:token" element={<PrPublicApprovalPage />} />
 
         <Route
           path="/"

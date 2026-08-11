@@ -55,4 +55,16 @@ public interface IPurchaseRequisitionService
         int id,
         DecidePurchaseRequisitionStepRequest request,
         int decidingUserId);
+
+
+    // =========================================================
+    // SECURE EMAIL APPROVAL LINKS (Phase 5)
+    // =========================================================
+
+    Task<PublicPurchaseRequisitionApprovalResponse?> GetPublicApprovalViewAsync(
+        string rawToken);
+
+    Task<PublicPurchaseRequisitionApprovalResponse?> DecideStepByTokenAsync(
+        string rawToken,
+        DecidePurchaseRequisitionStepRequest request);
 }

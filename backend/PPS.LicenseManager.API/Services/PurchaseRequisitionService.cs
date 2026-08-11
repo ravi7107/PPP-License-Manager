@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
@@ -33,11 +35,34 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         "VendorQuotation", "Supporting"
     };
 
-    private readonly ApplicationDbContext _context;
+    // How long a secure email approval link stays usable before the
+    // approver has to fall back to signing in and using the Pending
+    // Approvals page instead.
+    private const int ApprovalTokenValidityDays = 14;
 
-    public PurchaseRequisitionService(ApplicationDbContext context)
+    private readonly ApplicationDbContext _context;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<PurchaseRequisitionService> _logger;
+    private readonly string _publicBaseUrl;
+
+    public PurchaseRequisitionService(
+        ApplicationDbContext context,
+        IEmailService emailService,
+        IConfiguration configuration,
+        ILogger<PurchaseRequisitionService> logger)
     {
         _context = context;
+        _emailService = emailService;
+        _logger = logger;
+
+        // Base URL the frontend is reachable at, used to build secure
+        // approval links embedded in emails (e.g. "{base}/pr-approval/
+        // {token}"). Configurable via App:PublicBaseUrl (or the
+        // App__PublicBaseUrl environment variable in docker-compose) so
+        // it can be updated without another code change if the domain
+        // changes.
+        _publicBaseUrl = (configuration["App:PublicBaseUrl"]
+            ?? "http://localhost:5173").TrimEnd('/');
     }
 
 
@@ -596,6 +621,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var record = await _context.PurchaseRequisitions
             .Include(x => x.Company)
             .Include(x => x.LineItems)
+            .Include(x => x.RequestedByUser)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (record == null)
@@ -644,6 +670,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
+        var createdSteps = new List<PurchaseRequisitionApprovalStep>();
+
         try
         {
             var prNumber = await GenerateUniquePrNumberAsync(record);
@@ -657,15 +685,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             foreach (var stage in stages)
             {
-                _context.PurchaseRequisitionApprovalSteps.Add(
-                    new PurchaseRequisitionApprovalStep
-                    {
-                        PurchaseRequisitionId = record.Id,
-                        StepOrder = stage.StepOrder,
-                        AssignedApproverUserId = stage.ApproverUserId,
-                        Status = "Pending",
-                        CreatedAt = DateTime.UtcNow
-                    });
+                var approver = approvers.First(u => u.Id == stage.ApproverUserId);
+
+                var step = new PurchaseRequisitionApprovalStep
+                {
+                    PurchaseRequisitionId = record.Id,
+                    StepOrder = stage.StepOrder,
+                    AssignedApproverUserId = stage.ApproverUserId,
+                    AssignedApproverUser = approver,
+                    Status = "Pending",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.PurchaseRequisitionApprovalSteps.Add(step);
+                createdSteps.Add(step);
             }
 
             AddAuditLog(record.Id, "Submitted", requestedByUserId,
@@ -680,6 +713,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new InvalidOperationException(
                 "Could not generate a unique PR number - please try submitting again.");
         }
+
+        // Issue a secure approval token and email the first-stage approver
+        // now that the submit transaction has committed. A failure here
+        // (e.g. a future real email provider being unreachable) must not
+        // undo the successful submit - IssueTokenAndSendApprovalRequestEmailAsync
+        // swallows and logs its own errors.
+        var firstStep = createdSteps.First(s => s.StepOrder == record.CurrentApprovalStepOrder);
+        await IssueTokenAndSendApprovalRequestEmailAsync(record, firstStep);
 
         return await GetByIdAsync(record.Id, requestedByUserId, isPrivileged: false);
     }
@@ -715,14 +756,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         int purchaseRequisitionId,
         string action,
         int? performedByUserId,
-        string? details = null)
+        string? details = null,
+        string performedVia = "WebApp")
     {
         _context.PurchaseRequisitionAuditLogs.Add(new PurchaseRequisitionAuditLog
         {
             PurchaseRequisitionId = purchaseRequisitionId,
             Action = action,
             PerformedByUserId = performedByUserId,
-            PerformedVia = "WebApp",
+            PerformedVia = performedVia,
             Details = details,
             CreatedAt = DateTime.UtcNow
         });
@@ -807,13 +849,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     /*
      * Decides the step matching CurrentApprovalStepOrder - never a
      * client-supplied step id, so there's no way to decide a step that
-     * isn't currently "live". A rejection at any stage immediately
-     * rejects the whole requisition and flips every still-Pending future
-     * stage to Skipped (see PurchaseRequisitionApprovalStep's model
-     * comment); an approval either advances CurrentApprovalStepOrder to
-     * the next stage, or - on the final stage - marks the whole
-     * requisition Approved. This method intentionally does NOT generate
-     * a PDF or notify Finance on final approval - that's Phase 6/7.
+     * isn't currently "live" - for the authenticated dashboard flow. Runs
+     * this requisition's own ownership/status pre-checks, then hands off
+     * to DecideStepCoreAsync (below) for the actual state transition,
+     * which is shared with the secure email-link flow.
      */
     public async Task<PurchaseRequisitionResponse?> DecideStepAsync(
         int id,
@@ -822,6 +861,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     {
         var record = await _context.PurchaseRequisitions
             .Include(x => x.ApprovalSteps)
+                .ThenInclude(s => s.AssignedApproverUser)
             .Include(x => x.RequestedByUser)
             .FirstOrDefaultAsync(x => x.Id == id);
 
@@ -851,9 +891,43 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new InvalidOperationException(
                 "Remarks are required when rejecting a purchase requisition.");
 
+        await DecideStepCoreAsync(
+            record, currentStep, request.Approve, request.Remarks,
+            decidingUserId, "WebApp");
+
+        return await GetByIdAsync(record.Id, decidingUserId, isPrivileged: false);
+    }
+
+    /*
+     * Decides the step matching CurrentApprovalStepOrder - never a
+     * client-supplied step id, so there's no way to decide a step that
+     * isn't currently "live". A rejection at any stage immediately
+     * rejects the whole requisition and flips every still-Pending future
+     * stage to Skipped (see PurchaseRequisitionApprovalStep's model
+     * comment); an approval either advances CurrentApprovalStepOrder to
+     * the next stage, or - on the final stage - marks the whole
+     * requisition Approved. This method intentionally does NOT generate
+     * a PDF or notify Finance on final approval - that's Phase 6/7.
+     *
+     * Shared by both decision entry points - the authenticated dashboard
+     * flow (DecideStepAsync) and the secure email-link flow
+     * (DecideStepByTokenAsync) - so the state machine, in-app
+     * notification, and outbound email only exist in one place. Callers
+     * are responsible for their own pre-checks (ownership/authorization,
+     * PR/step status, remarks-required-on-reject); this method assumes
+     * the decision is already validated and just applies it.
+     */
+    private async Task DecideStepCoreAsync(
+        Models.PurchaseRequisition record,
+        PurchaseRequisitionApprovalStep currentStep,
+        bool approve,
+        string? remarks,
+        int decidingUserId,
+        string performedVia)
+    {
         var now = DateTime.UtcNow;
         currentStep.DecidedAt = now;
-        currentStep.Remarks = request.Remarks;
+        currentStep.Remarks = remarks;
 
         int notifyUserId;
         string notifyType;
@@ -862,7 +936,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var prLabel = record.PrNumber ?? $"#{record.Id}";
 
-        if (request.Approve)
+        PurchaseRequisitionApprovalStep? stepToEmailForApproval = null;
+        var sendRequesterOutcomeEmail = false;
+
+        if (approve)
         {
             currentStep.Status = "Approved";
 
@@ -883,13 +960,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 record.UpdatedAt = now;
 
                 AddAuditLog(record.Id, "FullyApproved", decidingUserId,
-                    $"Stage {currentStep.StepOrder} approved - all stages complete.");
+                    $"Stage {currentStep.StepOrder} approved - all stages complete.",
+                    performedVia);
 
                 notifyUserId = record.RequestedByUserId;
                 notifyType = "PurchaseRequisitionApproved";
                 notifyTitle = "Purchase requisition approved";
                 notifyMessage =
                     $"Your purchase requisition {prLabel} ({record.Title}) has been fully approved.";
+                sendRequesterOutcomeEmail = true;
             }
             else
             {
@@ -897,13 +976,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 record.UpdatedAt = now;
 
                 AddAuditLog(record.Id, "StepApproved", decidingUserId,
-                    $"Stage {currentStep.StepOrder} approved - advanced to stage {nextStep.StepOrder}.");
+                    $"Stage {currentStep.StepOrder} approved - advanced to stage {nextStep.StepOrder}.",
+                    performedVia);
 
                 notifyUserId = nextStep.AssignedApproverUserId;
                 notifyType = "PurchaseRequisitionApprovalNeeded";
                 notifyTitle = "Purchase requisition needs your approval";
                 notifyMessage =
                     $"{record.RequestedByUser?.FullName ?? "A user"} is waiting on your approval for {prLabel} ({record.Title}).";
+                stepToEmailForApproval = nextStep;
             }
         }
         else
@@ -921,13 +1002,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             }
 
             AddAuditLog(record.Id, "StepRejected", decidingUserId,
-                $"Stage {currentStep.StepOrder} rejected: {request.Remarks}");
+                $"Stage {currentStep.StepOrder} rejected: {remarks}",
+                performedVia);
 
             notifyUserId = record.RequestedByUserId;
             notifyType = "PurchaseRequisitionRejected";
             notifyTitle = "Purchase requisition rejected";
             notifyMessage =
-                $"Your purchase requisition {prLabel} ({record.Title}) was rejected at stage {currentStep.StepOrder}: {request.Remarks}";
+                $"Your purchase requisition {prLabel} ({record.Title}) was rejected at stage {currentStep.StepOrder}: {remarks}";
+            sendRequesterOutcomeEmail = true;
         }
 
         await _context.SaveChangesAsync();
@@ -935,7 +1018,286 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         AddNotification(notifyUserId, notifyType, notifyTitle, notifyMessage, record.Id);
         await _context.SaveChangesAsync();
 
-        return await GetByIdAsync(record.Id, decidingUserId, isPrivileged: false);
+        // Email is best-effort and must never undo a decision that's
+        // already been committed to the database - both helpers below
+        // catch and log their own failures rather than throwing.
+        if (stepToEmailForApproval != null)
+        {
+            await IssueTokenAndSendApprovalRequestEmailAsync(record, stepToEmailForApproval);
+        }
+        else if (sendRequesterOutcomeEmail)
+        {
+            await SendOutcomeEmailAsync(record, approve, remarks);
+        }
+    }
+
+
+    // =========================================================
+    // SECURE EMAIL APPROVAL LINKS (Phase 5)
+    // =========================================================
+
+    /*
+     * Read-only lookup for the unauthenticated landing page - never
+     * throws for an expired/consumed/inactive token and never mutates
+     * anything, so a corporate email security scanner pre-fetching the
+     * link via GET can't accidentally decide the step (see
+     * PublicPurchaseRequisitionApprovalResponse's comment). Only returns
+     * null when the token itself doesn't exist at all.
+     */
+    public async Task<PublicPurchaseRequisitionApprovalResponse?> GetPublicApprovalViewAsync(
+        string rawToken)
+    {
+        var tokenEntity = await FindTokenAsync(rawToken);
+
+        return tokenEntity == null ? null : MapPublicView(tokenEntity);
+    }
+
+    /*
+     * Decides a step via a secure, single-use email link instead of an
+     * authenticated session - the token itself (hashed, matched against
+     * PurchaseRequisitionApprovalTokens) stands in for "who is allowed to
+     * decide this step", since GetPublicApprovalViewAsync's caller was
+     * never required to log in. Delegates to the same DecideStepCoreAsync
+     * state machine as the dashboard flow so both paths stay in sync.
+     */
+    public async Task<PublicPurchaseRequisitionApprovalResponse?> DecideStepByTokenAsync(
+        string rawToken,
+        DecidePurchaseRequisitionStepRequest request)
+    {
+        var tokenEntity = await FindTokenAsync(rawToken);
+
+        if (tokenEntity == null)
+            return null;
+
+        var step = tokenEntity.ApprovalStep;
+        var record = step.PurchaseRequisition;
+
+        if (tokenEntity.ConsumedAt != null)
+            throw new InvalidOperationException(
+                "This approval link has already been used.");
+
+        if (tokenEntity.ExpiresAt < DateTime.UtcNow)
+            throw new InvalidOperationException(
+                "This approval link has expired. Please ask the requester for a new one, " +
+                "or sign in and use the Pending Approvals page instead.");
+
+        if (record.Status != "InApproval")
+            throw new InvalidOperationException(
+                "This purchase requisition is no longer awaiting approval.");
+
+        if (step.StepOrder != record.CurrentApprovalStepOrder)
+            throw new InvalidOperationException(
+                "This approval stage is no longer active.");
+
+        if (step.Status != "Pending")
+            throw new InvalidOperationException(
+                "This approval stage has already been decided.");
+
+        if (!request.Approve && string.IsNullOrWhiteSpace(request.Remarks))
+            throw new InvalidOperationException(
+                "Remarks are required when rejecting a purchase requisition.");
+
+        tokenEntity.ConsumedAt = DateTime.UtcNow;
+
+        await DecideStepCoreAsync(
+            record, step, request.Approve, request.Remarks,
+            step.AssignedApproverUserId, "Email");
+
+        return MapPublicView(tokenEntity);
+    }
+
+    private async Task<PurchaseRequisitionApprovalToken?> FindTokenAsync(string rawToken)
+    {
+        if (string.IsNullOrWhiteSpace(rawToken))
+            return null;
+
+        var tokenHash = HashToken(rawToken);
+
+        return await _context.PurchaseRequisitionApprovalTokens
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.AssignedApproverUser)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.Department)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.RequestedByUser)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.LineItems)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.ApprovalSteps)
+                        .ThenInclude(s => s.AssignedApproverUser)
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+    }
+
+    private static PublicPurchaseRequisitionApprovalResponse MapPublicView(
+        PurchaseRequisitionApprovalToken tokenEntity)
+    {
+        var step = tokenEntity.ApprovalStep;
+        var record = step.PurchaseRequisition;
+
+        return new PublicPurchaseRequisitionApprovalResponse
+        {
+            PrNumber = record.PrNumber,
+            Title = record.Title,
+            Justification = record.Justification,
+            DepartmentName = record.Department?.DepartmentName ?? string.Empty,
+            RequestedByUserName = record.RequestedByUser?.FullName ?? string.Empty,
+
+            Currency = record.Currency,
+            SubtotalAmount = record.SubtotalAmount,
+            TaxAmount = record.TaxAmount,
+            TotalAmount = record.TotalAmount,
+
+            StepOrder = step.StepOrder,
+            RequiredApprovalStageCount = record.RequiredApprovalStageCount,
+            ApproverName = step.AssignedApproverUser?.FullName ?? string.Empty,
+
+            PurchaseRequisitionStatus = record.Status,
+            StepStatus = step.Status,
+            IsDecided = tokenEntity.ConsumedAt != null || step.Status != "Pending",
+            IsExpired = tokenEntity.ExpiresAt < DateTime.UtcNow,
+
+            LineItems = record.LineItems
+                .OrderBy(li => li.LineNumber)
+                .Select(li => new PurchaseRequisitionLineItemResponse
+                {
+                    Id = li.Id,
+                    LineNumber = li.LineNumber,
+                    ItemDescription = li.ItemDescription,
+                    Category = li.Category,
+                    Quantity = li.Quantity,
+                    UnitOfMeasure = li.UnitOfMeasure,
+                    UnitPrice = li.UnitPrice,
+                    LineTotal = li.LineTotal,
+                    Notes = li.Notes
+                })
+                .ToList()
+        };
+    }
+
+    /*
+     * Issues a fresh single-use token for the given (now-current) step
+     * and emails its assigned approver a secure link. Called once when a
+     * PR is first submitted (for stage 1) and again every time approval
+     * advances to a new stage - never for a stage that isn't current, so
+     * there's at most one live, unconsumed token per requisition at a
+     * time even though a step could theoretically accumulate more than
+     * one Tokens row across retries.
+     */
+    private async Task IssueTokenAndSendApprovalRequestEmailAsync(
+        Models.PurchaseRequisition record,
+        PurchaseRequisitionApprovalStep step)
+    {
+        if (step.AssignedApproverUser == null)
+        {
+            _logger.LogWarning(
+                "Skipped issuing an approval email for purchase requisition {PurchaseRequisitionId} " +
+                "stage {StepOrder} - the assigned approver was not loaded.",
+                record.Id, step.StepOrder);
+            return;
+        }
+
+        try
+        {
+            var rawToken = GenerateSecureToken();
+
+            _context.PurchaseRequisitionApprovalTokens.Add(new PurchaseRequisitionApprovalToken
+            {
+                PurchaseRequisitionApprovalStepId = step.Id,
+                TokenHash = HashToken(rawToken),
+                ExpiresAt = DateTime.UtcNow.AddDays(ApprovalTokenValidityDays),
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+
+            var link = $"{_publicBaseUrl}/pr-approval/{rawToken}";
+            var prLabel = record.PrNumber ?? $"#{record.Id}";
+            var approver = step.AssignedApproverUser;
+
+            var subject = $"Approval needed: Purchase Requisition {prLabel}";
+            var body =
+                $"<p>Hi {System.Net.WebUtility.HtmlEncode(approver.FullName)},</p>" +
+                $"<p>{System.Net.WebUtility.HtmlEncode(record.RequestedByUser?.FullName ?? "A colleague")} " +
+                $"has submitted purchase requisition <strong>{System.Net.WebUtility.HtmlEncode(prLabel)}</strong> " +
+                $"(\"{System.Net.WebUtility.HtmlEncode(record.Title)}\") for " +
+                $"{System.Net.WebUtility.HtmlEncode(record.Currency)} {record.TotalAmount:0.00}, and it is " +
+                $"waiting on your decision (stage {step.StepOrder} of {record.RequiredApprovalStageCount}).</p>" +
+                $"<p><a href=\"{link}\">Review and decide on this purchase requisition</a></p>" +
+                $"<p>This link is valid for {ApprovalTokenValidityDays} days and can only be used once. " +
+                "If it has expired, sign in to the app and check your Pending Approvals page instead.</p>";
+
+            await _emailService.SendAsync(approver.Email, approver.FullName, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to issue an approval token or send the approval-request email for " +
+                "purchase requisition {PurchaseRequisitionId}, stage {StepOrder}.",
+                record.Id, step.StepOrder);
+        }
+    }
+
+    private async Task SendOutcomeEmailAsync(
+        Models.PurchaseRequisition record,
+        bool approved,
+        string? remarks)
+    {
+        if (record.RequestedByUser == null)
+            return;
+
+        try
+        {
+            var prLabel = record.PrNumber ?? $"#{record.Id}";
+            var requester = record.RequestedByUser;
+
+            var subject = approved
+                ? $"Approved: Purchase Requisition {prLabel}"
+                : $"Rejected: Purchase Requisition {prLabel}";
+
+            var outcomeSentence = approved
+                ? "has been fully approved."
+                : "was rejected" +
+                  (string.IsNullOrWhiteSpace(remarks)
+                      ? "."
+                      : $": {System.Net.WebUtility.HtmlEncode(remarks)}");
+
+            var body =
+                $"<p>Hi {System.Net.WebUtility.HtmlEncode(requester.FullName)},</p>" +
+                $"<p>Your purchase requisition <strong>{System.Net.WebUtility.HtmlEncode(prLabel)}</strong> " +
+                $"(\"{System.Net.WebUtility.HtmlEncode(record.Title)}\") {outcomeSentence}</p>";
+
+            await _emailService.SendAsync(requester.Email, requester.FullName, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send the decision-outcome email for purchase requisition {PurchaseRequisitionId}.",
+                record.Id);
+        }
+    }
+
+    private static string GenerateSecureToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+
+        // URL-safe base64 (RFC 4648 section 5), no padding - drops
+        // straight into a path segment ("/pr-approval/{token}") with no
+        // extra encoding step.
+        return Convert.ToBase64String(bytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
+
+    private static string HashToken(string rawToken)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
+
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private void AddNotification(

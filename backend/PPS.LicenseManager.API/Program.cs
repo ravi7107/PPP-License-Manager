@@ -160,6 +160,12 @@ builder.Services.AddScoped<
     IPurchaseRequisitionService,
     PurchaseRequisitionService>();
 
+// Log-only stub until real SMTP/API credentials are provided - see
+// LogOnlyEmailService's comment. Swap this one registration for a real
+// implementation when they're available; every caller already depends on
+// IEmailService, not this class.
+builder.Services.AddScoped<IEmailService, LogOnlyEmailService>();
+
 var app = builder.Build();
 
 // ===============================
