@@ -182,6 +182,7 @@ export default function PrPublicApprovalPage() {
                       <TableHead>Description</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead className="text-right">Qty</TableHead>
+                      <TableHead>Unit</TableHead>
                       <TableHead className="text-right">Unit Price</TableHead>
                       <TableHead className="text-right">Line Total</TableHead>
                     </TableRow>
@@ -191,13 +192,9 @@ export default function PrPublicApprovalPage() {
                       <TableRow key={li.id}>
                         <TableCell>{li.itemDescription}</TableCell>
                         <TableCell>{li.category ?? '—'}</TableCell>
-                        <TableCell className="text-right">
-                          {li.quantity}
-                          {li.unitOfMeasure ? (
-                            <span className="ml-1.5 text-muted-foreground">
-                              {li.unitOfMeasure}
-                            </span>
-                          ) : null}
+                        <TableCell className="text-right">{li.quantity}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {li.unitOfMeasure ?? '—'}
                         </TableCell>
                         <TableCell className="text-right">
                           {li.unitPrice.toFixed(2)}

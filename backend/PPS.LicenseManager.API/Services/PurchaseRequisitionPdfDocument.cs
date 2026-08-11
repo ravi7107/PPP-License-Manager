@@ -275,7 +275,8 @@ public class PurchaseRequisitionPdfDocument : IDocument
                     columns.ConstantColumn(25);
                     columns.RelativeColumn(3);
                     columns.RelativeColumn(1.5f);
-                    columns.RelativeColumn();
+                    columns.RelativeColumn(0.8f);
+                    columns.RelativeColumn(0.8f);
                     columns.RelativeColumn();
                     columns.RelativeColumn();
                 });
@@ -286,6 +287,7 @@ public class PurchaseRequisitionPdfDocument : IDocument
                     header.Cell().Element(HeaderCellStyle).Text("Description");
                     header.Cell().Element(HeaderCellStyle).Text("Category");
                     header.Cell().Element(HeaderCellStyle).AlignRight().Text("Qty");
+                    header.Cell().Element(HeaderCellStyle).Text("Unit");
                     header.Cell().Element(HeaderCellStyle).AlignRight().Text("Unit Price");
                     header.Cell().Element(HeaderCellStyle).AlignRight().Text("Line Total");
 
@@ -308,8 +310,15 @@ public class PurchaseRequisitionPdfDocument : IDocument
                     // ":0.##" drops the trailing zeros for whole numbers
                     // while still showing up to 2 decimals for a
                     // fractional quantity (e.g. 2.5).
+                    //
+                    // Unit is its own column (not appended after the
+                    // quantity in the same cell) - a quantity of 1 with a
+                    // numeric-looking unit like "2" would otherwise read
+                    // as "1 2", easy to misread as "12".
                     table.Cell().Element(BodyCellStyle).AlignRight()
-                        .Text($"{item.Quantity:0.##} {item.UnitOfMeasure}".Trim());
+                        .Text($"{item.Quantity:0.##}");
+                    table.Cell().Element(BodyCellStyle)
+                        .Text(item.UnitOfMeasure ?? "-");
                     table.Cell().Element(BodyCellStyle).AlignRight().Text($"{item.UnitPrice:0.00}");
                     table.Cell().Element(BodyCellStyle).AlignRight().Text($"{item.LineTotal:0.00}");
 
