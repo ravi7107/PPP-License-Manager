@@ -235,7 +235,12 @@ export function PrDetailDialog({
                   <TableCell>{li.itemDescription}</TableCell>
                   <TableCell>{li.category ?? '—'}</TableCell>
                   <TableCell className="text-right">
-                    {li.quantity} {li.unitOfMeasure ?? ''}
+                    {li.quantity}
+                    {li.unitOfMeasure ? (
+                      <span className="ml-1.5 text-muted-foreground">
+                        {li.unitOfMeasure}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-right">
                     {li.unitPrice.toFixed(2)}
