@@ -20,4 +20,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- PR PDF letterhead logo (see PurchaseRequisitionPdfDocument.ComposeHeader) -
+         embedded directly into the assembly so it's always available at
+         runtime, with no dependency on a volume mount or wwwroot path. -->
+    <EmbeddedResource Include="Assets\pps-logo.jpg" />
+  </ItemGroup>
+
 </Project>

@@ -1,3 +1,4 @@
+using System.Reflection;
 using QuestPDF.Drawing;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -25,6 +26,27 @@ namespace PPS.LicenseManager.API.Services;
 public class PurchaseRequisitionPdfDocument : IDocument
 {
     private readonly Models.PurchaseRequisition _pr;
+
+    // Company/Entity letterhead logo for the PDF header - embedded as an
+    // assembly resource (see PPS.LicenseManager.API.csproj) rather than
+    // read from disk, so it doesn't depend on wwwroot or a volume mount
+    // being present. Loaded once and reused for every PDF.
+    private static readonly byte[] LogoBytes = LoadLogoBytes();
+
+    private static byte[] LoadLogoBytes()
+    {
+        var assembly = typeof(PurchaseRequisitionPdfDocument).Assembly;
+        const string resourceName = "PPS.LicenseManager.API.Assets.pps-logo.jpg";
+
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded resource '{resourceName}' not found - check the " +
+                "EmbeddedResource entry in PPS.LicenseManager.API.csproj.");
+
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
+    }
 
     public PurchaseRequisitionPdfDocument(Models.PurchaseRequisition pr)
     {
@@ -58,23 +80,14 @@ public class PurchaseRequisitionPdfDocument : IDocument
         {
             column.Item().Row(row =>
             {
-                // Company letterhead (name + address). No logo image is
-                // wired in yet - once a logo file is available, add it as
-                // its own Item() above the name, e.g.:
-                //   letterheadColumn.Item().Height(40).Image(logoBytes).FitHeight();
-                row.RelativeItem().Column(letterheadColumn =>
-                {
-                    letterheadColumn.Item()
-                        .Text(_pr.Company?.Name ?? "-")
-                        .FontSize(14).Bold();
+                // Letterhead logo. This is a fixed company logo (not the
+                // per-PR Entity/Company name/address) - the Entity itself
+                // is shown down in the requester/entity summary row via
+                // its GSTIN, so it isn't repeated here.
+                row.ConstantItem(140).Height(45)
+                    .Image(LogoBytes).FitArea();
 
-                    if (!string.IsNullOrWhiteSpace(_pr.Company?.Address))
-                    {
-                        letterheadColumn.Item()
-                            .Text(_pr.Company!.Address!)
-                            .FontSize(8).FontColor(Colors.Grey.Darken1);
-                    }
-                });
+                row.RelativeItem();
 
                 row.ConstantItem(180).AlignRight().Column(statusColumn =>
                 {
