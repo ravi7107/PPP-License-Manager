@@ -26,6 +26,9 @@ import {
   Wrench,
   Activity,
   RefreshCw,
+  IndianRupee,
+  Gauge,
+  TrendingUp,
 } from 'lucide-react';
 
 import {
@@ -46,7 +49,10 @@ import {
 } from '@/components/ui/chart';
 
 import { KpiCard } from '@/components/layout/kpi-card';
-import { KpiCardSkeleton } from '@/components/layout/kpi-card-skeleton';
+import {
+  KpiCardSkeleton,
+  ChartCardSkeleton,
+} from '@/components/layout/kpi-card-skeleton';
 
 import { AppRole, canManage } from '@/lib/auth/roles';
 
@@ -55,18 +61,26 @@ import {
   AllocationRequest,
 } from '@/lib/api/allocation-requests.api';
 
+import { getAssets, Asset } from '@/lib/api/assets.api';
+
 import {
-  getDashboardKpis,
-  getLicenseUtilizationChartData,
-  getCostByEntityChartData,
-  getCostByClientChartData,
-  getDepartmentWiseAssetsChartData,
-  getMonthlyAllocationTrendChartData,
-  getSoftwareExpiryTimelineChartData,
-  getPendingApprovalTrendChartData,
-  getLowAvailabilityLicenses,
-  getExpiringLicensesList,
-} from '@/lib/mock/dashboard';
+  getLicensePurchases,
+  LicensePurchase,
+} from '@/lib/api/license-purchases.api';
+
+import {
+  computeAssetKpis,
+  computeDepartmentWiseAssetsChartData,
+  computeLicenseKpis,
+  computeLicenseUtilizationChartData,
+  computeCostByEntityChartData,
+  computeCostByClientChartData,
+  computeSoftwareExpiryTimelineChartData,
+  computeLowAvailabilityLicenses,
+  computeExpiringLicensesList,
+  computeMonthlyRequestTrend,
+  computeRequestsByStatus,
+} from '@/lib/dashboard/compute';
 
 
 const utilizationConfig: ChartConfig = {
@@ -101,16 +115,16 @@ const departmentAssetsConfig: ChartConfig = {
   },
 };
 
-const allocationTrendConfig: ChartConfig = {
-  allocations: {
-    label: 'Allocations',
+const requestTrendConfig: ChartConfig = {
+  requests: {
+    label: 'Requests Submitted',
     color: 'var(--chart-1)',
   },
 };
 
-const approvalTrendConfig: ChartConfig = {
-  pending: {
-    label: 'Pending Approvals',
+const requestStatusConfig: ChartConfig = {
+  count: {
+    label: 'Requests',
     color: 'var(--chart-4)',
   },
 };
@@ -130,54 +144,117 @@ const PIE_COLORS = [
   'var(--chart-5)',
 ];
 
+const STATUS_COLORS: Record<string, string> = {
+  Pending: 'var(--chart-4)',
+  Approved: 'var(--chart-2)',
+  Rejected: 'var(--chart-5)',
+};
+
 
 export default function DashboardPage() {
   const { roles } = useOutletContext<{
     roles: AppRole[];
   }>();
 
-  const kpis = getDashboardKpis();
-
   const showActionableWidgets = canManage(roles);
 
+
   /*
-   * Existing dashboard datasets.
-   * These are still using the current mock dashboard source.
-   * We can migrate these to the backend API separately.
+   * CORE BUSINESS DATA - real, live API data (no mocks).
+   *
+   * Assets and License Purchases power the hardware-utilization and
+   * license-cost/renewal sections of the dashboard. Both are fetched once
+   * on mount and aggregated client-side via lib/dashboard/compute.ts -
+   * the dataset sizes this app deals with make that far simpler (and far
+   * easier to verify correct) than standing up dedicated aggregation
+   * endpoints.
    */
-  const utilizationData =
-    getLicenseUtilizationChartData();
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [licensePurchases, setLicensePurchases] = useState<
+    LicensePurchase[]
+  >([]);
+  const [coreDataLoading, setCoreDataLoading] = useState(true);
+  const [coreDataError, setCoreDataError] = useState<string | null>(null);
 
-  const costEntityData =
-    getCostByEntityChartData();
+  useEffect(() => {
+    let mounted = true;
 
-  const costClientData =
-    getCostByClientChartData();
+    async function loadCoreData() {
+      try {
+        setCoreDataLoading(true);
+        setCoreDataError(null);
 
-  const departmentAssetsData =
-    getDepartmentWiseAssetsChartData();
+        const [assetsResult, purchasesResult] = await Promise.all([
+          getAssets(),
+          getLicensePurchases(),
+        ]);
 
-  const allocationTrendData =
-    getMonthlyAllocationTrendChartData();
+        if (!mounted) return;
 
-  const expiryTimelineData =
-    getSoftwareExpiryTimelineChartData();
+        setAssets(Array.isArray(assetsResult) ? assetsResult : []);
+        setLicensePurchases(
+          Array.isArray(purchasesResult) ? purchasesResult : []
+        );
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
 
-  const approvalTrendData =
-    getPendingApprovalTrendChartData();
+        if (mounted) {
+          setAssets([]);
+          setLicensePurchases([]);
+          setCoreDataError('Unable to load hardware/license data.');
+        }
+      } finally {
+        if (mounted) {
+          setCoreDataLoading(false);
+        }
+      }
+    }
 
-  const lowAvailability =
-    getLowAvailabilityLicenses();
+    loadCoreData();
 
-  const expiringLicenses =
-    getExpiringLicensesList();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const assetKpis = computeAssetKpis(assets);
+  const licenseKpis = computeLicenseKpis(licensePurchases);
+
+  const utilizationData = computeLicenseUtilizationChartData(
+    licensePurchases
+  );
+  const costEntityData = computeCostByEntityChartData(licensePurchases);
+  const costClientData = computeCostByClientChartData(licensePurchases);
+  const departmentAssetsData = computeDepartmentWiseAssetsChartData(assets);
+  const expiryTimelineData = computeSoftwareExpiryTimelineChartData(
+    licensePurchases
+  );
+  const lowAvailability = computeLowAvailabilityLicenses(licensePurchases);
+  const expiringLicenses = computeExpiringLicensesList(licensePurchases);
+
+  const assetUtilizationRate =
+    assetKpis.totalAssets > 0
+      ? Math.round(
+          (assetKpis.allocatedAssets / assetKpis.totalAssets) * 100
+        )
+      : 0;
+
+  const licenseUtilizationRate =
+    licenseKpis.totalLicenseSeats > 0
+      ? Math.round(
+          ((licenseKpis.totalLicenseSeats - licenseKpis.availableLicenseSeats) /
+            licenseKpis.totalLicenseSeats) *
+            100
+        )
+      : 0;
 
 
   /*
    * REAL BACKEND DATA
    *
-   * Pending allocation/license requests are now loaded
-   * from the ASP.NET Core API instead of UI Bakery SQL.
+   * Pending allocation/license requests are loaded from the ASP.NET Core
+   * API. This also powers the "Monthly Request Volume" and "Requests by
+   * Status" charts below - real submission history, not a mock trend.
    */
   const [
     allocationRequests,
@@ -287,6 +364,9 @@ export default function DashboardPage() {
   const pendingCountLoading =
     pendingApprovalsLoading;
 
+  const requestTrendData = computeMonthlyRequestTrend(allocationRequests);
+  const requestStatusData = computeRequestsByStatus(allocationRequests);
+
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -362,56 +442,157 @@ export default function DashboardPage() {
       </div>
 
 
+      {/* EXECUTIVE SNAPSHOT - the headline numbers management scans first */}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
+        <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <IndianRupee className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Total License Investment
+              </p>
+              {coreDataLoading ? (
+                <div className="mt-1.5 h-8 w-32 animate-pulse rounded bg-muted" />
+              ) : (
+                <p className="truncate text-2xl font-bold tracking-tight text-foreground">
+                  ₹{licenseKpis.totalLicenseSpend.toLocaleString('en-IN')}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Across {licensePurchases.filter((p) => p.isActive).length} active purchases
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Gauge className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Asset Utilization Rate
+              </p>
+              {coreDataLoading ? (
+                <div className="mt-1.5 h-8 w-20 animate-pulse rounded bg-muted" />
+              ) : (
+                <p className="text-2xl font-bold tracking-tight text-foreground">
+                  {assetUtilizationRate}%
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {assetKpis.allocatedAssets} of {assetKpis.totalAssets} assets in active use
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                License Utilization Rate
+              </p>
+              {coreDataLoading ? (
+                <div className="mt-1.5 h-8 w-20 animate-pulse rounded bg-muted" />
+              ) : (
+                <p className="text-2xl font-bold tracking-tight text-foreground">
+                  {licenseUtilizationRate}%
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {licenseKpis.totalLicenseSeats - licenseKpis.availableLicenseSeats} of {licenseKpis.totalLicenseSeats} seats issued
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
+
+
+      {coreDataError && (
+        <p className="text-sm text-destructive">{coreDataError}</p>
+      )}
+
+
       {/* KPI CARDS */}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-        <KpiCard
-          title="Total Assets"
-          value={kpis.totalAssets}
-          icon={HardDrive}
-          hint="All tracked hardware"
-        />
+        {coreDataLoading ? (
+          <>
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              title="Total Assets"
+              value={assetKpis.totalAssets}
+              icon={HardDrive}
+              hint="All tracked hardware"
+            />
 
-        <KpiCard
-          title="Allocated Assets"
-          value={kpis.allocatedAssets}
-          icon={PackageCheck}
-          hint="Currently in active use"
-        />
+            <KpiCard
+              title="Allocated Assets"
+              value={assetKpis.allocatedAssets}
+              icon={PackageCheck}
+              hint="Currently in active use"
+            />
 
-        <KpiCard
-          title="Available Assets"
-          value={kpis.availableAssets}
-          icon={PackageOpen}
-          hint="Ready for assignment"
-        />
+            <KpiCard
+              title="Available Assets"
+              value={assetKpis.availableAssets}
+              icon={PackageOpen}
+              hint="Ready for assignment"
+            />
 
-        <KpiCard
-          title="Assets Under Maintenance"
-          value={kpis.assetsUnderMaintenance}
-          icon={Wrench}
-          hint="In repair / servicing"
-          tone={
-            kpis.assetsUnderMaintenance > 0
-              ? 'warning'
-              : 'default'
-          }
-        />
+            <KpiCard
+              title="Assets Under Maintenance"
+              value={assetKpis.assetsUnderMaintenance}
+              icon={Wrench}
+              hint="In repair / servicing"
+              tone={
+                assetKpis.assetsUnderMaintenance > 0
+                  ? 'warning'
+                  : 'default'
+              }
+            />
+          </>
+        )}
 
-        <KpiCard
-          title="Software Licenses"
-          value={kpis.totalLicenseSeats}
-          icon={KeySquare}
-          hint="Total seats across all software"
-        />
+        {coreDataLoading ? (
+          <>
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              title="Software Licenses"
+              value={licenseKpis.totalLicenseSeats}
+              icon={KeySquare}
+              hint="Total seats across all software"
+            />
 
-        <KpiCard
-          title="Available Licenses"
-          value={kpis.availableLicenseSeats}
-          icon={Share2}
-          hint="Unassigned seats in pool"
-        />
+            <KpiCard
+              title="Available Licenses"
+              value={licenseKpis.availableLicenseSeats}
+              icon={Share2}
+              hint="Unassigned seats in pool"
+            />
+          </>
+        )}
 
 
         {/* REAL PENDING REQUEST COUNT */}
@@ -437,17 +618,21 @@ export default function DashboardPage() {
         )}
 
 
-        <KpiCard
-          title="Expiring Licenses"
-          value={kpis.expiringLicenses}
-          icon={AlertTriangle}
-          hint="Renewing within 30 days"
-          tone={
-            kpis.expiringLicenses > 0
-              ? 'danger'
-              : 'default'
-          }
-        />
+        {coreDataLoading ? (
+          <KpiCardSkeleton />
+        ) : (
+          <KpiCard
+            title="Expiring Licenses"
+            value={licenseKpis.expiringLicenses}
+            icon={AlertTriangle}
+            hint="Renewing within 30 days"
+            tone={
+              licenseKpis.expiringLicenses > 0
+                ? 'danger'
+                : 'default'
+            }
+          />
+        )}
       </div>
 
 
@@ -457,6 +642,9 @@ export default function DashboardPage() {
 
         {/* LICENSE UTILIZATION */}
 
+        {coreDataLoading ? (
+          <ChartCardSkeleton heightClassName="h-72" />
+        ) : (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -469,6 +657,11 @@ export default function DashboardPage() {
           </CardHeader>
 
           <CardContent>
+            {utilizationData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No license purchases recorded yet.
+              </p>
+            ) : (
             <ChartContainer
               config={utilizationConfig}
               className="h-72 w-full"
@@ -492,6 +685,7 @@ export default function DashboardPage() {
                 <YAxis
                   tickLine={false}
                   axisLine={false}
+                  allowDecimals={false}
                 />
 
                 <ChartTooltip
@@ -514,12 +708,17 @@ export default function DashboardPage() {
 
               </BarChart>
             </ChartContainer>
+            )}
           </CardContent>
         </Card>
+        )}
 
 
         {/* COST BY ENTITY */}
 
+        {coreDataLoading ? (
+          <ChartCardSkeleton heightClassName="h-64" />
+        ) : (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -527,12 +726,18 @@ export default function DashboardPage() {
             </CardTitle>
 
             <CardDescription>
-              Annual license spend allocated by business entity
+              License spend allocated by business entity
             </CardDescription>
           </CardHeader>
 
           <CardContent>
 
+            {costEntityData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No license spend recorded yet.
+              </p>
+            ) : (
+            <>
             <ChartContainer
               config={costEntityConfig}
               className="h-64 w-full"
@@ -610,13 +815,19 @@ export default function DashboardPage() {
               )}
 
             </ul>
+            </>
+            )}
 
           </CardContent>
         </Card>
+        )}
 
 
         {/* COST BY CLIENT */}
 
+        {coreDataLoading ? (
+          <ChartCardSkeleton heightClassName="h-64" />
+        ) : (
         <Card>
           <CardHeader>
 
@@ -625,13 +836,19 @@ export default function DashboardPage() {
             </CardTitle>
 
             <CardDescription>
-              Annual license spend allocated by client project
+              License spend allocated by client project
             </CardDescription>
 
           </CardHeader>
 
           <CardContent>
 
+            {costClientData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No client-billed license spend recorded yet.
+              </p>
+            ) : (
+            <>
             <ChartContainer
               config={costClientConfig}
               className="h-64 w-full"
@@ -711,13 +928,19 @@ export default function DashboardPage() {
               )}
 
             </ul>
+            </>
+            )}
 
           </CardContent>
         </Card>
+        )}
 
 
         {/* DEPARTMENT ASSETS */}
 
+        {coreDataLoading ? (
+          <ChartCardSkeleton heightClassName="h-72" />
+        ) : (
         <Card>
           <CardHeader>
 
@@ -733,6 +956,11 @@ export default function DashboardPage() {
 
           <CardContent>
 
+            {departmentAssetsData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No hardware assets recorded yet.
+              </p>
+            ) : (
             <ChartContainer
               config={departmentAssetsConfig}
               className="h-72 w-full"
@@ -775,22 +1003,27 @@ export default function DashboardPage() {
               </BarChart>
 
             </ChartContainer>
+            )}
 
           </CardContent>
         </Card>
+        )}
 
 
-        {/* MONTHLY ALLOCATION TREND */}
+        {/* MONTHLY REQUEST VOLUME */}
 
+        {pendingApprovalsLoading ? (
+          <ChartCardSkeleton heightClassName="h-72" />
+        ) : (
         <Card>
           <CardHeader>
 
             <CardTitle className="text-base">
-              Monthly Allocation Trend
+              Monthly Request Volume
             </CardTitle>
 
             <CardDescription>
-              License seats allocated per month
+              Allocation requests submitted per month
             </CardDescription>
 
           </CardHeader>
@@ -798,12 +1031,12 @@ export default function DashboardPage() {
           <CardContent>
 
             <ChartContainer
-              config={allocationTrendConfig}
+              config={requestTrendConfig}
               className="h-72 w-full"
             >
 
               <LineChart
-                data={allocationTrendData}
+                data={requestTrendData}
               >
 
                 <CartesianGrid vertical={false} />
@@ -828,8 +1061,8 @@ export default function DashboardPage() {
 
                 <Line
                   type="monotone"
-                  dataKey="allocations"
-                  stroke="var(--color-allocations)"
+                  dataKey="requests"
+                  stroke="var(--color-requests)"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                 />
@@ -840,39 +1073,45 @@ export default function DashboardPage() {
 
           </CardContent>
         </Card>
+        )}
 
 
-        {/* APPROVAL TREND */}
+        {/* REQUESTS BY STATUS */}
 
+        {pendingApprovalsLoading ? (
+          <ChartCardSkeleton heightClassName="h-72" />
+        ) : (
         <Card>
           <CardHeader>
 
             <CardTitle className="text-base">
-              Pending Approval Trend
+              Requests by Status
             </CardTitle>
 
             <CardDescription>
-              Open requests awaiting decision,
-              month over month
+              Approval funnel across all allocation requests
             </CardDescription>
 
           </CardHeader>
 
           <CardContent>
 
+            {requestStatusData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No allocation requests recorded yet.
+              </p>
+            ) : (
             <ChartContainer
-              config={approvalTrendConfig}
+              config={requestStatusConfig}
               className="h-72 w-full"
             >
 
-              <LineChart
-                data={approvalTrendData}
-              >
+              <BarChart data={requestStatusData}>
 
                 <CartesianGrid vertical={false} />
 
                 <XAxis
-                  dataKey="month"
+                  dataKey="status"
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
@@ -889,24 +1128,36 @@ export default function DashboardPage() {
                   content={<ChartTooltipContent />}
                 />
 
-                <Line
-                  type="monotone"
-                  dataKey="pending"
-                  stroke="var(--color-pending)"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                />
+                <Bar
+                  dataKey="count"
+                  radius={[4, 4, 0, 0]}
+                >
+                  {requestStatusData.map((row, index) => (
+                    <Cell
+                      key={index}
+                      fill={
+                        STATUS_COLORS[row.status] ??
+                        PIE_COLORS[index % PIE_COLORS.length]
+                      }
+                    />
+                  ))}
+                </Bar>
 
-              </LineChart>
+              </BarChart>
 
             </ChartContainer>
+            )}
 
           </CardContent>
         </Card>
+        )}
 
 
         {/* SOFTWARE EXPIRY */}
 
+        {coreDataLoading ? (
+          <ChartCardSkeleton heightClassName="h-72" />
+        ) : (
         <Card className="lg:col-span-2">
 
           <CardHeader>
@@ -924,6 +1175,11 @@ export default function DashboardPage() {
 
           <CardContent>
 
+            {expiryTimelineData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No license purchases with an expiry date on record.
+              </p>
+            ) : (
             <ChartContainer
               config={expiryTimelineConfig}
               className="h-72 w-full"
@@ -976,10 +1232,12 @@ export default function DashboardPage() {
               </BarChart>
 
             </ChartContainer>
+            )}
 
           </CardContent>
 
         </Card>
+        )}
 
       </div>
 
@@ -1132,10 +1390,17 @@ export default function DashboardPage() {
             <CardContent className="flex flex-col gap-3">
 
 
-              {lowAvailability.map((l) => (
+              {coreDataLoading && (
+                <p className="text-sm text-muted-foreground">
+                  Loading license data…
+                </p>
+              )}
+
+
+              {!coreDataLoading && lowAvailability.map((l) => (
 
                 <div
-                  key={l.id}
+                  key={`low-${l.id}`}
                   className="flex items-center justify-between rounded-md border p-3"
                 >
 
@@ -1168,10 +1433,10 @@ export default function DashboardPage() {
               ))}
 
 
-              {expiringLicenses.map((l) => (
+              {!coreDataLoading && expiringLicenses.map((l) => (
 
                 <div
-                  key={l.id}
+                  key={`expiring-${l.id}`}
                   className="flex items-center justify-between rounded-md border p-3"
                 >
 
@@ -1197,7 +1462,8 @@ export default function DashboardPage() {
               ))}
 
 
-              {lowAvailability.length === 0 &&
+              {!coreDataLoading &&
+                lowAvailability.length === 0 &&
                 expiringLicenses.length === 0 && (
 
                   <p className="text-sm text-muted-foreground">
