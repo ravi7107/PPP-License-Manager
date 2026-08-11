@@ -25,6 +25,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --uid 1500 --create-home appuser
+
+# /app/App_Data is where the Purchase Requisition PDFs are written
+# (see docker-compose.yml's backend_pdfs named volume, mounted here) - it
+# must exist and be owned by appuser *before* that volume is first
+# mounted. Docker seeds a brand-new named volume's contents from whatever
+# is already on disk at the mount point inside the image at the time of
+# first use, ownership included; without this, a freshly-created volume
+# comes up owned by root while the container itself runs as appuser
+# (below), and PDF generation fails with
+# System.UnauthorizedAccessException: Access to the path
+# '/app/App_Data/purchase-requisitions' is denied.
+RUN mkdir -p /app/App_Data && chown -R appuser:appuser /app/App_Data
+
 USER appuser
 
 ENV ASPNETCORE_URLS=http://+:8080 \
