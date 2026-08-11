@@ -288,8 +288,15 @@ public class PurchaseRequisitionPdfDocument : IDocument
                     table.Cell().Element(BodyCellStyle).Text(item.LineNumber.ToString());
                     table.Cell().Element(BodyCellStyle).Text(item.ItemDescription);
                     table.Cell().Element(BodyCellStyle).Text(item.Category ?? "-");
+                    // Quantity is numeric(18,2) - Postgres always returns
+                    // it padded to exactly 2 decimal places (e.g. a
+                    // quantity of 10 comes back as 10.00m), and decimal's
+                    // default ToString() preserves that scale verbatim.
+                    // ":0.##" drops the trailing zeros for whole numbers
+                    // while still showing up to 2 decimals for a
+                    // fractional quantity (e.g. 2.5).
                     table.Cell().Element(BodyCellStyle).AlignRight()
-                        .Text($"{item.Quantity} {item.UnitOfMeasure}".Trim());
+                        .Text($"{item.Quantity:0.##} {item.UnitOfMeasure}".Trim());
                     table.Cell().Element(BodyCellStyle).AlignRight().Text($"{item.UnitPrice:0.00}");
                     table.Cell().Element(BodyCellStyle).AlignRight().Text($"{item.LineTotal:0.00}");
 
