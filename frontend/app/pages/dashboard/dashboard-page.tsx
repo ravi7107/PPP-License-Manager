@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Navigate, useOutletContext } from 'react-router-dom';
 
 import {
   Bar,
@@ -7,8 +7,6 @@ import {
   CartesianGrid,
   XAxis,
   YAxis,
-  Pie,
-  PieChart,
   Cell,
   Line,
   LineChart,
@@ -26,7 +24,6 @@ import {
   Wrench,
   Activity,
   RefreshCw,
-  IndianRupee,
   Gauge,
   TrendingUp,
 } from 'lucide-react';
@@ -54,7 +51,8 @@ import {
   ChartCardSkeleton,
 } from '@/components/layout/kpi-card-skeleton';
 
-import { AppRole, canManage } from '@/lib/auth/roles';
+import { AppRole, canAccessModule, canManage } from '@/lib/auth/roles';
+import { getFirstAccessiblePath } from '@/lib/nav-config';
 
 import {
   getAllocationRequests,
@@ -73,8 +71,6 @@ import {
   computeDepartmentWiseAssetsChartData,
   computeLicenseKpis,
   computeLicenseUtilizationChartData,
-  computeCostByEntityChartData,
-  computeCostByClientChartData,
   computeSoftwareExpiryTimelineChartData,
   computeLowAvailabilityLicenses,
   computeExpiringLicensesList,
@@ -90,20 +86,6 @@ const utilizationConfig: ChartConfig = {
   },
   available: {
     label: 'Seats Available',
-    color: 'var(--chart-2)',
-  },
-};
-
-const costEntityConfig: ChartConfig = {
-  cost: {
-    label: 'Cost (₹)',
-    color: 'var(--chart-1)',
-  },
-};
-
-const costClientConfig: ChartConfig = {
-  cost: {
-    label: 'Cost (₹)',
     color: 'var(--chart-2)',
   },
 };
@@ -152,9 +134,20 @@ const STATUS_COLORS: Record<string, string> = {
 
 
 export default function DashboardPage() {
-  const { roles } = useOutletContext<{
+  const { roles, accessOverride } = useOutletContext<{
     roles: AppRole[];
+    accessOverride: Record<string, AppRole[]> | null;
   }>();
+
+  // This dashboard is scoped to Team Lead/Manager plus the admin roles -
+  // an Employee landing on "/" (the index route) gets sent to whatever
+  // module they actually have access to instead of seeing a page meant
+  // for their leads/managers.
+  const hasDashboardAccess = canAccessModule(
+    roles,
+    'dashboard',
+    accessOverride
+  );
 
   const showActionableWidgets = canManage(roles);
 
@@ -177,6 +170,11 @@ export default function DashboardPage() {
   const [coreDataError, setCoreDataError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hasDashboardAccess) {
+      setCoreDataLoading(false);
+      return;
+    }
+
     let mounted = true;
 
     async function loadCoreData() {
@@ -223,8 +221,6 @@ export default function DashboardPage() {
   const utilizationData = computeLicenseUtilizationChartData(
     licensePurchases
   );
-  const costEntityData = computeCostByEntityChartData(licensePurchases);
-  const costClientData = computeCostByClientChartData(licensePurchases);
   const departmentAssetsData = computeDepartmentWiseAssetsChartData(assets);
   const expiryTimelineData = computeSoftwareExpiryTimelineChartData(
     licensePurchases
@@ -368,6 +364,15 @@ export default function DashboardPage() {
   const requestStatusData = computeRequestsByStatus(allocationRequests);
 
 
+  if (!hasDashboardAccess) {
+    const fallbackPath =
+      getFirstAccessiblePath(roles, accessOverride, ['dashboard']) ??
+      '/purchase-requisitions';
+
+    return <Navigate to={fallbackPath} replace />;
+  }
+
+
   return (
     <div className="flex flex-col gap-4 md:gap-6">
 
@@ -442,32 +447,12 @@ export default function DashboardPage() {
       </div>
 
 
-      {/* EXECUTIVE SNAPSHOT - the headline numbers management scans first */}
+      {/* EXECUTIVE SNAPSHOT - the headline numbers management scans first.
+          Deliberately no cost/spend figures here - this dashboard is
+          scoped to Team Lead/Manager/admins and stays utilization-focused,
+          not financial. */}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-
-        <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card">
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <IndianRupee className="h-6 w-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Total License Investment
-              </p>
-              {coreDataLoading ? (
-                <div className="mt-1.5 h-8 w-32 animate-pulse rounded bg-muted" />
-              ) : (
-                <p className="truncate text-2xl font-bold tracking-tight text-foreground">
-                  ₹{licenseKpis.totalLicenseSpend.toLocaleString('en-IN')}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Across {licensePurchases.filter((p) => p.isActive).length} active purchases
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
         <Card className="relative overflow-hidden">
           <CardContent className="flex items-center gap-4 p-5">
@@ -713,227 +698,6 @@ export default function DashboardPage() {
         </Card>
         )}
 
-
-        {/* COST BY ENTITY */}
-
-        {coreDataLoading ? (
-          <ChartCardSkeleton heightClassName="h-64" />
-        ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Software Cost by Entity
-            </CardTitle>
-
-            <CardDescription>
-              License spend allocated by business entity
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-
-            {costEntityData.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                No license spend recorded yet.
-              </p>
-            ) : (
-            <>
-            <ChartContainer
-              config={costEntityConfig}
-              className="h-64 w-full"
-            >
-              <PieChart>
-
-                <ChartTooltip
-                  content={<ChartTooltipContent />}
-                />
-
-                <Pie
-                  data={costEntityData}
-                  dataKey="cost"
-                  nameKey="entity"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={2}
-                >
-
-                  {costEntityData.map(
-                    (_, index) => (
-                      <Cell
-                        key={index}
-                        fill={
-                          PIE_COLORS[
-                            index %
-                              PIE_COLORS.length
-                          ]
-                        }
-                      />
-                    )
-                  )}
-
-                </Pie>
-
-              </PieChart>
-            </ChartContainer>
-
-
-            <ul className="mt-3 space-y-1.5">
-
-              {costEntityData.map(
-                (row, index) => (
-
-                  <li
-                    key={row.entity}
-                    className="flex items-center justify-between text-sm"
-                  >
-
-                    <span className="flex items-center gap-2">
-
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                        style={{
-                          backgroundColor:
-                            PIE_COLORS[
-                              index %
-                                PIE_COLORS.length
-                            ],
-                        }}
-                      />
-
-                      <span className="text-muted-foreground">
-                        {row.entity}
-                      </span>
-
-                    </span>
-
-                    <span className="font-medium">
-                      ₹{Number(row.cost).toLocaleString('en-IN')}
-                    </span>
-
-                  </li>
-                )
-              )}
-
-            </ul>
-            </>
-            )}
-
-          </CardContent>
-        </Card>
-        )}
-
-
-        {/* COST BY CLIENT */}
-
-        {coreDataLoading ? (
-          <ChartCardSkeleton heightClassName="h-64" />
-        ) : (
-        <Card>
-          <CardHeader>
-
-            <CardTitle className="text-base">
-              Software Cost by Client
-            </CardTitle>
-
-            <CardDescription>
-              License spend allocated by client project
-            </CardDescription>
-
-          </CardHeader>
-
-          <CardContent>
-
-            {costClientData.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                No client-billed license spend recorded yet.
-              </p>
-            ) : (
-            <>
-            <ChartContainer
-              config={costClientConfig}
-              className="h-64 w-full"
-            >
-
-              <PieChart>
-
-                <ChartTooltip
-                  content={<ChartTooltipContent />}
-                />
-
-                <Pie
-                  data={costClientData}
-                  dataKey="cost"
-                  nameKey="client"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={2}
-                >
-
-                  {costClientData.map(
-                    (_, index) => (
-                      <Cell
-                        key={index}
-                        fill={
-                          PIE_COLORS[
-                            index %
-                              PIE_COLORS.length
-                          ]
-                        }
-                      />
-                    )
-                  )}
-
-                </Pie>
-
-              </PieChart>
-
-            </ChartContainer>
-
-
-            <ul className="mt-3 space-y-1.5">
-
-              {costClientData.map(
-                (row, index) => (
-
-                  <li
-                    key={row.client}
-                    className="flex items-center justify-between text-sm"
-                  >
-
-                    <span className="flex items-center gap-2">
-
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                        style={{
-                          backgroundColor:
-                            PIE_COLORS[
-                              index %
-                                PIE_COLORS.length
-                            ],
-                        }}
-                      />
-
-                      <span className="text-muted-foreground">
-                        {row.client}
-                      </span>
-
-                    </span>
-
-                    <span className="font-medium">
-                      ₹{Number(row.cost).toLocaleString('en-IN')}
-                    </span>
-
-                  </li>
-                )
-              )}
-
-            </ul>
-            </>
-            )}
-
-          </CardContent>
-        </Card>
-        )}
 
 
         {/* DEPARTMENT ASSETS */}

@@ -39,12 +39,15 @@ export type ModuleKey =
  * Employee
  */
 const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
+  // Business-analysis dashboard (hardware/license utilization, expiry,
+  // allocation activity) - scoped to Team Lead/Manager plus the admin
+  // roles who already see every other module. Employee lands on their
+  // own module instead (see getFirstAccessiblePath in nav-config.ts).
   dashboard: [
     'Super Admin',
     'IT Admin',
     'Team Lead',
     'Manager',
-    'Employee',
   ],
 
   hardware: [
