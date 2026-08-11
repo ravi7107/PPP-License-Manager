@@ -48,6 +48,14 @@ public class PurchaseRequisitionController : BaseController
             ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
     }
 
+    // Deliberately NOT under wwwroot (which app.UseStaticFiles() serves
+    // unauthenticated) - generated PDFs live here so the only way to read
+    // one back is through the authenticated GetPdf action below.
+    private string GetPdfStorageRootPath()
+    {
+        return Path.Combine(_environment.ContentRootPath, "App_Data");
+    }
+
 
     // =========================================================
     // MY PURCHASE REQUISITIONS
@@ -283,7 +291,8 @@ public class PurchaseRequisitionController : BaseController
         {
             var currentUserId = GetCurrentUserId();
 
-            var result = await _service.DecideStepAsync(id, request, currentUserId);
+            var result = await _service.DecideStepAsync(
+                id, request, currentUserId, GetPdfStorageRootPath());
 
             if (result == null)
                 return NotFoundResponse("Purchase requisition not found.");
@@ -299,6 +308,37 @@ public class PurchaseRequisitionController : BaseController
         catch (InvalidOperationException ex)
         {
             return BadRequestResponse(ex.Message);
+        }
+    }
+
+
+    // =========================================================
+    // PDF (Phase 6)
+    // =========================================================
+
+    // Only the owner, an assigned approver, or a privileged user can
+    // download the generated PDF - same access rule as GetById. The file
+    // itself lives outside wwwroot (see GetPdfStorageRootPath), so this
+    // action is the only way to read it back.
+    [HttpGet("{id:int}/pdf")]
+    public async Task<IActionResult> DownloadPdf(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var file = await _service.GetPdfFileAsync(
+                id, currentUserId, IsPrivileged(), GetPdfStorageRootPath());
+
+            if (file == null)
+                return NotFoundResponse(
+                    "No PDF is available for this purchase requisition yet.");
+
+            return PhysicalFile(file.Value.PhysicalPath, "application/pdf", file.Value.FileName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
     }
 

@@ -277,3 +277,26 @@ export function buildAttachmentUrl(storedPath: string): string {
   const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/api\/?$/, '');
   return `${base}${storedPath}`;
 }
+
+// Unlike attachments, the generated PDF is NOT a static file under
+// wwwroot (see the backend's GetPdfStorageRootPath) - it can only be
+// read through this authenticated endpoint, so a plain <a href> can't
+// be used (the browser wouldn't attach the JWT). Fetches the file as a
+// blob instead; the caller is responsible for turning that into a
+// download (see pr-detail-dialog.tsx's handleDownloadPdf).
+export async function downloadPurchaseRequisitionPdf(
+  id: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(`/PurchaseRequisition/${id}/pdf`, {
+    responseType: 'blob',
+  });
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `purchase-requisition-${id}.pdf`,
+  };
+}

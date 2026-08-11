@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   AttachmentType,
   buildAttachmentUrl,
+  downloadPurchaseRequisitionPdf,
   PurchaseRequisition,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -86,10 +87,13 @@ export function PrDetailDialog({
   const [attachmentType, setAttachmentType] =
     useState<AttachmentType>('VendorQuotation');
   const [decisionRemarks, setDecisionRemarks] = useState('');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setDecisionRemarks('');
+      setDownloadError(null);
     }
   }, [open, purchaseRequisition?.id]);
 
@@ -122,6 +126,33 @@ export function PrDetailDialog({
       void onUploadAttachment(file, attachmentType);
     };
     input.click();
+  };
+
+  // Unlike attachment links, the PDF isn't a plain <a href> - it's only
+  // reachable through an authenticated request (see
+  // downloadPurchaseRequisitionPdf's comment), so it has to be fetched as
+  // a blob and handed to the browser via a throwaway object URL.
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    setDownloadError(null);
+
+    try {
+      const { blob, fileName } = await downloadPurchaseRequisitionPdf(pr.id);
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setDownloadError(
+        err?.message ?? 'Failed to download the PDF.'
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
@@ -349,10 +380,27 @@ export function PrDetailDialog({
           </div>
         ) : null}
 
+        {downloadError ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+            {downloadError}
+          </div>
+        ) : null}
+
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
+          {pr.pdfPath ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={downloadingPdf}
+              onClick={handleDownloadPdf}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {downloadingPdf ? 'Downloading...' : 'Download PDF'}
+            </Button>
+          ) : null}
           {pr.isOwner && isDraft ? (
             <Button type="button" onClick={onOpenSubmit}>
               <Send className="mr-1.5 h-3.5 w-3.5" /> Submit for Approval

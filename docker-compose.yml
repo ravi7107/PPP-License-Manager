@@ -42,6 +42,14 @@ services:
       # own filesystem. Without this, every rebuild wipes them out even
       # though the database still references the (now-missing) file.
       - backend_uploads:/app/wwwroot/uploads
+      # Generated purchase requisition PDFs (Phase 6) - deliberately
+      # outside wwwroot so they're never served as a static file, only
+      # through the authenticated GET /api/PurchaseRequisition/{id}/pdf
+      # endpoint. Needs its own volume for the same reason as
+      # backend_uploads above - without it, a rebuild would wipe every
+      # generated PDF even though PurchaseRequisitions.PdfPath still
+      # points at it.
+      - backend_pdfs:/app/App_Data
 
   frontend:
     build:
@@ -55,3 +63,4 @@ services:
 volumes:
   pgdata:
   backend_uploads:
+  backend_pdfs:

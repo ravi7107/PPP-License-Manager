@@ -857,7 +857,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     public async Task<PurchaseRequisitionResponse?> DecideStepAsync(
         int id,
         DecidePurchaseRequisitionStepRequest request,
-        int decidingUserId)
+        int decidingUserId,
+        string pdfStorageRootPath)
     {
         var record = await _context.PurchaseRequisitions
             .Include(x => x.ApprovalSteps)
@@ -893,7 +894,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         await DecideStepCoreAsync(
             record, currentStep, request.Approve, request.Remarks,
-            decidingUserId, "WebApp");
+            decidingUserId, "WebApp", pdfStorageRootPath);
 
         return await GetByIdAsync(record.Id, decidingUserId, isPrivileged: false);
     }
@@ -923,7 +924,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         bool approve,
         string? remarks,
         int decidingUserId,
-        string performedVia)
+        string performedVia,
+        string pdfStorageRootPath)
     {
         var now = DateTime.UtcNow;
         currentStep.DecidedAt = now;
@@ -938,6 +940,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         PurchaseRequisitionApprovalStep? stepToEmailForApproval = null;
         var sendRequesterOutcomeEmail = false;
+        var isFinalApproval = false;
 
         if (approve)
         {
@@ -969,6 +972,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 notifyMessage =
                     $"Your purchase requisition {prLabel} ({record.Title}) has been fully approved.";
                 sendRequesterOutcomeEmail = true;
+                isFinalApproval = true;
             }
             else
             {
@@ -1018,6 +1022,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         AddNotification(notifyUserId, notifyType, notifyTitle, notifyMessage, record.Id);
         await _context.SaveChangesAsync();
 
+        // Best-effort, same as the email helpers below - a PDF generation
+        // failure must never undo a decision that's already been
+        // committed to the database. GenerateAndStorePdfAsync catches and
+        // logs its own failures.
+        if (isFinalApproval)
+        {
+            await GenerateAndStorePdfAsync(record, pdfStorageRootPath);
+        }
+
         // Email is best-effort and must never undo a decision that's
         // already been committed to the database - both helpers below
         // catch and log their own failures rather than throwing.
@@ -1062,7 +1075,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
      */
     public async Task<PublicPurchaseRequisitionApprovalResponse?> DecideStepByTokenAsync(
         string rawToken,
-        DecidePurchaseRequisitionStepRequest request)
+        DecidePurchaseRequisitionStepRequest request,
+        string pdfStorageRootPath)
     {
         var tokenEntity = await FindTokenAsync(rawToken);
 
@@ -1101,7 +1115,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         await DecideStepCoreAsync(
             record, step, request.Approve, request.Remarks,
-            step.AssignedApproverUserId, "Email");
+            step.AssignedApproverUserId, "Email", pdfStorageRootPath);
 
         return MapPublicView(tokenEntity);
     }
@@ -1298,6 +1312,99 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
 
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+
+    // =========================================================
+    // PDF (Phase 6)
+    // =========================================================
+
+    /*
+     * Renders and stores the approval PDF once a requisition reaches its
+     * final Approved state (see DecideStepCoreAsync's isFinalApproval
+     * branch). Stored under pdfStorageRootPath - the caller passes in
+     * IWebHostEnvironment.ContentRootPath + "App_Data", NOT wwwroot -
+     * so, unlike attachments, the file is never reachable as a bare
+     * static URL; GetPdfFileAsync's authenticated access check is the
+     * only way to read it back.
+     *
+     * Re-queries via Query() rather than trusting the caller's `record`
+     * to already have every navigation loaded (LineItems/Attachments in
+     * particular usually aren't, coming from DecideStepCoreAsync's
+     * callers) - EF's identity map means this returns the SAME tracked
+     * instance with the missing navigations now populated, not a
+     * duplicate, so mutating PdfPath/PdfGeneratedAt on it is safe.
+     */
+    private async Task GenerateAndStorePdfAsync(
+        Models.PurchaseRequisition record,
+        string pdfStorageRootPath)
+    {
+        try
+        {
+            var full = await Query().FirstOrDefaultAsync(x => x.Id == record.Id);
+
+            if (full == null)
+                return;
+
+            var directory = Path.Combine(
+                pdfStorageRootPath, "purchase-requisitions", full.Id.ToString());
+
+            Directory.CreateDirectory(directory);
+
+            var safeFileNameBase = (full.PrNumber ?? full.Id.ToString())
+                .Replace('/', '-')
+                .Replace('\\', '-');
+
+            var fileName = $"{safeFileNameBase}.pdf";
+            var destination = Path.Combine(directory, fileName);
+
+            new PurchaseRequisitionPdfDocument(full).GeneratePdf(destination);
+
+            // Relative to pdfStorageRootPath, forward-slashed for
+            // consistency regardless of the host OS - GetPdfFileAsync
+            // re-joins it onto pdfStorageRootPath the same way attachments
+            // re-join StoredPath onto webRootPath.
+            full.PdfPath = $"purchase-requisitions/{full.Id}/{fileName}";
+            full.PdfGeneratedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to generate the approval PDF for purchase requisition {PurchaseRequisitionId}.",
+                record.Id);
+        }
+    }
+
+    public async Task<(string PhysicalPath, string FileName)?> GetPdfFileAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (record == null || string.IsNullOrWhiteSpace(record.PdfPath))
+            return null;
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        var relativePath = record.PdfPath.Replace('/', Path.DirectorySeparatorChar);
+        var physicalPath = Path.Combine(pdfStorageRootPath, relativePath);
+
+        if (!File.Exists(physicalPath))
+            return null;
+
+        return (physicalPath, Path.GetFileName(physicalPath));
     }
 
     private void AddNotification(

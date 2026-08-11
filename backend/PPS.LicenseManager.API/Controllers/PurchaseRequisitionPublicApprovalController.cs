@@ -22,10 +22,23 @@ namespace PPS.LicenseManager.API.Controllers;
 public class PurchaseRequisitionPublicApprovalController : BaseController
 {
     private readonly IPurchaseRequisitionService _service;
+    private readonly IWebHostEnvironment _environment;
 
-    public PurchaseRequisitionPublicApprovalController(IPurchaseRequisitionService service)
+    public PurchaseRequisitionPublicApprovalController(
+        IPurchaseRequisitionService service,
+        IWebHostEnvironment environment)
     {
         _service = service;
+        _environment = environment;
+    }
+
+    // Same private, non-wwwroot location PurchaseRequisitionController
+    // uses - see that controller's GetPdfStorageRootPath for the
+    // rationale. A decision made from this token-based flow can trigger
+    // PDF generation on final approval the same as the dashboard flow.
+    private string GetPdfStorageRootPath()
+    {
+        return Path.Combine(_environment.ContentRootPath, "App_Data");
     }
 
     [HttpGet("{token}")]
@@ -46,7 +59,8 @@ public class PurchaseRequisitionPublicApprovalController : BaseController
     {
         try
         {
-            var result = await _service.DecideStepByTokenAsync(token, request);
+            var result = await _service.DecideStepByTokenAsync(
+                token, request, GetPdfStorageRootPath());
 
             if (result == null)
                 return NotFoundResponse("This approval link is invalid.");

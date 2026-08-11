@@ -13,8 +13,22 @@ using PPS.LicenseManager.API.Services;
 using System.Text;
 using PPS.LicenseManager.API.Repositories.Interfaces;
 using PPS.LicenseManager.API.Services.Interfaces;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ===============================
+// QuestPDF license
+// ===============================
+// Community license: free for any individual/business under $1M USD
+// annual gross revenue (https://www.questpdf.com/license/configuration.html).
+// If that no longer applies, switch to a paid QuestPDF license here.
+QuestPDF.Settings.License = LicenseType.Community;
+
+// QuestPDF discovers fonts from the OS by default (Settings.UseEnvironmentFonts,
+// true by default) - left as-is deliberately, since the Dockerfile installs
+// fontconfig + fonts-dejavu-core specifically so that discovery has a real
+// font to find. Without one or the other, PDF generation throws at runtime.
 
 // ===============================
 // Services

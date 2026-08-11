@@ -54,7 +54,8 @@ public interface IPurchaseRequisitionService
     Task<PurchaseRequisitionResponse?> DecideStepAsync(
         int id,
         DecidePurchaseRequisitionStepRequest request,
-        int decidingUserId);
+        int decidingUserId,
+        string pdfStorageRootPath);
 
 
     // =========================================================
@@ -66,5 +67,21 @@ public interface IPurchaseRequisitionService
 
     Task<PublicPurchaseRequisitionApprovalResponse?> DecideStepByTokenAsync(
         string rawToken,
-        DecidePurchaseRequisitionStepRequest request);
+        DecidePurchaseRequisitionStepRequest request,
+        string pdfStorageRootPath);
+
+
+    // =========================================================
+    // PDF (Phase 6)
+    // =========================================================
+
+    // Returns null if the requisition, or its PDF, doesn't exist (e.g. not
+    // yet Approved). Throws UnauthorizedAccessException if the caller is
+    // neither the owner, a privileged user, nor an assigned approver -
+    // same access rule as GetByIdAsync.
+    Task<(string PhysicalPath, string FileName)?> GetPdfFileAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath);
 }
