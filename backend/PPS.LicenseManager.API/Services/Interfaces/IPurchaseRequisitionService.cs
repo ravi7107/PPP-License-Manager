@@ -46,7 +46,7 @@ public interface IPurchaseRequisitionService
         int requestedByUserId);
 
     Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
-        GetApproverCandidatesAsync(int requestingUserId);
+        GetApproverCandidatesAsync(int purchaseRequisitionId, int requestingUserId);
 
     Task<IEnumerable<PurchaseRequisitionPendingApprovalResponse>>
         GetPendingApprovalsAsync(int approverUserId);

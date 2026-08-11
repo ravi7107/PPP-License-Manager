@@ -776,20 +776,27 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // =========================================================
 
     public async Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
-        GetApproverCandidatesAsync(int requestingUserId)
+        GetApproverCandidatesAsync(int purchaseRequisitionId, int requestingUserId)
     {
-        var requester = await _context.Users
-            .Include(x => x.Department)
-            .FirstOrDefaultAsync(x => x.Id == requestingUserId);
+        var record = await _context.PurchaseRequisitions
+            .FirstOrDefaultAsync(x => x.Id == purchaseRequisitionId);
 
-        if (requester == null)
-            throw new InvalidOperationException("Requesting user not found.");
+        if (record == null)
+            throw new InvalidOperationException("Purchase requisition not found.");
 
-        var companyId = requester.CompanyId ?? requester.Department?.CompanyId;
+        if (record.RequestedByUserId != requestingUserId)
+            throw new UnauthorizedAccessException(
+                "You can only view approver candidates for your own purchase requisitions.");
 
-        if (companyId == null)
-            throw new InvalidOperationException(
-                "Unable to determine your company - contact an administrator.");
+        // Scope candidates by the purchase requisition's own company - set
+        // from whichever Department was selected at Draft creation (see
+        // CreateDraftAsync/ValidateAndComputeAsync) - rather than the
+        // requester's personal CompanyId/Department. Those two can
+        // disagree, and a requester with no personal company link at all
+        // (e.g. a System Administrator account) previously made this
+        // endpoint fail outright even though the PR itself has a
+        // perfectly well-defined company.
+        var companyId = record.CompanyId;
 
         var candidates = await _context.Users
             .Include(x => x.Department)

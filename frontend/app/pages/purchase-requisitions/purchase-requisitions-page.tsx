@@ -222,9 +222,10 @@ export default function PurchaseRequisitionsPage() {
   };
 
   const openSubmitDialog = async () => {
+    if (!detailPr) return;
     setSubmitError(null);
     try {
-      const candidates = await getApproverCandidates();
+      const candidates = await getApproverCandidates(detailPr.id);
       setApproverCandidates(candidates);
       setSubmitOpen(true);
     } catch (err: any) {

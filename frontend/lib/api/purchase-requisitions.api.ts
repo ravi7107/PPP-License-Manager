@@ -237,12 +237,16 @@ export async function submitPurchaseRequisition(
   return response.data.data;
 }
 
-export async function getApproverCandidates(): Promise<
-  PurchaseRequisitionApproverCandidate[]
-> {
+// Scoped to a specific purchase requisition - eligibility depends on the
+// PR's own company (set from the Department selected at Draft creation),
+// not the requester's personal company, so the candidate list can differ
+// PR-to-PR for the same requester.
+export async function getApproverCandidates(
+  id: number
+): Promise<PurchaseRequisitionApproverCandidate[]> {
   const response = await api.get<
     ApiResponse<PurchaseRequisitionApproverCandidate[]>
-  >('/PurchaseRequisition/approver-candidates');
+  >(`/PurchaseRequisition/${id}/approver-candidates`);
 
   return response.data.data;
 }

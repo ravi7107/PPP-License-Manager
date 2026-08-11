@@ -76,16 +76,26 @@ public class PurchaseRequisitionController : BaseController
     // APPROVER CANDIDATES (for the Submit dialog)
     // =========================================================
 
-    [HttpGet("approver-candidates")]
-    public async Task<IActionResult> GetApproverCandidates()
+    // Scoped to a specific purchase requisition (rather than "candidates
+    // for me, in general") because eligibility depends on the PR's own
+    // company - which is set from the Department selected at Draft
+    // creation, not from the requester's personal company. See
+    // GetApproverCandidatesAsync's comment for why that distinction
+    // matters.
+    [HttpGet("{id:int}/approver-candidates")]
+    public async Task<IActionResult> GetApproverCandidates(int id)
     {
         try
         {
             var currentUserId = GetCurrentUserId();
 
-            var result = await _service.GetApproverCandidatesAsync(currentUserId);
+            var result = await _service.GetApproverCandidatesAsync(id, currentUserId);
 
             return Success(result, "Approver candidates retrieved successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
