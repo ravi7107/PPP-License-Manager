@@ -127,6 +127,24 @@ export interface PurchaseRequisitionApproverCandidate {
   departmentName: string | null;
 }
 
+export interface PurchaseRequisitionPendingApproval {
+  id: number;
+  prNumber: string | null;
+  title: string;
+  departmentName: string;
+  requestedByUserName: string;
+  stepOrder: number;
+  requiredApprovalStageCount: number;
+  currency: string;
+  totalAmount: number;
+  submittedAt: string | null;
+}
+
+export interface DecidePurchaseRequisitionStepRequest {
+  approve: boolean;
+  remarks?: string | null;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -225,6 +243,28 @@ export async function getApproverCandidates(): Promise<
   const response = await api.get<
     ApiResponse<PurchaseRequisitionApproverCandidate[]>
   >('/PurchaseRequisition/approver-candidates');
+
+  return response.data.data;
+}
+
+export async function getPendingApprovals(): Promise<
+  PurchaseRequisitionPendingApproval[]
+> {
+  const response = await api.get<
+    ApiResponse<PurchaseRequisitionPendingApproval[]>
+  >('/PurchaseRequisition/pending-approvals');
+
+  return response.data.data;
+}
+
+export async function decidePurchaseRequisitionStep(
+  id: number,
+  request: DecidePurchaseRequisitionStepRequest
+): Promise<PurchaseRequisition> {
+  const response = await api.post<ApiResponse<PurchaseRequisition>>(
+    `/PurchaseRequisition/${id}/decision`,
+    request
+  );
 
   return response.data.data;
 }

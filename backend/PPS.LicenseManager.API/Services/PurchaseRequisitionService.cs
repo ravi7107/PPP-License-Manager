@@ -767,4 +767,194 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             DepartmentName = u.Department?.DepartmentName
         });
     }
+
+
+    // =========================================================
+    // APPROVAL ENGINE (Phase 4)
+    // =========================================================
+
+    public async Task<IEnumerable<PurchaseRequisitionPendingApprovalResponse>>
+        GetPendingApprovalsAsync(int approverUserId)
+    {
+        var records = await _context.PurchaseRequisitions
+            .Include(x => x.Department)
+            .Include(x => x.RequestedByUser)
+            .Include(x => x.ApprovalSteps)
+            .Where(x =>
+                x.Status == "InApproval" &&
+                x.ApprovalSteps.Any(s =>
+                    s.StepOrder == x.CurrentApprovalStepOrder &&
+                    s.Status == "Pending" &&
+                    s.AssignedApproverUserId == approverUserId))
+            .OrderBy(x => x.SubmittedAt)
+            .ToListAsync();
+
+        return records.Select(r => new PurchaseRequisitionPendingApprovalResponse
+        {
+            Id = r.Id,
+            PrNumber = r.PrNumber,
+            Title = r.Title,
+            DepartmentName = r.Department?.DepartmentName ?? string.Empty,
+            RequestedByUserName = r.RequestedByUser?.FullName ?? string.Empty,
+            StepOrder = r.CurrentApprovalStepOrder ?? 0,
+            RequiredApprovalStageCount = r.RequiredApprovalStageCount,
+            Currency = r.Currency,
+            TotalAmount = r.TotalAmount,
+            SubmittedAt = r.SubmittedAt
+        });
+    }
+
+    /*
+     * Decides the step matching CurrentApprovalStepOrder - never a
+     * client-supplied step id, so there's no way to decide a step that
+     * isn't currently "live". A rejection at any stage immediately
+     * rejects the whole requisition and flips every still-Pending future
+     * stage to Skipped (see PurchaseRequisitionApprovalStep's model
+     * comment); an approval either advances CurrentApprovalStepOrder to
+     * the next stage, or - on the final stage - marks the whole
+     * requisition Approved. This method intentionally does NOT generate
+     * a PDF or notify Finance on final approval - that's Phase 6/7.
+     */
+    public async Task<PurchaseRequisitionResponse?> DecideStepAsync(
+        int id,
+        DecidePurchaseRequisitionStepRequest request,
+        int decidingUserId)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .Include(x => x.RequestedByUser)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (record == null)
+            return null;
+
+        if (record.Status != "InApproval")
+            throw new InvalidOperationException(
+                "This purchase requisition is not currently awaiting approval.");
+
+        var currentStep = record.ApprovalSteps
+            .FirstOrDefault(s => s.StepOrder == record.CurrentApprovalStepOrder);
+
+        if (currentStep == null)
+            throw new InvalidOperationException(
+                "No active approval step was found for this purchase requisition.");
+
+        if (currentStep.AssignedApproverUserId != decidingUserId)
+            throw new UnauthorizedAccessException(
+                "You are not the assigned approver for the current stage of this purchase requisition.");
+
+        if (currentStep.Status != "Pending")
+            throw new InvalidOperationException(
+                "This approval stage has already been decided.");
+
+        if (!request.Approve && string.IsNullOrWhiteSpace(request.Remarks))
+            throw new InvalidOperationException(
+                "Remarks are required when rejecting a purchase requisition.");
+
+        var now = DateTime.UtcNow;
+        currentStep.DecidedAt = now;
+        currentStep.Remarks = request.Remarks;
+
+        int notifyUserId;
+        string notifyType;
+        string notifyTitle;
+        string notifyMessage;
+
+        var prLabel = record.PrNumber ?? $"#{record.Id}";
+
+        if (request.Approve)
+        {
+            currentStep.Status = "Approved";
+
+            var nextStep = record.ApprovalSteps
+                .Where(s => s.StepOrder > currentStep.StepOrder)
+                .OrderBy(s => s.StepOrder)
+                .FirstOrDefault();
+
+            if (nextStep == null)
+            {
+                // Final stage approved - the whole requisition is now
+                // Approved. The immutability trigger only blocks further
+                // updates once a row's PREVIOUS status was already
+                // Approved, so this transition itself is unaffected by it.
+                record.Status = "Approved";
+                record.ApprovedAt = now;
+                record.CurrentApprovalStepOrder = null;
+                record.UpdatedAt = now;
+
+                AddAuditLog(record.Id, "FullyApproved", decidingUserId,
+                    $"Stage {currentStep.StepOrder} approved - all stages complete.");
+
+                notifyUserId = record.RequestedByUserId;
+                notifyType = "PurchaseRequisitionApproved";
+                notifyTitle = "Purchase requisition approved";
+                notifyMessage =
+                    $"Your purchase requisition {prLabel} ({record.Title}) has been fully approved.";
+            }
+            else
+            {
+                record.CurrentApprovalStepOrder = nextStep.StepOrder;
+                record.UpdatedAt = now;
+
+                AddAuditLog(record.Id, "StepApproved", decidingUserId,
+                    $"Stage {currentStep.StepOrder} approved - advanced to stage {nextStep.StepOrder}.");
+
+                notifyUserId = nextStep.AssignedApproverUserId;
+                notifyType = "PurchaseRequisitionApprovalNeeded";
+                notifyTitle = "Purchase requisition needs your approval";
+                notifyMessage =
+                    $"{record.RequestedByUser?.FullName ?? "A user"} is waiting on your approval for {prLabel} ({record.Title}).";
+            }
+        }
+        else
+        {
+            currentStep.Status = "Rejected";
+            record.Status = "Rejected";
+            record.RejectedAt = now;
+            record.CurrentApprovalStepOrder = null;
+            record.UpdatedAt = now;
+
+            foreach (var futureStep in record.ApprovalSteps
+                .Where(s => s.StepOrder > currentStep.StepOrder && s.Status == "Pending"))
+            {
+                futureStep.Status = "Skipped";
+            }
+
+            AddAuditLog(record.Id, "StepRejected", decidingUserId,
+                $"Stage {currentStep.StepOrder} rejected: {request.Remarks}");
+
+            notifyUserId = record.RequestedByUserId;
+            notifyType = "PurchaseRequisitionRejected";
+            notifyTitle = "Purchase requisition rejected";
+            notifyMessage =
+                $"Your purchase requisition {prLabel} ({record.Title}) was rejected at stage {currentStep.StepOrder}: {request.Remarks}";
+        }
+
+        await _context.SaveChangesAsync();
+
+        AddNotification(notifyUserId, notifyType, notifyTitle, notifyMessage, record.Id);
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(record.Id, decidingUserId, isPrivileged: false);
+    }
+
+    private void AddNotification(
+        int userId,
+        string type,
+        string title,
+        string message,
+        int purchaseRequisitionId)
+    {
+        _context.Notifications.Add(new Notification
+        {
+            UserId = userId,
+            Type = type,
+            Title = title,
+            Message = message,
+            RelatedEntityType = "PurchaseRequisition",
+            RelatedEntityId = purchaseRequisitionId,
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
 }

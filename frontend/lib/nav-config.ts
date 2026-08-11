@@ -31,6 +31,7 @@ export const navItems: NavItem[] = [
   { key: 'licenses', label: 'Software Licenses', path: '/licenses', icon: KeySquare },
   { key: 'allocations', label: 'Allocations', path: '/allocations', icon: Share2 },
   { key: 'purchaseRequisitions', label: 'Purchase Requisitions', path: '/purchase-requisitions', icon: ClipboardList },
+  { key: 'purchaseRequisitionApprovals', label: 'PR Approvals', path: '/purchase-requisition-approvals', icon: ClipboardCheck },
   { key: 'availability', label: 'Resource Availability', path: '/availability', icon: UserX },
   { key: 'approvals', label: 'Approvals', path: '/approvals', icon: ClipboardCheck },
   { key: 'myRequests', label: 'My Requests', path: '/my-requests', icon: FileText },

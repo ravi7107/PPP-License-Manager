@@ -22,7 +22,8 @@ export type ModuleKey =
   | 'clients'
   | 'officeLocations'
   | 'accessManagement'
-  | 'purchaseRequisitions';
+  | 'purchaseRequisitions'
+  | 'purchaseRequisitionApprovals';
 
 /*
  * Default module permissions.
@@ -131,6 +132,17 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   // Any employee can raise a purchase requisition - it's not gated to a
   // specific role the way Hardware/Licenses admin actions are.
   purchaseRequisitions: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+    'Employee',
+  ],
+
+  // A requester can name ANY active user in their company as a stage
+  // approver (see PurchaseRequisitionService.GetApproverCandidatesAsync),
+  // not just certain roles, so this queue is open the same way.
+  purchaseRequisitionApprovals: [
     'Super Admin',
     'IT Admin',
     'Team Lead',

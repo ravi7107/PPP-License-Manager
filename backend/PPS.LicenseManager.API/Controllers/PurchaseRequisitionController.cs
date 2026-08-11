@@ -261,6 +261,49 @@ public class PurchaseRequisitionController : BaseController
 
 
     // =========================================================
+    // PENDING APPROVALS (Approval Engine)
+    // =========================================================
+
+    [HttpGet("pending-approvals")]
+    public async Task<IActionResult> GetPendingApprovals()
+    {
+        var currentUserId = GetCurrentUserId();
+
+        var result = await _service.GetPendingApprovalsAsync(currentUserId);
+
+        return Success(result, "Pending approvals retrieved successfully.");
+    }
+
+    [HttpPost("{id:int}/decision")]
+    public async Task<IActionResult> DecideStep(
+        int id,
+        [FromBody] DecidePurchaseRequisitionStepRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.DecideStepAsync(id, request, currentUserId);
+
+            if (result == null)
+                return NotFoundResponse("Purchase requisition not found.");
+
+            return Success(
+                result,
+                request.Approve ? "Approval recorded." : "Rejection recorded.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
+
+
+    // =========================================================
     // SUBMIT
     // =========================================================
 

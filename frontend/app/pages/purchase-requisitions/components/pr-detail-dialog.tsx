@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Download, Send, Trash2, Upload } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Download, Send, Trash2, Upload, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -30,6 +30,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+
 import {
   AttachmentType,
   buildAttachmentUrl,
@@ -55,25 +58,40 @@ interface PrDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   purchaseRequisition: PurchaseRequisition | null;
+  currentUserId?: number | null;
   uploading: boolean;
   uploadError?: string | null;
   onUploadAttachment: (file: File, attachmentType: AttachmentType) => Promise<void>;
   onDeleteAttachment: (attachmentId: number) => Promise<void>;
   onOpenSubmit: () => void;
+  deciding?: boolean;
+  decisionError?: string | null;
+  onDecide?: (approve: boolean, remarks: string) => Promise<void>;
 }
 
 export function PrDetailDialog({
   open,
   onOpenChange,
   purchaseRequisition,
+  currentUserId,
   uploading,
   uploadError,
   onUploadAttachment,
   onDeleteAttachment,
   onOpenSubmit,
+  deciding = false,
+  decisionError,
+  onDecide,
 }: PrDetailDialogProps) {
   const [attachmentType, setAttachmentType] =
     useState<AttachmentType>('VendorQuotation');
+  const [decisionRemarks, setDecisionRemarks] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setDecisionRemarks('');
+    }
+  }, [open, purchaseRequisition?.id]);
 
   if (!purchaseRequisition) {
     return null;
@@ -82,6 +100,17 @@ export function PrDetailDialog({
   const pr = purchaseRequisition;
   const isDraft = pr.status === 'Draft';
   const canManageAttachments = pr.isOwner && isDraft;
+
+  const currentStep = pr.approvalSteps.find(
+    (s) => s.stepOrder === pr.currentApprovalStepOrder
+  );
+
+  const isCurrentApprover =
+    pr.status === 'InApproval' &&
+    !!currentStep &&
+    currentStep.status === 'Pending' &&
+    currentUserId != null &&
+    currentStep.assignedApproverUserId === currentUserId;
 
   const selectFile = () => {
     const input = document.createElement('input');
@@ -274,6 +303,49 @@ export function PrDetailDialog({
                 </li>
               ))}
             </ul>
+          </div>
+        ) : null}
+
+        {/* YOUR DECISION */}
+
+        {isCurrentApprover && onDecide ? (
+          <div className="rounded-md border border-border bg-muted/40 p-3">
+            <h3 className="mb-2 text-sm font-semibold">Your Decision</h3>
+
+            {decisionError ? (
+              <div className="mb-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+                {decisionError}
+              </div>
+            ) : null}
+
+            <Label className="text-xs">
+              Remarks {'(required to reject)'}
+            </Label>
+            <Textarea
+              className="mt-1"
+              placeholder="Add any remarks for the requester..."
+              value={decisionRemarks}
+              onChange={(e) => setDecisionRemarks(e.target.value)}
+              disabled={deciding}
+            />
+
+            <div className="mt-2 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deciding}
+                onClick={() => onDecide(false, decisionRemarks)}
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" /> Reject
+              </Button>
+              <Button
+                type="button"
+                disabled={deciding}
+                onClick={() => onDecide(true, decisionRemarks)}
+              >
+                <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
+              </Button>
+            </div>
           </div>
         ) : null}
 

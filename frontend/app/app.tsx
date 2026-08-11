@@ -13,6 +13,7 @@ import LicensesPage from '@/app/pages/licenses/licenses-page';
 import ReportsPage from '@/app/pages/reports/reports-page';
 import AllocationsPage from '@/app/pages/allocations/allocations-page';
 import PurchaseRequisitionsPage from '@/app/pages/purchase-requisitions/purchase-requisitions-page';
+import PendingApprovalsPage from '@/app/pages/purchase-requisitions/pending-approvals-page';
 import AvailabilityPage from '@/app/pages/availability/availability-page';
 import ApprovalsPage from '@/app/pages/requests/approvals-page';
 import MyRequestsPage from '@/app/pages/requests/my-requests-page';
@@ -45,6 +46,7 @@ function App() {
           <Route path="licenses" element={<LicensesPage />} />
           <Route path="allocations" element={<AllocationsPage />} />
           <Route path="purchase-requisitions" element={<PurchaseRequisitionsPage />} />
+          <Route path="purchase-requisition-approvals" element={<PendingApprovalsPage />} />
           <Route path="availability" element={<AvailabilityPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="my-requests" element={<MyRequestsPage />} />
