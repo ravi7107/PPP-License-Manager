@@ -50,6 +50,27 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<PurchaseRequisition> PurchaseRequisitions =>
+        Set<PurchaseRequisition>();
+
+    public DbSet<PurchaseRequisitionLineItem> PurchaseRequisitionLineItems =>
+        Set<PurchaseRequisitionLineItem>();
+
+    public DbSet<PurchaseRequisitionAttachment> PurchaseRequisitionAttachments =>
+        Set<PurchaseRequisitionAttachment>();
+
+    public DbSet<PurchaseRequisitionApprovalStep> PurchaseRequisitionApprovalSteps =>
+        Set<PurchaseRequisitionApprovalStep>();
+
+    public DbSet<PurchaseRequisitionApprovalToken> PurchaseRequisitionApprovalTokens =>
+        Set<PurchaseRequisitionApprovalToken>();
+
+    public DbSet<PurchaseRequisitionAuditLog> PurchaseRequisitionAuditLogs =>
+        Set<PurchaseRequisitionAuditLog>();
+
+    public DbSet<PurchaseRequisitionFinanceNotification> PurchaseRequisitionFinanceNotifications =>
+        Set<PurchaseRequisitionFinanceNotification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -342,6 +363,182 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.ResultingAssignment)
                   .WithMany()
                   .HasForeignKey(x => x.ResultingAssignmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ------------------------------------------------------------------
+        // Purchase Requisition module
+        // ------------------------------------------------------------------
+
+        modelBuilder.Entity<PurchaseRequisition>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.PrNumber)
+                  .IsUnique();
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Draft")
+                  .IsRequired();
+
+            entity.Property(x => x.Currency)
+                  .HasMaxLength(3)
+                  .HasDefaultValue("INR")
+                  .IsRequired();
+
+            entity.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.TaxAmount).HasPrecision(18, 2);
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.DepartmentId);
+            entity.HasIndex(x => x.RequestedByUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Department)
+                  .WithMany()
+                  .HasForeignKey(x => x.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RequestedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.RequestedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionLineItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany(x => x.LineItems)
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionAttachment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.AttachmentType)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("VendorQuotation")
+                  .IsRequired();
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.UploadedByUserId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany(x => x.Attachments)
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionApprovalStep>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.AssignedApproverUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasIndex(x => new { x.PurchaseRequisitionId, x.StepOrder })
+                  .IsUnique();
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany(x => x.ApprovalSteps)
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.AssignedApproverUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssignedApproverUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionApprovalToken>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.TokenHash)
+                  .IsUnique();
+
+            entity.HasIndex(x => x.PurchaseRequisitionApprovalStepId);
+
+            entity.HasOne(x => x.ApprovalStep)
+                  .WithMany(x => x.Tokens)
+                  .HasForeignKey(x => x.PurchaseRequisitionApprovalStepId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionAuditLog>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PerformedVia)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("WebApp")
+                  .IsRequired();
+
+            entity.Property(x => x.Details)
+                  .HasColumnType("text");
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.CreatedAt);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany()
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PerformedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.PerformedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionFinanceNotification>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.DeliveryStatus)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Sent")
+                  .IsRequired();
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.SentByUserId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany()
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SentByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.SentByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
