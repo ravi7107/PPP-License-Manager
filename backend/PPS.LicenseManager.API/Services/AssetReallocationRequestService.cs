@@ -70,8 +70,10 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
             RequestedByUserId = r.RequestedByUserId,
             RequestedByUserName = r.RequestedByUser.FullName,
 
+            RequestType = r.RequestType,
+
             ProposedUserId = r.ProposedUserId,
-            ProposedUserName = r.ProposedUser.FullName,
+            ProposedUserName = r.ProposedUser?.FullName,
 
             ProposedSeatId = r.ProposedSeatId,
             ProposedSeatCode = r.ProposedSeat?.SeatCode,
@@ -139,10 +141,24 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
     // CREATE (Team Lead)
     // =========================================================
 
+    private static readonly string[] ValidRequestTypes =
+    {
+        "Reassign", "Reseat", "RemoteMode", "ReturnToOffice"
+    };
+
     public async Task<AssetReallocationRequestResponse> CreateAsync(
         CreateReallocationRequest request,
         int requestedByUserId)
     {
+        var requestType =
+            string.IsNullOrWhiteSpace(request.RequestType)
+                ? "Reassign"
+                : request.RequestType;
+
+        if (!ValidRequestTypes.Contains(requestType))
+            throw new InvalidOperationException(
+                $"Unknown request type \"{requestType}\".");
+
         var requestedBy = await _context.Users
             .FirstOrDefaultAsync(x => x.Id == requestedByUserId);
 
@@ -176,16 +192,57 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
             throw new InvalidOperationException(
                 "This asset isn't currently assigned to anyone, so there's nothing to reallocate. Use Allocate instead.");
 
-        if (currentAssignment.UserId == request.ProposedUserId)
-            throw new InvalidOperationException(
-                "This asset is already assigned to the selected user.");
+        User? proposedUser = null;
 
-        var proposedUser = await _context.Users
-            .FirstOrDefaultAsync(x => x.Id == request.ProposedUserId);
+        // -----------------------------------------------------------
+        // Per-type validation
+        // -----------------------------------------------------------
+        if (requestType == "Reassign")
+        {
+            if (request.ProposedUserId == null)
+                throw new InvalidOperationException(
+                    "Select a user to reallocate this asset to.");
 
-        if (proposedUser == null || !proposedUser.IsActive)
+            if (currentAssignment.UserId == request.ProposedUserId)
+                throw new InvalidOperationException(
+                    "This asset is already assigned to the selected user.");
+
+            proposedUser = await _context.Users
+                .FirstOrDefaultAsync(x => x.Id == request.ProposedUserId);
+
+            if (proposedUser == null || !proposedUser.IsActive)
+                throw new InvalidOperationException(
+                    "Selected user does not exist or is inactive.");
+        }
+        else if (request.ProposedUserId != null)
+        {
             throw new InvalidOperationException(
-                "Selected user does not exist or is inactive.");
+                $"A new user can't be set on a \"{requestType}\" request.");
+        }
+
+        if (requestType == "Reseat" && request.ProposedSeatId == null)
+        {
+            throw new InvalidOperationException(
+                "Select a seat to move this asset to.");
+        }
+
+        if (requestType == "RemoteMode")
+        {
+            if (currentAssignment.WorkMode == "Remote")
+                throw new InvalidOperationException(
+                    "This asset is already set to Remote/WFH.");
+
+            if (request.ProposedSeatId != null)
+                throw new InvalidOperationException(
+                    "A seat can't be set on a \"RemoteMode\" request - going remote always vacates the current seat.");
+        }
+
+        if (requestType == "ReturnToOffice" &&
+            currentAssignment.WorkMode != "Remote")
+        {
+            throw new InvalidOperationException(
+                "This asset isn't currently set to Remote/WFH.");
+        }
 
         if (request.ProposedSeatId.HasValue)
         {
@@ -202,6 +259,7 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
             AssetId = request.AssetId,
             CurrentAssignmentId = currentAssignment.Id,
             RequestedByUserId = requestedByUserId,
+            RequestType = requestType,
             ProposedUserId = request.ProposedUserId,
             ProposedSeatId = request.ProposedSeatId,
             Remarks = request.Remarks,
@@ -217,12 +275,32 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
 
         await _context.SaveChangesAsync();
 
+        var actionDescription = requestType switch
+        {
+            "Reassign" =>
+                $"reallocate {asset.AssetTag} ({asset.AssetName}) to {proposedUser!.FullName}",
+            "Reseat" =>
+                $"move {asset.AssetTag} ({asset.AssetName}) to a different seat",
+            "RemoteMode" =>
+                $"set {asset.AssetTag} ({asset.AssetName}) to Remote/WFH",
+            "ReturnToOffice" =>
+                $"return {asset.AssetTag} ({asset.AssetName}) to the office",
+            _ => $"change {asset.AssetTag} ({asset.AssetName})"
+        };
+
+        // Notify against the affected user - the proposed new holder for
+        // Reassign, or the asset's current holder for every other type
+        // (there's no new user to notify about).
+        var notifyAboutUserId =
+            requestType == "Reassign"
+                ? request.ProposedUserId!.Value
+                : currentAssignment.UserId;
+
         await _notificationService.NotifyItAndReportingManagerAsync(
-            request.ProposedUserId,
+            notifyAboutUserId,
             "AssetReallocationRequested",
             "Hardware reallocation needs your approval",
-            $"{requestedBy.FullName} requested to reallocate {asset.AssetTag} " +
-            $"({asset.AssetName}) to {proposedUser.FullName}. " +
+            $"{requestedBy.FullName} requested to {actionDescription}. " +
             "Both a Super Admin and an IT Admin need to approve before it takes effect.",
             "AssetReallocationRequest",
             record.Id);
@@ -316,6 +394,15 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
 
         record.UpdatedAt = now;
 
+        var actionDescription = record.RequestType switch
+        {
+            "Reassign" => $"reallocate {record.Asset.AssetTag} to {record.ProposedUser?.FullName}",
+            "Reseat" => $"move {record.Asset.AssetTag} to a different seat",
+            "RemoteMode" => $"set {record.Asset.AssetTag} to Remote/WFH",
+            "ReturnToOffice" => $"return {record.Asset.AssetTag} to the office",
+            _ => $"change {record.Asset.AssetTag}"
+        };
+
         // Either side rejecting rejects the whole request immediately -
         // there's no point waiting on the other approver.
         if (record.AdminDecision == "Rejected" ||
@@ -329,8 +416,7 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
                 record,
                 "AssetReallocationRejected",
                 "Hardware reallocation request rejected",
-                $"Your request to reallocate {record.Asset.AssetTag} to " +
-                $"{record.ProposedUser.FullName} was rejected by {decider.FullName}." +
+                $"Your request to {actionDescription} was rejected by {decider.FullName}." +
                 (string.IsNullOrWhiteSpace(request.Remarks)
                     ? string.Empty
                     : $" Reason: {request.Remarks}"));
@@ -338,7 +424,7 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
             return await GetByIdAsync(record.Id);
         }
 
-        // Both sides approved - execute the actual reallocation now.
+        // Both sides approved - execute the actual change now.
         if (record.AdminDecision == "Approved" &&
             record.ItDecision == "Approved")
         {
@@ -346,17 +432,45 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
                 throw new InvalidOperationException(
                     "The original hardware assignment for this request no longer exists.");
 
-            var result = await _assetAssignmentService.TransferAsync(
-                record.CurrentAssignmentId.Value,
-                new TransferAssetRequest
-                {
-                    NewUserId = record.ProposedUserId,
-                    SeatId = record.ProposedSeatId,
-                    Remarks =
-                        $"Reallocation request #{record.Id} approved by " +
-                        "Super Admin and IT Admin."
-                },
-                decidedByUserId);
+            var approvalRemarks =
+                $"Reallocation request #{record.Id} approved by " +
+                "Super Admin and IT Admin.";
+
+            AssetAssignmentResponse? result = record.RequestType switch
+            {
+                "Reassign" => await _assetAssignmentService.TransferAsync(
+                    record.CurrentAssignmentId.Value,
+                    new TransferAssetRequest
+                    {
+                        NewUserId = record.ProposedUserId!.Value,
+                        SeatId = record.ProposedSeatId,
+                        Remarks = approvalRemarks
+                    },
+                    decidedByUserId),
+
+                "Reseat" => await _assetAssignmentService.ReseatAsync(
+                    record.CurrentAssignmentId.Value,
+                    record.ProposedSeatId,
+                    approvalRemarks,
+                    decidedByUserId),
+
+                "RemoteMode" => await _assetAssignmentService.SetWorkModeAsync(
+                    record.CurrentAssignmentId.Value,
+                    "Remote",
+                    null,
+                    approvalRemarks,
+                    decidedByUserId),
+
+                "ReturnToOffice" => await _assetAssignmentService.SetWorkModeAsync(
+                    record.CurrentAssignmentId.Value,
+                    "Office",
+                    record.ProposedSeatId,
+                    approvalRemarks,
+                    decidedByUserId),
+
+                _ => throw new InvalidOperationException(
+                    $"Unknown request type \"{record.RequestType}\".")
+            };
 
             if (result == null)
                 throw new InvalidOperationException(
@@ -372,8 +486,7 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
                 record,
                 "AssetReallocationApproved",
                 "Hardware reallocation request approved",
-                $"Your request to reallocate {record.Asset.AssetTag} to " +
-                $"{record.ProposedUser.FullName} was approved by both " +
+                $"Your request to {actionDescription} was approved by both " +
                 "Super Admin and IT Admin, and has been completed.");
 
             return await GetByIdAsync(record.Id);

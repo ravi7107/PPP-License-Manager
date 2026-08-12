@@ -1231,6 +1231,10 @@ public class OfficeLocationService : IOfficeLocationService
                 x.Asset != null
                     ? x.Asset.AssetTag
                     : null,
+            AssetName =
+                x.Asset != null
+                    ? x.Asset.AssetName
+                    : null,
             HostName =
                 x.Asset != null
                     ? x.Asset.HostName

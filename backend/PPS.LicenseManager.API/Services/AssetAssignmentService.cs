@@ -81,7 +81,9 @@ public class AssetAssignmentService : IAssetAssignmentService
             OfficeFloorId = assignment.Seat?.OfficeFloorId,
             FloorName = assignment.Seat?.OfficeFloor?.FloorName,
             OfficeLocationName =
-                assignment.Seat?.OfficeFloor?.OfficeLocation?.LocationName
+                assignment.Seat?.OfficeFloor?.OfficeLocation?.LocationName,
+
+            WorkMode = assignment.WorkMode
         };
     }
 
@@ -444,5 +446,171 @@ if (request.AssignmentType == AssignmentType.Temporary &&
         await transaction.CommitAsync();
 
         return true;
+    }
+
+
+    // =========================================================
+    // RESEAT (same user, move to a different/new seat)
+    // =========================================================
+
+    // Unlike TransferAsync, this doesn't close and reopen the assignment -
+    // the holder isn't changing, only where their asset sits on the floor
+    // map, so the existing assignment row is updated in place.
+    public async Task<AssetAssignmentResponse?> ReseatAsync(
+        int id,
+        int? seatId,
+        string? remarks,
+        int actingUserId)
+    {
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
+
+        var current = await _context.AssetAssignments
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (current == null)
+            return null;
+
+        if (!current.IsActive ||
+            !string.Equals(
+                current.Status,
+                "Assigned",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Only an active hardware assignment can be reseated.");
+        }
+
+        var now = DateTime.UtcNow;
+
+        // Vacate the old seat first (if moving off of it) so the new
+        // occupancy check below doesn't see the asset as still mapped
+        // elsewhere.
+        if (current.SeatId.HasValue &&
+            current.SeatId != seatId)
+        {
+            await _officeLocationService.SetSeatOccupantAsync(
+                current.SeatId.Value,
+                null,
+                null);
+        }
+
+        if (seatId.HasValue)
+        {
+            var seatResult = await _officeLocationService
+                .SetSeatOccupantAsync(
+                    seatId.Value,
+                    current.AssetId,
+                    current.UserId);
+
+            if (seatResult == null)
+                throw new InvalidOperationException(
+                    "Selected seat was not found.");
+        }
+
+        current.SeatId = seatId;
+        current.UpdatedAt = now;
+
+        if (!string.IsNullOrWhiteSpace(remarks))
+            current.Remarks = remarks;
+
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+
+        return await GetByIdAsync(current.Id);
+    }
+
+
+    // =========================================================
+    // WORK MODE (Office <-> Remote/WFH)
+    // =========================================================
+
+    // Going Remote vacates the assignment's current seat (the device left
+    // the building) but keeps the assignment itself active and unchanged
+    // otherwise - the holder doesn't change. Returning to Office can
+    // optionally seat it again in the same call.
+    public async Task<AssetAssignmentResponse?> SetWorkModeAsync(
+        int id,
+        string workMode,
+        int? seatId,
+        string? remarks,
+        int actingUserId)
+    {
+        if (workMode != "Office" && workMode != "Remote")
+            throw new InvalidOperationException(
+                "Work mode must be either \"Office\" or \"Remote\".");
+
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
+
+        var current = await _context.AssetAssignments
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (current == null)
+            return null;
+
+        if (!current.IsActive ||
+            !string.Equals(
+                current.Status,
+                "Assigned",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Only an active hardware assignment can change work mode.");
+        }
+
+        if (current.WorkMode == workMode)
+            throw new InvalidOperationException(
+                workMode == "Remote"
+                    ? "This asset is already set to Remote/WFH."
+                    : "This asset is already set to Office.");
+
+        var now = DateTime.UtcNow;
+
+        if (workMode == "Remote")
+        {
+            // The device is leaving the building - always clear the seat,
+            // regardless of what the caller passed for seatId.
+            if (current.SeatId.HasValue)
+            {
+                await _officeLocationService.SetSeatOccupantAsync(
+                    current.SeatId.Value,
+                    null,
+                    null);
+            }
+
+            current.SeatId = null;
+        }
+        else
+        {
+            // Returning to Office - optionally seat it right away.
+            if (seatId.HasValue)
+            {
+                var seatResult = await _officeLocationService
+                    .SetSeatOccupantAsync(
+                        seatId.Value,
+                        current.AssetId,
+                        current.UserId);
+
+                if (seatResult == null)
+                    throw new InvalidOperationException(
+                        "Selected seat was not found.");
+
+                current.SeatId = seatId;
+            }
+        }
+
+        current.WorkMode = workMode;
+        current.UpdatedAt = now;
+
+        if (!string.IsNullOrWhiteSpace(remarks))
+            current.Remarks = remarks;
+
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+
+        return await GetByIdAsync(current.Id);
     }
 }

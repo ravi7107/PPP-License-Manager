@@ -32,14 +32,27 @@ public class AssetReallocationRequest
 
     public User RequestedByUser { get; set; } = null!;
 
-    [Required]
-    public int ProposedUserId { get; set; }
+    // Required for "Reassign" (move to a new user); left null for
+    // "Reseat"/"RemoteMode"/"ReturnToOffice", which don't change who holds
+    // the asset. See RequestType.
+    public int? ProposedUserId { get; set; }
 
-    public User ProposedUser { get; set; } = null!;
+    public User? ProposedUser { get; set; }
 
+    // Required for "Reseat"; optional for "Reassign" and "ReturnToOffice";
+    // unused for "RemoteMode" (going remote always clears the seat).
     public int? ProposedSeatId { get; set; }
 
     public OfficeSeat? ProposedSeat { get; set; }
+
+    // Reassign (default - move this asset to a different user, optionally
+    // also a different seat), Reseat (same user, move to a different
+    // seat), RemoteMode (mark the current assignment as WFH and vacate its
+    // seat), ReturnToOffice (revert a WFH assignment back to Office,
+    // optionally into a new seat).
+    [Required]
+    [MaxLength(20)]
+    public string RequestType { get; set; } = "Reassign";
 
     [MaxLength(500)]
     public string? Remarks { get; set; }

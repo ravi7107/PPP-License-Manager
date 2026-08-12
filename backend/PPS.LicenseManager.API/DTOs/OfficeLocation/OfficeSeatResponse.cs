@@ -30,6 +30,8 @@ public class OfficeSeatResponse
 
     public string? AssetTag { get; set; }
 
+    public string? AssetName { get; set; }
+
     public string? HostName { get; set; }
 
     public int? UserId { get; set; }

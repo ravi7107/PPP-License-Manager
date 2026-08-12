@@ -15,8 +15,12 @@ export interface AssetReallocationRequest {
   requestedByUserId: number;
   requestedByUserName: string;
 
-  proposedUserId: number;
-  proposedUserName: string;
+  // Reassign (move to a new user), Reseat (same user, new seat),
+  // RemoteMode (mark as Remote/WFH), ReturnToOffice.
+  requestType: string;
+
+  proposedUserId: number | null;
+  proposedUserName: string | null;
 
   proposedSeatId: number | null;
   proposedSeatCode: string | null;
@@ -50,7 +54,9 @@ export interface AssetReallocationRequest {
 
 export interface CreateReallocationRequest {
   assetId: number;
-  proposedUserId: number;
+  // Reassign (default), Reseat, RemoteMode, ReturnToOffice.
+  requestType: string;
+  proposedUserId?: number | null;
   proposedSeatId?: number | null;
   remarks?: string | null;
 }

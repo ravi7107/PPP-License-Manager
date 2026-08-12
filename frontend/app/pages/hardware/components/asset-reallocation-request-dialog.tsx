@@ -19,15 +19,71 @@ import { OfficeSeat } from '@/lib/api/office-locations.api';
 
 const NO_SEAT_VALUE = '__none__';
 
-const requestFormSchema = z.object({
-  proposedUserId: z.string().min(1, 'Select a user'),
-  seatId: z.string(),
-  remarks: z.string(),
-});
+export type ReallocationRequestType =
+  | 'Reassign'
+  | 'Reseat'
+  | 'RemoteMode'
+  | 'ReturnToOffice';
+
+const REQUEST_TYPE_OPTIONS: {
+  value: ReallocationRequestType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'Reassign',
+    label: 'Reallocate to another user',
+    description: 'Move this asset to a different employee (optionally into a different seat too).',
+  },
+  {
+    value: 'Reseat',
+    label: 'Move to another seat',
+    description: 'Same employee keeps the asset - just move it to a different workstation on the floor map.',
+  },
+  {
+    value: 'RemoteMode',
+    label: 'Set to Remote / WFH',
+    description: 'Employee takes this asset home. It stays assigned to them but is removed from the office floor map.',
+  },
+  {
+    value: 'ReturnToOffice',
+    label: 'Return to office',
+    description: 'Bring a Remote/WFH asset back to the office, optionally into a specific seat.',
+  },
+];
+
+const requestFormSchema = z
+  .object({
+    requestType: z.enum(['Reassign', 'Reseat', 'RemoteMode', 'ReturnToOffice']),
+    proposedUserId: z.string(),
+    seatId: z.string(),
+    remarks: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.requestType === 'Reassign' && !values.proposedUserId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['proposedUserId'],
+        message: 'Select a user',
+      });
+    }
+
+    if (
+      values.requestType === 'Reseat' &&
+      (!values.seatId || values.seatId === NO_SEAT_VALUE)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['seatId'],
+        message: 'Select a seat',
+      });
+    }
+  });
 
 export type AssetReallocationRequestFormValues = z.infer<typeof requestFormSchema>;
 
 const EMPTY_REQUEST_FORM: AssetReallocationRequestFormValues = {
+  requestType: 'Reassign',
   proposedUserId: '',
   seatId: NO_SEAT_VALUE,
   remarks: '',
@@ -40,6 +96,9 @@ interface AssetReallocationRequestDialogProps {
   currentUserId?: number | null;
   currentSeatId?: number | null;
   currentSeatLabel?: string | null;
+  // "Office" or "Remote" - determines whether "Set to Remote / WFH" or
+  // "Return to office" is offered.
+  currentWorkMode?: string | null;
   // Used to filter the seat picker down to seats the backend will actually
   // accept for this asset (same company as the asset's department, and
   // either department-agnostic or matching the asset's department).
@@ -65,6 +124,7 @@ export function AssetReallocationRequestDialog({
   currentUserId,
   currentSeatId,
   currentSeatLabel,
+  currentWorkMode,
   assetDepartmentId,
   assetCompanyId,
   users,
@@ -87,7 +147,17 @@ export function AssetReallocationRequestDialog({
     }
   }, [open, currentSeatId]);
 
+  const requestType = form.watch('requestType');
+
   if (!asset) return null;
+
+  const isRemote = currentWorkMode === 'Remote';
+
+  const availableTypes = REQUEST_TYPE_OPTIONS.filter((option) => {
+    if (option.value === 'RemoteMode') return !isRemote;
+    if (option.value === 'ReturnToOffice') return isRemote;
+    return true;
+  });
 
   const safeUsers = Array.isArray(users) ? users : [];
   const safeSeats = Array.isArray(seats) ? seats : [];
@@ -116,15 +186,18 @@ export function AssetReallocationRequestDialog({
     return isVacant && isSameCompany && isCompatibleDepartment;
   });
 
+  const showUserField = requestType === 'Reassign';
+  const showSeatField = requestType === 'Reassign' || requestType === 'Reseat' || requestType === 'ReturnToOffice';
+  const seatRequired = requestType === 'Reseat';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Request Hardware Reallocation</DialogTitle>
           <DialogDescription>
-            Request to move {asset.assetTag} ({asset.hostName ?? asset.model ?? 'asset'}) to a
-            different user. A Super Admin and an IT Admin will both need to approve before it
-            takes effect.
+            {asset.assetTag} ({asset.hostName ?? asset.model ?? 'asset'}). A Super Admin and an
+            IT Admin will both need to approve before it takes effect.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -140,83 +213,119 @@ export function AssetReallocationRequestDialog({
 
             <FormField
               control={form.control}
-              name="proposedUserId"
+              name="requestType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reallocate To</FormLabel>
+                  <FormLabel>What do you want to do?</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select user" />
+                        <SelectValue placeholder="Select an action" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {selectableUsers.length === 0 ? (
-                        <div className="px-2 py-3 text-sm text-muted-foreground">
-                          No users available
-                        </div>
-                      ) : (
-                        selectableUsers.map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.full_name ?? u.name ?? 'Unnamed User'}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="seatId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Seat (optional)</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="No seat" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value={NO_SEAT_VALUE}>
-                        No seat (won&apos;t show on the office floor map)
-                      </SelectItem>
-                      {selectableSeats.length === 0 ? (
-                        <div className="px-2 py-3 text-sm text-muted-foreground">
-                          No vacant seats set up yet
-                        </div>
-                      ) : (
-                        selectableSeats.map((s) => (
-                          <SelectItem key={s.id} value={String(s.id)}>
-                            {seatLabel(s)}
-                            {s.id === currentSeatId ? ' (current)' : ''}
-                          </SelectItem>
-                        ))
-                      )}
+                      {availableTypes.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground">
-                    {currentSeatLabel
-                      ? `Currently at ${currentSeatLabel}.`
-                      : 'This asset isn’t linked to a seat on the office floor map yet.'}
+                    {availableTypes.find((o) => o.value === field.value)?.description}
                   </p>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
+            {showUserField && (
+              <FormField
+                control={form.control}
+                name="proposedUserId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Reallocate To</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {selectableUsers.length === 0 ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">
+                            No users available
+                          </div>
+                        ) : (
+                          selectableUsers.map((u) => (
+                            <SelectItem key={u.id} value={String(u.id)}>
+                              {u.full_name ?? u.name ?? 'Unnamed User'}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {showSeatField && (
+              <FormField
+                control={form.control}
+                name="seatId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Seat {seatRequired ? '' : '(optional)'}
+                    </FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No seat" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {!seatRequired && (
+                          <SelectItem value={NO_SEAT_VALUE}>
+                            No seat (won&apos;t show on the office floor map)
+                          </SelectItem>
+                        )}
+                        {selectableSeats.length === 0 ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">
+                            No vacant seats set up yet
+                          </div>
+                        ) : (
+                          selectableSeats.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>
+                              {seatLabel(s)}
+                              {s.id === currentSeatId ? ' (current)' : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      {currentSeatLabel
+                        ? `Currently at ${currentSeatLabel}.`
+                        : 'This asset isn’t linked to a seat on the office floor map yet.'}
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="remarks"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reason for reallocation</FormLabel>
+                  <FormLabel>Reason</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Why does this hardware need to move?…" {...field} />
+                    <Textarea placeholder="Why does this hardware need to change?…" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

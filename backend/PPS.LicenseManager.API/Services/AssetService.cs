@@ -164,6 +164,102 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         };
     }
 
+    // Aggregated detail view for the office floor map's double-click
+    // panel: system specs + current holder/seat + installed software.
+    // Returns null both when the asset doesn't exist AND when an
+    // entity-restricted caller (Team Lead/Manager) isn't allowed to see
+    // it - the controller treats both the same way (404), so this never
+    // leaks whether an out-of-entity asset exists.
+    public async Task<AssetFullDetailResponse?> GetFullDetailAsync(
+        int id,
+        bool isEntityRestricted = false,
+        int? companyId = null)
+    {
+        if (isEntityRestricted && companyId == null)
+            return null;
+
+        var asset = await _context.Assets
+            .Include(a => a.Department)
+                .ThenInclude(d => d!.Company)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (asset == null)
+            return null;
+
+        if (isEntityRestricted &&
+            (asset.Department == null ||
+             asset.Department.CompanyId != companyId))
+        {
+            return null;
+        }
+
+        var assignment = await _context.AssetAssignments
+            .Include(x => x.User)
+            .Include(x => x.Seat)
+                .ThenInclude(x => x!.OfficeFloor)
+                    .ThenInclude(x => x.OfficeLocation)
+            .Where(x => x.AssetId == id && x.IsActive)
+            .FirstOrDefaultAsync();
+
+        var installedSoftware = await _context.AssetSoftwares
+            .Include(x => x.Software)
+            .Where(x => x.AssetId == id && x.IsActive)
+            .OrderBy(x => x.Software!.Name)
+            .Select(x => new InstalledSoftwareItem
+            {
+                SoftwareId = x.SoftwareId,
+                SoftwareName = x.Software!.Name,
+                Version = x.Version,
+                LicenseKey = x.LicenseKey,
+                InstallDate = x.InstallDate,
+                Status = x.Status
+            })
+            .ToListAsync();
+
+        return new AssetFullDetailResponse
+        {
+            AssetId = asset.Id,
+            AssetTag = asset.AssetTag,
+            AssetName = asset.AssetName,
+            AssetType = asset.AssetType,
+            Manufacturer = asset.Manufacturer,
+            Model = asset.Model,
+            SerialNumber = asset.SerialNumber,
+            HostName = asset.HostName,
+            OperatingSystem = asset.OperatingSystem,
+            Processor = asset.Processor,
+            RamGb = asset.RamGb,
+            StorageGb = asset.StorageGb,
+            GraphicsCard = asset.GraphicsCard,
+            PurchaseDate = asset.PurchaseDate,
+            WarrantyExpiry = asset.WarrantyExpiry,
+            Status = asset.Status,
+            Remarks = asset.Remarks,
+
+            DepartmentId = asset.DepartmentId,
+            DepartmentName = asset.Department?.DepartmentName,
+            CompanyId = asset.Department?.CompanyId,
+            CompanyName = asset.Department?.Company?.Name,
+
+            AssignmentId = assignment?.Id,
+            UserId = assignment?.UserId,
+            UserName = assignment?.User?.FullName,
+            EmployeeCode = assignment?.User?.EmployeeCode,
+            UserEmail = assignment?.User?.Email,
+            AssignedOn = assignment?.AssignedOn,
+            WorkMode = assignment?.WorkMode,
+
+            SeatId = assignment?.SeatId,
+            SeatCode = assignment?.Seat?.SeatCode,
+            SeatName = assignment?.Seat?.SeatName,
+            FloorName = assignment?.Seat?.OfficeFloor?.FloorName,
+            OfficeLocationName =
+                assignment?.Seat?.OfficeFloor?.OfficeLocation?.LocationName,
+
+            InstalledSoftware = installedSoftware
+        };
+    }
+
 public async Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10)
 {
     return await _context.Assets

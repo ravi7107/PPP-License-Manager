@@ -98,6 +98,24 @@ public async Task<IActionResult> Dashboard()
         return Ok(asset);
     }
 
+    // Aggregated system + current holder/seat + installed software view,
+    // used by the office floor map's double-click detail panel.
+    [HttpGet("{id:int}/full-detail")]
+    public async Task<IActionResult> GetFullDetail(int id)
+    {
+        var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
+        var detail = await _assetService.GetFullDetailAsync(
+            id,
+            isEntityRestricted,
+            companyId);
+
+        if (detail == null)
+            return NotFound();
+
+        return Ok(detail);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(CreateAssetRequest request)
     {

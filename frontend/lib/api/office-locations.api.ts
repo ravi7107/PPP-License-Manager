@@ -310,3 +310,70 @@ export async function uploadOfficeFloorMap(
 
   return response.data;
 }
+
+
+// ============================================================
+// ASSET FULL DETAIL (office floor map double-click panel)
+// ============================================================
+
+export interface InstalledSoftwareItem {
+  softwareId: number;
+  softwareName: string;
+  version: string;
+  licenseKey: string | null;
+  installDate: string;
+  status: string;
+}
+
+export interface AssetFullDetail {
+  assetId: number;
+  assetTag: string;
+  assetName: string;
+  assetType: string;
+  manufacturer: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  hostName: string | null;
+  operatingSystem: string | null;
+  processor: string | null;
+  ramGb: number | null;
+  storageGb: number | null;
+  graphicsCard: string | null;
+  purchaseDate: string | null;
+  warrantyExpiry: string | null;
+  status: string;
+  remarks: string | null;
+
+  departmentId: number | null;
+  departmentName: string | null;
+  companyId: number | null;
+  companyName: string | null;
+
+  assignmentId: number | null;
+  userId: number | null;
+  userName: string | null;
+  employeeCode: string | null;
+  userEmail: string | null;
+  assignedOn: string | null;
+
+  // "Office" or "Remote"
+  workMode: string | null;
+
+  seatId: number | null;
+  seatCode: string | null;
+  seatName: string | null;
+  floorName: string | null;
+  officeLocationName: string | null;
+
+  installedSoftware: InstalledSoftwareItem[];
+}
+
+export async function getAssetFullDetail(
+  assetId: number
+): Promise<AssetFullDetail> {
+  const response = await api.get<AssetFullDetail>(
+    `/Asset/${assetId}/full-detail`
+  );
+
+  return response.data;
+}

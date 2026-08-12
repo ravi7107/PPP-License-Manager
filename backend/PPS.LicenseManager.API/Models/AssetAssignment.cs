@@ -51,4 +51,13 @@ public int? OriginalAssignmentId { get; set; }
     public int? SeatId { get; set; }
 
     public OfficeSeat? Seat { get; set; }
+
+    // "Office" (default) or "Remote" - set via
+    // AssetAssignmentService.SetWorkModeAsync. Going Remote vacates SeatId
+    // (the device left the building) without closing/reopening this
+    // assignment row, since the holder doesn't change - only where they're
+    // working from.
+    [Required]
+    [MaxLength(20)]
+    public string WorkMode { get; set; } = "Office";
 }

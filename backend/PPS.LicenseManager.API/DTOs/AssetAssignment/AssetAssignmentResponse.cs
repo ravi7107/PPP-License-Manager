@@ -33,4 +33,7 @@ public class AssetAssignmentResponse
     public int? OfficeFloorId { get; set; }
     public string? FloorName { get; set; }
     public string? OfficeLocationName { get; set; }
+
+    // "Office" or "Remote" (WFH) - see AssetAssignment.WorkMode.
+    public string WorkMode { get; set; } = "Office";
 }

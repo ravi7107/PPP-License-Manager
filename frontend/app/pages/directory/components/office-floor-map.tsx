@@ -28,6 +28,11 @@ interface OfficeFloorMapProps {
 
   onSeatClick?: (seat: OfficeSeat) => void;
 
+  // Fires on a double-click/double-tap of a seat marker, independent of
+  // onSeatClick/onSeatMove - used to open a read-only detail panel that's
+  // available even to viewers who can't drag/edit seats.
+  onSeatDoubleClick?: (seat: OfficeSeat) => void;
+
   onSeatMove?: (
     seat: OfficeSeat,
     xPosition: number,
@@ -96,6 +101,7 @@ export default function OfficeFloorMap({
   apiBaseUrl,
   selectedSeatId,
   onSeatClick,
+  onSeatDoubleClick,
   onSeatMove,
 }: OfficeFloorMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -390,6 +396,14 @@ export default function OfficeFloorMap({
         </div>
       )}
 
+      {onSeatDoubleClick && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          <MapPin className="h-4 w-4" />
+          Double-click a workstation to see the system, installed software,
+          and who it&apos;s assigned to.
+        </div>
+      )}
+
       {/* MAP */}
       <div className="overflow-auto rounded-lg border bg-muted/20 p-2">
         <div
@@ -470,6 +484,13 @@ export default function OfficeFloorMap({
                   if (!onSeatMove) {
                     onSeatClick?.(seat);
                   }
+                }}
+
+                onDoubleClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+
+                  onSeatDoubleClick?.(seat);
                 }}
 
                 className={[

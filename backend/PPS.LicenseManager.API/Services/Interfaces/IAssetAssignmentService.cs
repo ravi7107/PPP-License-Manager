@@ -26,4 +26,17 @@ public interface IAssetAssignmentService
     Task<bool> ReturnAsync(
         int id,
         ReturnAssetRequest request);
+
+    Task<AssetAssignmentResponse?> ReseatAsync(
+        int id,
+        int? seatId,
+        string? remarks,
+        int actingUserId);
+
+    Task<AssetAssignmentResponse?> SetWorkModeAsync(
+        int id,
+        string workMode,
+        int? seatId,
+        string? remarks,
+        int actingUserId);
 }

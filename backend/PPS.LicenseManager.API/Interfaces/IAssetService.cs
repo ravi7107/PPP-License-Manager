@@ -19,5 +19,9 @@ public interface IAssetService
     Task<AssetDashboardOverviewResponse> GetDashboardOverviewAsync();
     Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10);
     Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest request);
+    Task<AssetFullDetailResponse?> GetFullDetailAsync(
+        int id,
+        bool isEntityRestricted = false,
+        int? companyId = null);
 }
 

@@ -68,6 +68,28 @@ function seatSummary(r: AssetReallocationRequest): string {
     .join(' / ');
 }
 
+const REQUEST_TYPE_LABELS: Record<string, string> = {
+  Reassign: 'Reallocate',
+  Reseat: 'Move seat',
+  RemoteMode: 'Set Remote/WFH',
+  ReturnToOffice: 'Return to office',
+};
+
+function actionSummary(r: AssetReallocationRequest): string {
+  switch (r.requestType) {
+    case 'Reassign':
+      return r.proposedUserName ?? '—';
+    case 'Reseat':
+      return 'Same user';
+    case 'RemoteMode':
+      return 'Remote / WFH';
+    case 'ReturnToOffice':
+      return 'Back to office';
+    default:
+      return r.proposedUserName ?? '—';
+  }
+}
+
 interface ReallocationRequestsPanelProps {
   mode: 'mine' | 'pending';
   isSuperAdmin?: boolean;
@@ -199,7 +221,7 @@ export function ReallocationRequestsPanel({
             <TableRow>
               <TableHead>Asset</TableHead>
               {mode === 'pending' && <TableHead>Current User</TableHead>}
-              <TableHead>Reallocate To</TableHead>
+              <TableHead>Action</TableHead>
               <TableHead>Seat</TableHead>
               {mode === 'pending' && <TableHead>Requested By</TableHead>}
               <TableHead>Status</TableHead>
@@ -250,7 +272,12 @@ export function ReallocationRequestsPanel({
                       <TableCell>{r.currentUserName ?? '—'}</TableCell>
                     )}
 
-                    <TableCell>{r.proposedUserName}</TableCell>
+                    <TableCell>
+                      <div>{actionSummary(r)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {REQUEST_TYPE_LABELS[r.requestType] ?? r.requestType}
+                      </div>
+                    </TableCell>
 
                     <TableCell className="text-sm text-muted-foreground">
                       {seatSummary(r)}
@@ -328,7 +355,9 @@ export function ReallocationRequestsPanel({
             </DialogTitle>
             <DialogDescription>
               {decidingRecord &&
-                `${decidingRecord.assetTag} → ${decidingRecord.proposedUserName}`}
+                `${decidingRecord.assetTag} — ${
+                  REQUEST_TYPE_LABELS[decidingRecord.requestType] ?? decidingRecord.requestType
+                }: ${actionSummary(decidingRecord)}`}
             </DialogDescription>
           </DialogHeader>
 

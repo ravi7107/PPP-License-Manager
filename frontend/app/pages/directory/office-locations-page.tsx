@@ -64,9 +64,10 @@ import {
 } from '@/lib/api/departments.api';
 
 import OfficeFloorMap from '@/app/pages/directory/components/office-floor-map';
+import { AssetDetailDialog } from '@/app/pages/directory/components/asset-detail-dialog';
 
 import { useAuth } from '@/lib/auth/auth-context';
-import { canManage, type AppRole } from '@/lib/auth/roles';
+import { canManage, isTeamLeader, type AppRole } from '@/lib/auth/roles';
 
 type DialogMode = 'create' | 'edit';
 
@@ -77,6 +78,13 @@ export default function OfficeLocationsPage() {
     user?.role ? [user.role as AppRole] : [];
 
   const canEdit = canManage(userRoles);
+
+  // Only Team Lead can raise a hardware reallocation request (same
+  // role gate as AssetReallocationRequestController's Create endpoint) -
+  // Super Admin/IT Admin use direct Assign/Transfer from the Hardware
+  // page instead, and Manager currently has no hardware module access at
+  // all, so there's nothing for them to request here either.
+  const canRequestReallocation = isTeamLeader(userRoles);
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -107,6 +115,12 @@ export default function OfficeLocationsPage() {
   const [mapFloor, setMapFloor] = useState<OfficeFloor | null>(null);
   const [mapUploadingFloorId, setMapUploadingFloorId] =
     useState<number | null>(null);
+
+  // Double-click detail panel - available to every role that can open the
+  // map (Team Lead/Manager included), unlike single-click-to-edit which
+  // stays canEdit-only.
+  const [detailDialog, setDetailDialog] = useState(false);
+  const [detailSeat, setDetailSeat] = useState<OfficeSeat | null>(null);
 
   const [locationForm, setLocationForm] = useState({
     companyId: '',
@@ -914,6 +928,10 @@ export default function OfficeLocationsPage() {
                     }
                   : undefined
               }
+              onSeatDoubleClick={(seat) => {
+                setDetailSeat(seat);
+                setDetailDialog(true);
+              }}
               onSeatMove={canEdit ? async (
                 seat,
                 xPosition,
@@ -1346,6 +1364,21 @@ export default function OfficeLocationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* WORKSTATION DETAIL PANEL (double-click on the floor map) */}
+      <AssetDetailDialog
+        open={detailDialog}
+        onOpenChange={(open) => {
+          setDetailDialog(open);
+
+          if (!open) {
+            setDetailSeat(null);
+          }
+        }}
+        seat={detailSeat}
+        seats={seats}
+        canRequestReallocation={canRequestReallocation}
+      />
     </div>
   );
 }

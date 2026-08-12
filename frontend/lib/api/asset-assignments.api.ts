@@ -32,6 +32,9 @@ export interface AssetAssignment {
   officeFloorId: number | null;
   floorName: string | null;
   officeLocationName: string | null;
+
+  // "Office" or "Remote" (WFH)
+  workMode: string;
 }
 
 export interface AssignAssetRequest {

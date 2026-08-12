@@ -153,6 +153,7 @@ type AssetWithAssignment = AssetRecord & {
   currentAssignmentId: number | null;
   currentSeatId: number | null;
   currentSeatLabel: string | null;
+  currentWorkMode: string | null;
 };
 
 export default function HardwarePage() {
@@ -512,6 +513,7 @@ export default function HardwarePage() {
             currentAssignmentId: null,
             currentSeatId: null,
             currentSeatLabel: null,
+            currentWorkMode: null,
           };
         }
 
@@ -552,6 +554,9 @@ export default function HardwarePage() {
                   .filter(Boolean)
                   .join(' / ')
               : null,
+
+          currentWorkMode:
+            assignment.workMode ?? null,
 
           status: 'Assigned',
         };
@@ -855,14 +860,20 @@ export default function HardwarePage() {
 
     const parsedSeatId = Number(values.seatId);
     const seatId =
-      values.seatId && !Number.isNaN(parsedSeatId)
+      values.seatId &&
+      values.seatId !== '__none__' &&
+      !Number.isNaN(parsedSeatId)
         ? parsedSeatId
         : null;
 
     try {
       await apiCreateReallocationRequest({
         assetId: selectedAsset.id,
-        proposedUserId: Number(values.proposedUserId),
+        requestType: values.requestType,
+        proposedUserId:
+          values.requestType === 'Reassign'
+            ? Number(values.proposedUserId)
+            : null,
         proposedSeatId: seatId,
         remarks: values.remarks || null,
       });
@@ -1740,6 +1751,9 @@ const handleSubmit = async (
         }
         currentSeatLabel={
           selectedAsset?.currentSeatLabel ?? null
+        }
+        currentWorkMode={
+          selectedAsset?.currentWorkMode ?? null
         }
         assetDepartmentId={
           selectedAsset?.departmentId ?? null

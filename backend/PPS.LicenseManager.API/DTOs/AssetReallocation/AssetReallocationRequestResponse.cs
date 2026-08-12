@@ -16,8 +16,11 @@ public class AssetReallocationRequestResponse
     public int RequestedByUserId { get; set; }
     public string RequestedByUserName { get; set; } = string.Empty;
 
-    public int ProposedUserId { get; set; }
-    public string ProposedUserName { get; set; } = string.Empty;
+    // Reassign, Reseat, RemoteMode, ReturnToOffice.
+    public string RequestType { get; set; } = "Reassign";
+
+    public int? ProposedUserId { get; set; }
+    public string? ProposedUserName { get; set; }
 
     public int? ProposedSeatId { get; set; }
     public string? ProposedSeatCode { get; set; }
