@@ -119,6 +119,11 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasDefaultValue("Assigned")
                   .IsRequired();
 
+            entity.Property(x => x.WorkMode)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Office")
+                  .IsRequired();
+
             entity.Property(x => x.Remarks)
                   .HasMaxLength(500);
 
@@ -309,6 +314,11 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.Property(x => x.ItDecision)
                   .HasMaxLength(20)
                   .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.RequestType)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Reassign")
                   .IsRequired();
 
             entity.Property(x => x.Remarks).HasMaxLength(500);
