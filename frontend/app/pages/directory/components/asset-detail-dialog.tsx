@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Landmark, Laptop, MapPin, User as UserIcon } from 'lucide-react';
+import { Landmark, Laptop, MapPin, Pencil, Plus, Trash2, User as UserIcon } from 'lucide-react';
 
 import {
   Dialog,
@@ -37,6 +37,19 @@ import {
   createReallocationRequest,
 } from '@/lib/api/asset-reallocation-requests.api';
 
+import { getSoftware, Software } from '@/lib/api/software.api';
+import {
+  AssetSoftware,
+  createAssetSoftware,
+  deleteAssetSoftware,
+  getAssetSoftwareByAsset,
+  updateAssetSoftware,
+} from '@/lib/api/asset-software.api';
+import {
+  AssetSoftwareFormDialog,
+  AssetSoftwareFormValues,
+} from '@/app/pages/directory/components/asset-software-form-dialog';
+
 interface AssetDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +60,11 @@ interface AssetDetailDialogProps {
   // Assign/Transfer/Return from the Hardware page instead, so the button
   // here is scoped to the request-workflow roles only.
   canRequestReallocation: boolean;
+  // Whether the signed-in user can manage the "Installed Applications"
+  // list for this asset (Super Admin / IT Admin, same gate as the rest
+  // of the Hardware/Office Locations pages). Everyone else sees it
+  // read-only.
+  canEdit: boolean;
 }
 
 function DetailRow({
@@ -70,6 +88,7 @@ export function AssetDetailDialog({
   seat,
   seats,
   canRequestReallocation,
+  canEdit,
 }: AssetDetailDialogProps) {
   const [detail, setDetail] = useState<AssetFullDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,10 +101,37 @@ export function AssetDetailDialog({
   const [users, setUsers] = useState<LookupOption[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  // Installed-software management (Add/Edit/Remove) - separate from the
+  // read-only summary that comes back on `detail.installedSoftware`, since
+  // that DTO doesn't carry the AssetSoftware row id needed to edit/delete.
+  const [installedSoftware, setInstalledSoftware] = useState<AssetSoftware[]>([]);
+  const [installedLoading, setInstalledLoading] = useState(false);
+  const [softwareCatalog, setSoftwareCatalog] = useState<Software[]>([]);
+
+  const [softwareFormOpen, setSoftwareFormOpen] = useState(false);
+  const [editingSoftware, setEditingSoftware] = useState<AssetSoftware | null>(null);
+  const [softwareSaving, setSoftwareSaving] = useState(false);
+  const [softwareError, setSoftwareError] = useState<string | null>(null);
+
+  const loadInstalledSoftware = async (assetId: number) => {
+    setInstalledLoading(true);
+
+    try {
+      const result = await getAssetSoftwareByAsset(assetId);
+      setInstalledSoftware(result);
+    } catch {
+      // Non-fatal - the panel just falls back to showing nothing until
+      // this succeeds again on the next open/refresh.
+    } finally {
+      setInstalledLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!open || !seat?.assetId) {
       setDetail(null);
       setError(null);
+      setInstalledSoftware([]);
       return;
     }
 
@@ -112,10 +158,104 @@ export function AssetDetailDialog({
       }
     })();
 
+    void loadInstalledSoftware(seat.assetId as number);
+
     return () => {
       cancelled = true;
     };
   }, [open, seat?.assetId]);
+
+  useEffect(() => {
+    if (!open || !canEdit || softwareCatalog.length > 0) return;
+
+    (async () => {
+      try {
+        const result = await getSoftware();
+        setSoftwareCatalog(result.filter((s) => s.isActive));
+      } catch {
+        // Non-fatal - Add Software will just show an empty picker until
+        // this succeeds again on the next open.
+      }
+    })();
+  }, [open, canEdit]);
+
+  const openAddSoftware = () => {
+    setEditingSoftware(null);
+    setSoftwareError(null);
+    setSoftwareFormOpen(true);
+  };
+
+  const openEditSoftware = (item: AssetSoftware) => {
+    setEditingSoftware(item);
+    setSoftwareError(null);
+    setSoftwareFormOpen(true);
+  };
+
+  const handleSoftwareSubmit = async (values: AssetSoftwareFormValues) => {
+    if (!seat?.assetId) return;
+
+    setSoftwareSaving(true);
+    setSoftwareError(null);
+
+    try {
+      if (editingSoftware) {
+        await updateAssetSoftware(editingSoftware.id, {
+          version: values.version || '',
+          licenseKey: values.licenseKey || null,
+          installDate: values.installDate,
+          status: values.status,
+          remarks: values.remarks || null,
+          isActive: values.status !== 'Removed',
+        });
+      } else {
+        await createAssetSoftware({
+          assetId: seat.assetId,
+          softwareId: Number(values.softwareId),
+          version: values.version || '',
+          licenseKey: values.licenseKey || null,
+          installDate: values.installDate,
+          status: values.status,
+          remarks: values.remarks || null,
+        });
+      }
+
+      setSoftwareFormOpen(false);
+      setEditingSoftware(null);
+      await loadInstalledSoftware(seat.assetId);
+    } catch (err: any) {
+      setSoftwareError(
+        err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          err?.message ||
+          'Unable to save this installed-software record.',
+      );
+    } finally {
+      setSoftwareSaving(false);
+    }
+  };
+
+  const handleDeleteSoftware = async (item: AssetSoftware) => {
+    if (!seat?.assetId) return;
+
+    if (
+      !window.confirm(
+        `Remove ${item.softwareName} from this asset's installed-software record? This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteAssetSoftware(item.id);
+      await loadInstalledSoftware(seat.assetId);
+    } catch (err: any) {
+      window.alert(
+        err?.response?.data?.message ||
+          err?.message ||
+          'Unable to remove this installed-software record.',
+      );
+    }
+  };
 
   const openReallocationRequest = async () => {
     setRequestError(null);
@@ -323,11 +463,22 @@ export function AssetDetailDialog({
               </div>
 
               <div className="rounded-lg border p-3 sm:col-span-2">
-                <div className="mb-2 text-sm font-semibold">
-                  Installed Applications / License Copies
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold">
+                    Installed Applications / License Copies
+                  </div>
+
+                  {canEdit && (
+                    <Button size="sm" variant="outline" onClick={openAddSoftware}>
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add Software
+                    </Button>
+                  )}
                 </div>
 
-                {detail.installedSoftware.length === 0 ? (
+                {installedLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : installedSoftware.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No software has been recorded as installed on this asset.
                   </p>
@@ -339,19 +490,46 @@ export function AssetDetailDialog({
                         <TableHead>Version</TableHead>
                         <TableHead>License Key</TableHead>
                         <TableHead>Status</TableHead>
+                        {canEdit && <TableHead className="text-right">Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {detail.installedSoftware.map((item) => (
-                        <TableRow key={item.softwareId + item.softwareName}>
+                      {installedSoftware.map((item) => (
+                        <TableRow key={item.id}>
                           <TableCell>{item.softwareName}</TableCell>
                           <TableCell>{item.version || '—'}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {item.licenseKey || '—'}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{item.status}</Badge>
+                            <Badge
+                              variant={item.status === 'Removed' ? 'outline' : 'default'}
+                            >
+                              {item.status}
+                            </Badge>
                           </TableCell>
+                          {canEdit && (
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => openEditSoftware(item)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteSoftware(item)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -392,6 +570,20 @@ export function AssetDetailDialog({
         saving={requestSaving}
         error={requestError}
         onSubmit={handleReallocationSubmit}
+      />
+
+      <AssetSoftwareFormDialog
+        open={softwareFormOpen}
+        onOpenChange={(open) => {
+          setSoftwareFormOpen(open);
+
+          if (!open) setEditingSoftware(null);
+        }}
+        saving={softwareSaving}
+        error={softwareError}
+        softwareCatalog={softwareCatalog}
+        editing={editingSoftware}
+        onSubmit={handleSoftwareSubmit}
       />
     </>
   );

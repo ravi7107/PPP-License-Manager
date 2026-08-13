@@ -1378,6 +1378,7 @@ export default function OfficeLocationsPage() {
         seat={detailSeat}
         seats={seats}
         canRequestReallocation={canRequestReallocation}
+        canEdit={canEdit}
       />
     </div>
   );
