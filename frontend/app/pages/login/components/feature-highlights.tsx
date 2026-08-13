@@ -24,7 +24,7 @@ const FEATURES: Feature[] = [
     description: 'Create and track purchase requisitions.',
   },
   {
-    icon: MapPinned,
+    icon: MapPin,
     title: 'User Seat Locator',
     description: 'Find users, systems and seats instantly.',
   },
