@@ -51,3 +51,20 @@ export interface AssetUtilizationSlice {
   asset_count: number;
   percent_of_fleet: number;
 }
+
+export interface GrowthTrendRow {
+  month_label: string;
+  new_users: number;
+  cumulative_users: number;
+  new_license_seats: number;
+  cumulative_license_seats: number;
+}
+
+export interface CapacityRunwayRow {
+  software_name: string;
+  total_seats: number;
+  free_seats: number;
+  seats_consumed_last_90_days: number;
+  estimated_weeks_of_runway: number | null;
+  recommendation: string;
+}

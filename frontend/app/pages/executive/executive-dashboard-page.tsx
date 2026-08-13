@@ -1,14 +1,6 @@
 import { useLoadAction } from '@/lib/uibakery';
 import { Crown } from 'lucide-react';
-import loadInvestmentSummary from '@/actions/executive/loadInvestmentSummary';
-import loadTopExpensiveSoftware from '@/actions/executive/loadTopExpensiveSoftware';
-import loadUpcomingRenewals from '@/actions/executive/loadUpcomingRenewals';
-import loadDepartmentEfficiency from '@/actions/executive/loadDepartmentEfficiency';
-import loadSoftwareAllocationTrends from '@/actions/executive/loadSoftwareAllocationTrends';
-import loadDepartmentCostReport from '@/actions/reports/loadDepartmentCostReport';
-import loadClientWiseReport from '@/actions/reports/loadClientWiseReport';
-import loadEntityWiseReport from '@/actions/reports/loadEntityWiseReport';
-import loadAssetUtilizationReport from '@/actions/reports/loadAssetUtilizationReport';
+import loadExecutiveOverview from '@/actions/executive/loadExecutiveOverview';
 import {
   InvestmentSummaryRow,
   TopExpensiveSoftwareRow,
@@ -16,6 +8,8 @@ import {
   DepartmentEfficiencyRow,
   AllocationTrendRow,
   AssetUtilizationSlice,
+  GrowthTrendRow,
+  CapacityRunwayRow,
 } from '@/app/pages/executive/types';
 import { DepartmentCostRow, ClientReportRow, EntityReportRow } from '@/app/pages/reports/types';
 import { ExecutiveKpiCards } from '@/app/pages/executive/components/executive-kpi-cards';
@@ -25,42 +19,27 @@ import { UpcomingRenewalsCard } from '@/app/pages/executive/components/upcoming-
 import { AssetUtilizationChart } from '@/app/pages/executive/components/asset-utilization-chart';
 import { DepartmentEfficiencyChart } from '@/app/pages/executive/components/department-efficiency-chart';
 import { AllocationTrendsChart } from '@/app/pages/executive/components/allocation-trends-chart';
+import { GrowthTrendsChart } from '@/app/pages/executive/components/growth-trends-chart';
+import { CapacityRunwayCard } from '@/app/pages/executive/components/capacity-runway-card';
 import { KpiCardSkeleton, ChartCardSkeleton } from '@/components/layout/kpi-card-skeleton';
 
+interface ExecutiveOverviewData {
+  investmentSummary: InvestmentSummaryRow;
+  topExpensiveSoftware: TopExpensiveSoftwareRow[];
+  upcomingRenewals: UpcomingRenewalRow[];
+  departmentEfficiency: DepartmentEfficiencyRow[];
+  allocationTrends: AllocationTrendRow[];
+  assetUtilization: AssetUtilizationSlice[];
+  departmentCost: DepartmentCostRow[];
+  clientCost: ClientReportRow[];
+  entityCost: EntityReportRow[];
+  growthTrends: GrowthTrendRow[];
+  capacityRunway: CapacityRunwayRow[];
+}
+
 export default function ExecutiveDashboardPage() {
-  const [summaryRows, summaryLoading]: [InvestmentSummaryRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadInvestmentSummary,
-    [],
-    {},
-  );
-  const [topSoftware, topSoftwareLoading]: [TopExpensiveSoftwareRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadTopExpensiveSoftware,
-    [],
-    {},
-  );
-  const [renewals, renewalsLoading]: [UpcomingRenewalRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadUpcomingRenewals, [], {});
-  const [deptEfficiency, deptEfficiencyLoading]: [DepartmentEfficiencyRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadDepartmentEfficiency,
-    [],
-    {},
-  );
-  const [allocationTrends, allocationTrendsLoading]: [AllocationTrendRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadSoftwareAllocationTrends,
-    [],
-    {},
-  );
-  const [departmentCost, costLoading]: [DepartmentCostRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadDepartmentCostReport,
-    [],
-    {},
-  );
-  const [clientCost]: [ClientReportRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadClientWiseReport, [], {});
-  const [entityCost]: [EntityReportRow[], boolean, Error | null, () => Promise<void>] = useLoadAction(loadEntityWiseReport, [], {});
-  const [assetUtilization, assetUtilizationLoading]: [AssetUtilizationSlice[], boolean, Error | null, () => Promise<void>] = useLoadAction(
-    loadAssetUtilizationReport,
-    [],
-    {},
-  );
+  const [overview, loading]: [ExecutiveOverviewData | null, boolean, Error | null, () => Promise<void>] =
+    useLoadAction(loadExecutiveOverview, null, {});
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -70,39 +49,65 @@ export default function ExecutiveDashboardPage() {
         </div>
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Executive Dashboard</h2>
-          <p className="text-sm text-muted-foreground">Enterprise-wide software investment, utilization, and efficiency overview.</p>
+          <p className="text-sm text-muted-foreground">
+            Cost &amp; spend, utilization &amp; efficiency, and growth &amp; capacity planning - across your organization.
+          </p>
         </div>
       </div>
 
-      {summaryLoading ? (
+      {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <KpiCardSkeleton key={i} />
           ))}
         </div>
       ) : (
-        <ExecutiveKpiCards summary={summaryRows?.[0]} />
+        <ExecutiveKpiCards summary={overview?.investmentSummary} />
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          {costLoading ? (
-            <ChartCardSkeleton heightClassName="h-72" />
-          ) : (
-            <CostBreakdownCharts departmentRows={departmentCost ?? []} clientRows={clientCost ?? []} entityRows={entityCost ?? []} />
-          )}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Cost &amp; Spend Optimization</h3>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {loading ? (
+              <ChartCardSkeleton heightClassName="h-72" />
+            ) : (
+              <CostBreakdownCharts
+                departmentRows={overview?.departmentCost ?? []}
+                clientRows={overview?.clientCost ?? []}
+                entityRows={overview?.entityCost ?? []}
+              />
+            )}
+          </div>
+          {loading ? <ChartCardSkeleton heightClassName="h-64" /> : <UpcomingRenewalsCard rows={overview?.upcomingRenewals ?? []} />}
         </div>
-        {assetUtilizationLoading ? <ChartCardSkeleton heightClassName="h-64" /> : <AssetUtilizationChart rows={assetUtilization ?? []} />}
+
+        <div className="mt-4">
+          {loading ? <ChartCardSkeleton heightClassName="h-80" /> : <TopSoftwareChart rows={overview?.topExpensiveSoftware ?? []} />}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {topSoftwareLoading ? <ChartCardSkeleton heightClassName="h-80" /> : <TopSoftwareChart rows={topSoftware ?? []} />}
-        {deptEfficiencyLoading ? <ChartCardSkeleton heightClassName="h-80" /> : <DepartmentEfficiencyChart rows={deptEfficiency ?? []} />}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Utilization &amp; Efficiency</h3>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {loading ? <ChartCardSkeleton heightClassName="h-80" /> : <DepartmentEfficiencyChart rows={overview?.departmentEfficiency ?? []} />}
+          {loading ? <ChartCardSkeleton heightClassName="h-64" /> : <AssetUtilizationChart rows={overview?.assetUtilization ?? []} />}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {allocationTrendsLoading ? <ChartCardSkeleton heightClassName="h-80" /> : <AllocationTrendsChart rows={allocationTrends ?? []} />}
-        {renewalsLoading ? <ChartCardSkeleton heightClassName="h-64" /> : <UpcomingRenewalsCard rows={renewals ?? []} />}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Growth &amp; Capacity Planning</h3>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {loading ? <ChartCardSkeleton heightClassName="h-80" /> : <AllocationTrendsChart rows={overview?.allocationTrends ?? []} />}
+          {loading ? <ChartCardSkeleton heightClassName="h-80" /> : <GrowthTrendsChart rows={overview?.growthTrends ?? []} />}
+        </div>
+
+        <div className="mt-4">
+          {loading ? <ChartCardSkeleton heightClassName="h-64" /> : <CapacityRunwayCard rows={overview?.capacityRunway ?? []} />}
+        </div>
       </div>
     </div>
   );
