@@ -106,8 +106,12 @@ export function computeLicenseKpis(
     0
   );
 
+  // Seats that can actually be allocated right now (created AND free),
+  // not just "quota not yet turned into a seat-row" - a purchase where
+  // every seat has been created but several were later released is
+  // still allocatable, and this KPI should reflect that.
   const availableLicenseSeats = activePurchases.reduce(
-    (sum, p) => sum + (p.availableLicenses ?? 0),
+    (sum, p) => sum + (p.freeToAllocateLicenses ?? p.availableLicenses ?? 0),
     0
   );
 
@@ -261,15 +265,19 @@ export function computeLowAvailabilityLicenses(
   return purchases
     .filter((p) => p.isActive && (p.totalLicenses ?? 0) > 0)
     .filter((p) => {
-      const ratio = (p.availableLicenses ?? 0) / (p.totalLicenses ?? 1);
+      const free = p.freeToAllocateLicenses ?? p.availableLicenses ?? 0;
+      const ratio = free / (p.totalLicenses ?? 1);
       return ratio <= LOW_AVAILABILITY_RATIO;
     })
-    .map((p) => ({
-      id: p.id,
-      softwareName: p.softwareName || 'Unknown',
-      totalSeats: p.totalLicenses ?? 0,
-      seatsUsed: (p.totalLicenses ?? 0) - (p.availableLicenses ?? 0),
-    }))
+    .map((p) => {
+      const free = p.freeToAllocateLicenses ?? p.availableLicenses ?? 0;
+      return {
+        id: p.id,
+        softwareName: p.softwareName || 'Unknown',
+        totalSeats: p.totalLicenses ?? 0,
+        seatsUsed: (p.totalLicenses ?? 0) - free,
+      };
+    })
     .sort((a, b) => a.totalSeats - a.seatsUsed - (b.totalSeats - b.seatsUsed))
     .slice(0, 5);
 }

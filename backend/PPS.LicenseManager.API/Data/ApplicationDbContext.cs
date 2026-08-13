@@ -243,6 +243,11 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasDefaultValue("Pending")
                   .IsRequired();
 
+            entity.Property(x => x.RequestReason)
+                  .HasMaxLength(30)
+                  .HasDefaultValue("Unavailability")
+                  .IsRequired();
+
             entity.Property(x => x.Remarks)
                   .HasMaxLength(500);
 

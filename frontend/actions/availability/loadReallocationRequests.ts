@@ -11,6 +11,10 @@ async function loadReallocationRequests() {
     unavailability_id:
       record.userUnavailabilityId,
 
+    reallocation_reason:
+      (record.requestReason as 'Unavailability' | 'Underutilization') ||
+      'Unavailability',
+
     source_user_id:
       record.currentUserId,
 

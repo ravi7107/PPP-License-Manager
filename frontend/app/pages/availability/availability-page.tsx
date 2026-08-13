@@ -12,6 +12,7 @@ import {
   CircleCheck,
   UserCheck,
   CalendarX,
+  TrendingDown,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ import {
 } from '@/lib/api/licenses.api';
 
 import { getUsers } from '@/lib/api/users.api';
+import { getResourceAllocations } from '@/lib/api/resource-allocations.api';
 
 import {
   createUnavailability as createUnavailabilityApi,
@@ -46,6 +48,7 @@ import {
 } from '@/lib/api/availability.api';
 import { ReallocationRequestDialog } from '@/app/pages/availability/components/reallocation-request-dialog';
 import { ReallocationApprovalDialog } from '@/app/pages/availability/components/reallocation-approval-dialog';
+import { UnderutilizedReallocationDialog } from '@/app/pages/availability/components/underutilized-reallocation-dialog';
 import {
   AvailableResource,
   LookupOption,
@@ -53,6 +56,8 @@ import {
   ReallocationRequest,
   UnavailabilityFormValues,
   UnavailabilityPeriod,
+  UnderutilizedCandidate,
+  UnderutilizedReallocationFormValues,
 } from '@/app/pages/availability/types';
 
 function periodStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -189,8 +194,47 @@ export default function AvailabilityPage() {
   const [markOpen, setMarkOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [underutilizedOpen, setUnderutilizedOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<AvailableResource | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ReallocationRequest | null>(null);
+  const [preselectedCandidate, setPreselectedCandidate] =
+    useState<UnderutilizedCandidate | null>(null);
+
+  const [underutilizedCandidates, setUnderutilizedCandidates] =
+    useState<UnderutilizedCandidate[]>([]);
+  const [underutilizedRequesting, setUnderutilizedRequesting] =
+    useState(false);
+
+  const loadUnderutilizedCandidates = async () => {
+    try {
+      const allocations = await getResourceAllocations();
+
+      setUnderutilizedCandidates(
+        (Array.isArray(allocations) ? allocations : [])
+          .filter(
+            (a) =>
+              a.isActive &&
+              a.status?.toLowerCase() === 'allocated'
+          )
+          .map((a) => ({
+            resource_allocation_id: a.id,
+            license_id: a.licenseId,
+            license_alias_code: a.licenseAliasCode,
+            software_name: a.softwareName,
+            current_user_id: a.userId,
+            current_user_name: a.userName,
+            asset_name: a.assetName,
+          }))
+      );
+    } catch (error) {
+      console.error(
+        'Unable to load license allocations for the underutilization flow:',
+        error
+      );
+
+      setUnderutilizedCandidates([]);
+    }
+  };
 
   const loadAvailabilityData = async () => {
     setPeriodsLoading(true);
@@ -206,6 +250,7 @@ export default function AvailabilityPage() {
         loadUnavailabilityPeriods(),
         loadAvailableResources(),
         loadReallocationRequests(),
+        loadUnderutilizedCandidates(),
       ]);
 
       setPeriods(
@@ -536,6 +581,70 @@ export default function AvailabilityPage() {
     }
   };
 
+  const openUnderutilizedDialog = (
+    candidate: UnderutilizedCandidate | null = null
+  ) => {
+    setPreselectedCandidate(candidate);
+    setUnderutilizedOpen(true);
+  };
+
+  const handleCreateUnderutilizedRequest = async (
+    values: UnderutilizedReallocationFormValues
+  ) => {
+    if (!actorUserId) {
+      throw new Error(
+        'Unable to identify the logged-in user.'
+      );
+    }
+
+    const resourceAllocationId = Number(values.resourceAllocationId);
+
+    if (!resourceAllocationId) {
+      throw new Error(
+        'Select the license this request is for.'
+      );
+    }
+
+    const payload = {
+      userUnavailabilityId: null,
+      requestReason: 'Underutilization',
+
+      resourceAllocationId,
+
+      targetUserId:
+        Number(values.targetUserId),
+
+      requestedByUserId:
+        actorUserId,
+
+      remarks:
+        values.justification.trim(),
+    };
+
+    try {
+      setUnderutilizedRequesting(true);
+
+      const created =
+        await createReallocationRequestApi(payload);
+
+      await logAudit({
+        tableName: 'ResourceReallocationRequests',
+        recordId: created.id,
+        action: 'INSERT',
+        oldValues: null,
+        newValues: JSON.stringify(created),
+        actorName,
+      });
+
+      setUnderutilizedOpen(false);
+      setPreselectedCandidate(null);
+
+      await refreshAll();
+    } finally {
+      setUnderutilizedRequesting(false);
+    }
+  };
+
   const handleReturnToOriginalUser = async (
     request: ReallocationRequest
   ) => {
@@ -748,10 +857,20 @@ export default function AvailabilityPage() {
             </CardDescription>
           </div>
           {canMarkOrRequest ? (
-            <Button size="sm" onClick={() => setMarkOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Mark User Unavailable
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openUnderutilizedDialog(null)}
+              >
+                <TrendingDown className="mr-2 h-4 w-4" />
+                Flag Underutilized License
+              </Button>
+              <Button size="sm" onClick={() => setMarkOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Mark User Unavailable
+              </Button>
+            </div>
           ) : null}
         </CardHeader>
         <CardContent>
@@ -1011,6 +1130,7 @@ export default function AvailabilityPage() {
                       <TableHead>Resource</TableHead>
                       <TableHead>From</TableHead>
                       <TableHead>To</TableHead>
+                      <TableHead>Reason</TableHead>
                       <TableHead>Requested By</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -1019,13 +1139,13 @@ export default function AvailabilityPage() {
                   <TableBody>
                     {requestsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                           Loading reallocation requests…
                         </TableCell>
                       </TableRow>
                     ) : operationalRequests.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                           No pending or active reallocation requests.
                         </TableCell>
                       </TableRow>
@@ -1040,6 +1160,19 @@ export default function AvailabilityPage() {
                           </TableCell>
                           <TableCell>{r.source_user_name}</TableCell>
                           <TableCell>{r.target_user_name ?? '—'}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                r.reallocation_reason === 'Underutilization'
+                                  ? 'secondary'
+                                  : 'outline'
+                              }
+                            >
+                              {r.reallocation_reason === 'Underutilization'
+                                ? 'Underutilized'
+                                : 'Unavailability'}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{r.requested_by ?? '—'}</TableCell>
                           <TableCell>
                             <Badge variant={requestStatusVariant(r.status)}>{r.status}</Badge>
@@ -1055,6 +1188,7 @@ export default function AvailabilityPage() {
                                 Review
                               </Button>
                             ) : canApprove &&
+                              r.reallocation_reason !== 'Underutilization' &&
                               r.status === 'Approved' &&
                               r.resulting_allocation_id &&
                               r.resulting_allocation_active === true ? (
@@ -1072,6 +1206,11 @@ export default function AvailabilityPage() {
                             ) : r.status === 'Returned' ? (
                               <Badge variant="outline">
                                 Returned
+                              </Badge>
+                            ) : r.status === 'Approved' &&
+                              r.reallocation_reason === 'Underutilization' ? (
+                              <Badge variant="outline">
+                                Permanent
                               </Badge>
                             ) : null}
                           </TableCell>
@@ -1103,6 +1242,16 @@ export default function AvailabilityPage() {
         request={selectedRequest}
         saving={deciding}
         onDecide={handleDecide}
+      />
+
+      <UnderutilizedReallocationDialog
+        open={underutilizedOpen}
+        onOpenChange={setUnderutilizedOpen}
+        saving={underutilizedRequesting}
+        candidates={underutilizedCandidates}
+        users={users}
+        preselected={preselectedCandidate}
+        onSubmit={handleCreateUnderutilizedRequest}
       />
     </div>
   );

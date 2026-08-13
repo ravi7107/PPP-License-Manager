@@ -1,11 +1,16 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.Availability;
 using PPS.LicenseManager.API.Services.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
+// Was missing [Authorize] entirely - anyone could mark users unavailable,
+// reallocate licenses, or approve/reject reallocation requests without
+// logging in. Same gap as License/LicensePurchaseController.
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class AvailabilityController : ControllerBase
 {
     private readonly IAvailabilityService _availabilityService;

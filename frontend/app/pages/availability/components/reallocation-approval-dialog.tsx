@@ -52,13 +52,22 @@ export function ReallocationApprovalDialog({ open, onOpenChange, request, saving
           <DialogTitle>Review Reallocation Request</DialogTitle>
           <DialogDescription>
             {resourceLabel} from {request.source_user_name} to {request.target_user_name ?? 'Unknown'}. Approving
-            immediately performs the reallocation.
+            immediately performs the reallocation
+            {request.reallocation_reason === 'Underutilization'
+              ? ' permanently - there is no forced return date.'
+              : '.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form className="grid grid-cols-1 gap-4">
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
-              <p><span className="text-muted-foreground">Requested by:</span> {request.requested_by ?? 'Unknown'}</p>
+              <p>
+                <span className="text-muted-foreground">Reason:</span>{' '}
+                {request.reallocation_reason === 'Underutilization'
+                  ? 'Underutilized license'
+                  : 'Employee unavailability'}
+              </p>
+              <p className="mt-1"><span className="text-muted-foreground">Requested by:</span> {request.requested_by ?? 'Unknown'}</p>
               <p className="mt-1"><span className="text-muted-foreground">Justification:</span> {request.justification ?? '—'}</p>
             </div>
             <FormField

@@ -251,6 +251,26 @@ public class ResourceAllocationService : IResourceAllocationService
             allocation.License.Status = "Allocated";
             allocation.License.LicensedEmail = user.Email;
         }
+        else
+        {
+            // This allocation no longer represents an active owner (it was
+            // edited to Inactive/Released/etc.). Without this branch the
+            // license was left stuck at Status = "Allocated" forever with
+            // no active allocation pointing at it - permanently
+            // un-allocatable and invisible to the Available-licenses list.
+            // Only clear the license if no *other* allocation is still
+            // actively holding it.
+            var stillHeldElsewhere = await _context.ResourceAllocations
+                .AnyAsync(r => r.LicenseId == allocation.LicenseId &&
+                               r.Id != allocation.Id &&
+                               r.IsActive);
+
+            if (!stillHeldElsewhere)
+            {
+                allocation.License.Status = "Available";
+                allocation.License.LicensedEmail = string.Empty;
+            }
+        }
 
         await _context.SaveChangesAsync();
 
@@ -259,12 +279,34 @@ public class ResourceAllocationService : IResourceAllocationService
 
     public async Task<bool> DeleteAsync(int id)
     {
-        var allocation = await _context.ResourceAllocations.FindAsync(id);
+        var allocation = await _context.ResourceAllocations
+            .Include(r => r.License)
+            .FirstOrDefaultAsync(r => r.Id == id);
 
         if (allocation == null)
             return false;
 
+        var wasActive = allocation.IsActive;
+        var licenseId = allocation.LicenseId;
+
         _context.ResourceAllocations.Remove(allocation);
+
+        if (wasActive)
+        {
+            // Deleting the record that was the license's active allocation
+            // must not leave the license stuck at Status = "Allocated"
+            // with nothing pointing at it.
+            var stillHeldElsewhere = await _context.ResourceAllocations
+                .AnyAsync(r => r.LicenseId == licenseId &&
+                               r.Id != id &&
+                               r.IsActive);
+
+            if (!stillHeldElsewhere)
+            {
+                allocation.License.Status = "Available";
+                allocation.License.LicensedEmail = string.Empty;
+            }
+        }
 
         await _context.SaveChangesAsync();
 

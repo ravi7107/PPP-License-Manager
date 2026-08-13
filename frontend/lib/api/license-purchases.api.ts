@@ -11,7 +11,13 @@ export interface LicensePurchase {
 
   totalLicenses: number;
   createdLicenses: number;
+  // Quota not yet turned into a license seat-row. Kept for backward
+  // compatibility - prefer freeToAllocateLicenses for "can I allocate
+  // right now" checks, since a seat can be created but not free
+  // (Allocated/Suspended/Expired).
   availableLicenses: number;
+  // Already-created seats that are actually free to allocate right now.
+  freeToAllocateLicenses: number;
 
   purchaseDate: string;
   expiryDate: string | null;

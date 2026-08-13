@@ -275,10 +275,12 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         var records = await _context.ResourceReallocationRequests
             .AsNoTracking()
             .Include(x => x.UserUnavailability)
-                .ThenInclude(x => x.User)
+                .ThenInclude(x => x!.User)
             .Include(x => x.ResourceAllocation)
                 .ThenInclude(x => x.License)
                     .ThenInclude(x => x.Software)
+            .Include(x => x.ResourceAllocation)
+                .ThenInclude(x => x.User)
             .Include(x => x.TargetUser)
             .Include(x => x.RequestedByUser)
             .Include(x => x.DecidedByUser)
@@ -289,36 +291,73 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         return records.Select(MapReallocation);
     }
 
+    private static readonly string[] ValidReallocationReasons =
+    {
+        "Unavailability", "Underutilization"
+    };
+
     public async Task<ResourceReallocationResponse>
         CreateReallocationRequestAsync(
             CreateResourceReallocationRequest request)
     {
         var now = DateTime.UtcNow;
 
-        var unavailability =
-            await _context.UserUnavailabilities
-                .Include(x => x.User)
-                .FirstOrDefaultAsync(
-                    x => x.Id == request.UserUnavailabilityId);
+        var requestReason =
+            string.IsNullOrWhiteSpace(request.RequestReason)
+                ? "Unavailability"
+                : request.RequestReason.Trim();
 
-        if (unavailability == null)
+        if (!ValidReallocationReasons.Contains(requestReason))
             throw new InvalidOperationException(
-                "Unavailability record not found.");
+                $"Unknown reallocation reason \"{requestReason}\".");
 
-        if (string.Equals(
-                unavailability.Status,
-                "Cancelled",
-                StringComparison.OrdinalIgnoreCase))
+        PPS.LicenseManager.API.Models.UserUnavailability? unavailability = null;
+
+        if (requestReason == "Unavailability")
         {
-            throw new InvalidOperationException(
-                "Cannot request reallocation from a cancelled unavailability period.");
+            if (request.UserUnavailabilityId == null)
+                throw new InvalidOperationException(
+                    "Select the unavailability period this reallocation is for.");
+
+            unavailability =
+                await _context.UserUnavailabilities
+                    .Include(x => x.User)
+                    .FirstOrDefaultAsync(
+                        x => x.Id == request.UserUnavailabilityId.Value);
+
+            if (unavailability == null)
+                throw new InvalidOperationException(
+                    "Unavailability record not found.");
+
+            if (string.Equals(
+                    unavailability.Status,
+                    "Cancelled",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Cannot request reallocation from a cancelled unavailability period.");
+            }
+
+            if (unavailability.StartDate > now ||
+                unavailability.EndDate < now)
+            {
+                throw new InvalidOperationException(
+                    "The selected unavailability period is not currently active.");
+            }
         }
-
-        if (unavailability.StartDate > now ||
-            unavailability.EndDate < now)
+        else
         {
-            throw new InvalidOperationException(
-                "The selected unavailability period is not currently active.");
+            // Underutilization: a manual, reason-only request - there's
+            // no usage-tracking in the system yet to auto-detect this,
+            // so a Super Admin/IT Admin reviews the written
+            // justification (in Remarks) instead of an automated signal.
+            if (request.UserUnavailabilityId != null)
+                throw new InvalidOperationException(
+                    "An unavailability period can't be set on an Underutilization request.");
+
+            if (string.IsNullOrWhiteSpace(request.Remarks))
+                throw new InvalidOperationException(
+                    "Please explain why this license is considered underutilized.");
         }
 
         var allocation =
@@ -343,17 +382,20 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
                 "The selected allocation is no longer active.");
         }
 
-        if (allocation.UserId != unavailability.UserId)
-            throw new InvalidOperationException(
-                "The selected allocation does not belong to the unavailable user.");
+        if (requestReason == "Unavailability")
+        {
+            if (allocation.UserId != unavailability!.UserId)
+                throw new InvalidOperationException(
+                    "The selected allocation does not belong to the unavailable user.");
+
+            if (!allocation.License.AllowTemporaryCheckout)
+                throw new InvalidOperationException(
+                    "Temporary checkout is not allowed for this license.");
+        }
 
         if (!allocation.License.IsActive)
             throw new InvalidOperationException(
                 "The selected license is inactive.");
-
-        if (!allocation.License.AllowTemporaryCheckout)
-            throw new InvalidOperationException(
-                "Temporary checkout is not allowed for this license.");
 
         if (allocation.License.ExpiryDate <= now)
             throw new InvalidOperationException(
@@ -401,8 +443,9 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         var record =
             new PPS.LicenseManager.API.Models.ResourceReallocationRequest
             {
-                UserUnavailabilityId =
-                    request.UserUnavailabilityId,
+                UserUnavailabilityId = unavailability?.Id,
+
+                RequestReason = requestReason,
 
                 ResourceAllocationId =
                     request.ResourceAllocationId,
@@ -429,21 +472,34 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
 
         // Notify IT and the affected employee's assigned
         // Team Lead / Manager about the new request.
+        var notifyUserId = unavailability?.UserId ?? allocation.UserId;
+
+        var notifyTitle = requestReason == "Underutilization"
+            ? "Underutilized License Reallocation Requested"
+            : "License Reallocation Requested";
+
+        var notifyBody = requestReason == "Underutilization"
+            ? $"A reallocation request was raised for {allocation.User.FullName}'s " +
+              $"{allocation.License.Software.Name} license, flagged as underutilized."
+            : $"A temporary license reallocation request has been created for {unavailability!.User.FullName}.";
+
         await _notificationService.NotifyItAndReportingManagerAsync(
-            unavailability.UserId,
+            notifyUserId,
             "ReallocationRequested",
-            "License Reallocation Requested",
-            $"A temporary license reallocation request has been created for {unavailability.User.FullName}.",
+            notifyTitle,
+            notifyBody,
             "ResourceReallocationRequest",
             record.Id);
 
         var saved = await _context.ResourceReallocationRequests
             .AsNoTracking()
             .Include(x => x.UserUnavailability)
-                .ThenInclude(x => x.User)
+                .ThenInclude(x => x!.User)
             .Include(x => x.ResourceAllocation)
                 .ThenInclude(x => x.License)
                     .ThenInclude(x => x.Software)
+            .Include(x => x.ResourceAllocation)
+                .ThenInclude(x => x.User)
             .Include(x => x.TargetUser)
             .Include(x => x.RequestedByUser)
             .Include(x => x.DecidedByUser)
@@ -459,10 +515,12 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
     {
         var record = await _context.ResourceReallocationRequests
             .Include(x => x.UserUnavailability)
-                .ThenInclude(x => x.User)
+                .ThenInclude(x => x!.User)
             .Include(x => x.ResourceAllocation)
                 .ThenInclude(x => x.License)
                     .ThenInclude(x => x.Software)
+            .Include(x => x.ResourceAllocation)
+                .ThenInclude(x => x.User)
             .Include(x => x.TargetUser)
             .Include(x => x.RequestedByUser)
             .Include(x => x.DecidedByUser)
@@ -519,26 +577,80 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         // changed after the request was originally submitted.
         var now = DateTime.UtcNow;
 
-        var unavailability =
-            record.UserUnavailability;
-
-        if (string.Equals(
-                unavailability.Status,
-                "Cancelled",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "The unavailability period has been cancelled.");
-        }
-
-        if (unavailability.StartDate > now ||
-            unavailability.EndDate < now)
-        {
-            throw new InvalidOperationException(
-                "The unavailability period is no longer active.");
-        }
-
         var allocation = record.ResourceAllocation;
+        DateTime? expectedReturnDate;
+        string transferRemarks;
+
+        if (record.RequestReason == "Unavailability")
+        {
+            var unavailability = record.UserUnavailability;
+
+            if (unavailability == null)
+                throw new InvalidOperationException(
+                    "The unavailability period for this request could not be found.");
+
+            if (string.Equals(
+                    unavailability.Status,
+                    "Cancelled",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The unavailability period has been cancelled.");
+            }
+
+            if (unavailability.StartDate > now ||
+                unavailability.EndDate < now)
+            {
+                throw new InvalidOperationException(
+                    "The unavailability period is no longer active.");
+            }
+
+            if (allocation.UserId != unavailability.UserId)
+            {
+                throw new InvalidOperationException(
+                    "The allocation no longer belongs to the unavailable user.");
+            }
+
+            if (!allocation.License.AllowTemporaryCheckout)
+                throw new InvalidOperationException(
+                    "Temporary checkout is no longer allowed for this license.");
+
+            // Temporary allocation cannot extend beyond the
+            // unavailable employee's return date.
+            var temporaryReturnDate = unavailability.EndDate;
+
+            // Also respect the license's maximum checkout period.
+            if (allocation.License.MaxCheckoutDays > 0)
+            {
+                var maximumCheckoutDate =
+                    now.AddDays(allocation.License.MaxCheckoutDays);
+
+                if (maximumCheckoutDate < temporaryReturnDate)
+                {
+                    temporaryReturnDate = maximumCheckoutDate;
+                }
+            }
+
+            expectedReturnDate = temporaryReturnDate;
+
+            transferRemarks =
+                string.IsNullOrWhiteSpace(request.DecisionRemarks)
+                    ? $"Temporary reallocation approved from {unavailability.User.FullName} to {record.TargetUser.FullName}."
+                    : request.DecisionRemarks.Trim();
+        }
+        else
+        {
+            // Underutilization: this is a permanent reallocation, not a
+            // temporary loan - there's no employee coming back to reclaim
+            // it, so no forced return date is set.
+            expectedReturnDate = null;
+
+            transferRemarks =
+                string.IsNullOrWhiteSpace(request.DecisionRemarks)
+                    ? $"Reallocated from {allocation.User.FullName} to {record.TargetUser.FullName} " +
+                      $"(underutilization: {record.Remarks})."
+                    : request.DecisionRemarks.Trim();
+        }
 
         if (!allocation.IsActive ||
             !string.Equals(
@@ -550,19 +662,9 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
                 "The original allocation is no longer active.");
         }
 
-        if (allocation.UserId != unavailability.UserId)
-        {
-            throw new InvalidOperationException(
-                "The allocation no longer belongs to the unavailable user.");
-        }
-
         if (!allocation.License.IsActive)
             throw new InvalidOperationException(
                 "The license is inactive.");
-
-        if (!allocation.License.AllowTemporaryCheckout)
-            throw new InvalidOperationException(
-                "Temporary checkout is no longer allowed for this license.");
 
         if (allocation.License.ExpiryDate <= now)
             throw new InvalidOperationException(
@@ -575,32 +677,6 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         if (record.TargetUserId == allocation.UserId)
             throw new InvalidOperationException(
                 "The target user already owns this allocation.");
-
-        // Temporary allocation cannot extend beyond the
-        // unavailable employee's return date.
-        var expectedReturnDate =
-            unavailability.EndDate;
-
-        // Also respect the license's maximum checkout period.
-        if (allocation.License.MaxCheckoutDays > 0)
-        {
-            var maximumCheckoutDate =
-                now.AddDays(
-                    allocation.License.MaxCheckoutDays);
-
-            if (maximumCheckoutDate <
-                expectedReturnDate)
-            {
-                expectedReturnDate =
-                    maximumCheckoutDate;
-            }
-        }
-
-        var transferRemarks =
-            string.IsNullOrWhiteSpace(
-                request.DecisionRemarks)
-                ? $"Temporary reallocation approved from {unavailability.User.FullName} to {record.TargetUser.FullName}."
-                : request.DecisionRemarks.Trim();
 
         var transferred =
             await _resourceAllocationService
@@ -655,7 +731,7 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
         var record =
             await _context.ResourceReallocationRequests
                 .Include(x => x.UserUnavailability)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.ResourceAllocation)
                     .ThenInclude(x => x.License)
                 .Include(x => x.TargetUser)
@@ -808,10 +884,12 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
             await _context.ResourceReallocationRequests
                 .AsNoTracking()
                 .Include(x => x.UserUnavailability)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.ResourceAllocation)
                     .ThenInclude(x => x.License)
                         .ThenInclude(x => x.Software)
+                .Include(x => x.ResourceAllocation)
+                    .ThenInclude(x => x.User)
                 .Include(x => x.TargetUser)
                 .Include(x => x.RequestedByUser)
                 .Include(x => x.DecidedByUser)
@@ -836,6 +914,9 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
             UserUnavailabilityId =
                 record.UserUnavailabilityId,
 
+            RequestReason =
+                record.RequestReason,
+
             ResourceAllocationId =
                 record.ResourceAllocationId,
 
@@ -852,7 +933,7 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
                 record.ResourceAllocation.UserId,
 
             CurrentUserName =
-                record.UserUnavailability.User.FullName,
+                record.ResourceAllocation.User.FullName,
 
             TargetUserId =
                 record.TargetUserId,

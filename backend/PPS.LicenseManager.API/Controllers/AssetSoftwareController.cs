@@ -1,11 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.AssetSoftware;
 using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
+// Was missing [Authorize] entirely. Same gap as License/LicensePurchaseController.
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class AssetSoftwareController : ControllerBase
 {
     private readonly IAssetSoftwareService _service;

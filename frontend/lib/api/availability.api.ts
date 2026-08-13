@@ -36,7 +36,15 @@ export interface ResourceReallocationApi {
   id: number;
   requestReference: string;
 
-  userUnavailabilityId: number;
+  // Null when requestReason is "Underutilization" - that path is a
+  // manual request with no unavailability period behind it.
+  userUnavailabilityId: number | null;
+
+  // "Unavailability" (temporary, tied to a leave period, return-by-date
+  // enforced) or "Underutilization" (permanent, manual, justified by
+  // `remarks`, no forced return date).
+  requestReason: string;
+
   resourceAllocationId: number;
 
   licenseId: number;
@@ -84,7 +92,13 @@ export interface CancelUserUnavailabilityApiRequest {
 }
 
 export interface CreateResourceReallocationApiRequest {
-  userUnavailabilityId: number;
+  // Required when requestReason is "Unavailability"; must be omitted for
+  // "Underutilization" requests.
+  userUnavailabilityId?: number | null;
+  // "Unavailability" (default) or "Underutilization". For
+  // "Underutilization", remarks is required and doubles as the written
+  // justification.
+  requestReason?: string;
   resourceAllocationId: number;
   targetUserId: number;
   requestedByUserId: number;

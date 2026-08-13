@@ -54,6 +54,11 @@ public class LicensePurchaseService : ILicensePurchaseService
                     p.TotalLicenses -
                     p.Licenses.Count(l => l.IsActive),
 
+                FreeToAllocateLicenses = p.Licenses.Count(l =>
+                    l.IsActive &&
+                    l.Status == "Available" &&
+                    l.ExpiryDate > DateTime.UtcNow),
+
                 PurchaseDate = p.PurchaseDate,
                 ExpiryDate = p.ExpiryDate,
                 SupportExpiryDate = p.SupportExpiryDate,
@@ -110,6 +115,11 @@ public class LicensePurchaseService : ILicensePurchaseService
                 AvailableLicenses =
                     p.TotalLicenses -
                     p.Licenses.Count(l => l.IsActive),
+
+                FreeToAllocateLicenses = p.Licenses.Count(l =>
+                    l.IsActive &&
+                    l.Status == "Available" &&
+                    l.ExpiryDate > DateTime.UtcNow),
 
                 PurchaseDate = p.PurchaseDate,
                 ExpiryDate = p.ExpiryDate,

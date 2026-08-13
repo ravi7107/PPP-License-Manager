@@ -8,10 +8,19 @@ public class ResourceReallocationRequest
 
     public Guid RequestReference { get; set; } = Guid.NewGuid();
 
-    [Required]
-    public int UserUnavailabilityId { get; set; }
+    // Null when RequestReason is "Underutilization" - that path is a
+    // manual, reason-only request with no unavailability period behind it.
+    public int? UserUnavailabilityId { get; set; }
 
-    public UserUnavailability UserUnavailability { get; set; } = null!;
+    public UserUnavailability? UserUnavailability { get; set; }
+
+    // "Unavailability" (original, tied to a UserUnavailability period,
+    // return-by-date) or "Underutilization" (manual - a Super Admin/IT
+    // Admin reviews the written justification in Remarks; permanent,
+    // no forced return date).
+    [Required]
+    [MaxLength(30)]
+    public string RequestReason { get; set; } = "Unavailability";
 
     [Required]
     public int ResourceAllocationId { get; set; }

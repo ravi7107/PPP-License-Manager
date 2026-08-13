@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.ResourceAllocation;
 using PPS.LicenseManager.API.Services.Interfaces;
@@ -5,8 +6,11 @@ using PPS.LicenseManager.API.Services.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
+// Was missing [Authorize] entirely - anyone could allocate/transfer/release
+// licenses without logging in. Same gap as License/LicensePurchaseController.
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class ResourceAllocationController : ControllerBase
 {
     private readonly IResourceAllocationService _resourceAllocationService;

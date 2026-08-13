@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.AssetAssignment;
 using PPS.LicenseManager.API.DTOs.AssetReallocation;
+using PPS.LicenseManager.API.DTOs.ResourceAllocation;
 using PPS.LicenseManager.API.Models;
 using PPS.LicenseManager.API.Services.Interfaces;
 
@@ -19,15 +20,18 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
 {
     private readonly ApplicationDbContext _context;
     private readonly IAssetAssignmentService _assetAssignmentService;
+    private readonly IResourceAllocationService _resourceAllocationService;
     private readonly INotificationService _notificationService;
 
     public AssetReallocationRequestService(
         ApplicationDbContext context,
         IAssetAssignmentService assetAssignmentService,
+        IResourceAllocationService resourceAllocationService,
         INotificationService notificationService)
     {
         _context = context;
         _assetAssignmentService = assetAssignmentService;
+        _resourceAllocationService = resourceAllocationService;
         _notificationService = notificationService;
     }
 
@@ -482,12 +486,28 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
 
             await _context.SaveChangesAsync();
 
+            // The system moved to a new user - its installed
+            // software/license seats should move with it, so one
+            // approval covers both hardware and software instead of
+            // requiring a second, separate license-transfer step.
+            var softwareCarryNote = string.Empty;
+
+            if (record.RequestType == "Reassign")
+            {
+                softwareCarryNote = await CarrySoftwareToNewUserAsync(
+                    record.AssetId,
+                    record.ProposedUserId!.Value,
+                    decidedByUserId,
+                    record.Id);
+            }
+
             await NotifyRequesterAsync(
                 record,
                 "AssetReallocationApproved",
                 "Hardware reallocation request approved",
                 $"Your request to {actionDescription} was approved by both " +
-                "Super Admin and IT Admin, and has been completed.");
+                "Super Admin and IT Admin, and has been completed." +
+                softwareCarryNote);
 
             return await GetByIdAsync(record.Id);
         }
@@ -497,6 +517,80 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
         await _context.SaveChangesAsync();
 
         return await GetByIdAsync(record.Id);
+    }
+
+    // =========================================================
+    // AUTO-CARRY SOFTWARE (moves this asset's active license
+    // allocations to the new user alongside the hardware itself)
+    // =========================================================
+
+    private async Task<string> CarrySoftwareToNewUserAsync(
+        int assetId,
+        int newUserId,
+        int actingUserId,
+        int reallocationRequestId)
+    {
+        var activeAllocationIds = await _context.ResourceAllocations
+            .Where(r => r.AssetId == assetId && r.IsActive)
+            .Select(r => r.Id)
+            .ToListAsync();
+
+        if (activeAllocationIds.Count == 0)
+            return string.Empty;
+
+        var movedSoftware = new List<string>();
+        var skippedSoftware = new List<string>();
+
+        foreach (var allocationId in activeAllocationIds)
+        {
+            try
+            {
+                var moved = await _resourceAllocationService.TransferAsync(
+                    allocationId,
+                    new TransferResourceAllocationRequest
+                    {
+                        NewUserId = newUserId,
+                        NewAssetId = assetId,
+                        TransferredByUserId = actingUserId,
+                        Remarks =
+                            $"Auto-transferred with hardware reallocation #{reallocationRequestId}."
+                    });
+
+                if (moved != null)
+                    movedSoftware.Add(moved.SoftwareName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // A single problem license (e.g. expired, or somehow
+                // already released mid-flight) must not block the
+                // hardware reallocation that already succeeded - it's
+                // surfaced in the requester notification instead so a
+                // Super Admin/IT Admin can sort it out separately.
+                var allocation = await _context.ResourceAllocations
+                    .Include(r => r.License)
+                        .ThenInclude(l => l.Software)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.Id == allocationId);
+
+                var softwareName = allocation?.License?.Software?.Name
+                    ?? $"license #{allocationId}";
+
+                skippedSoftware.Add($"{softwareName} ({ex.Message})");
+            }
+        }
+
+        if (movedSoftware.Count == 0 && skippedSoftware.Count == 0)
+            return string.Empty;
+
+        var note = string.Empty;
+
+        if (movedSoftware.Count > 0)
+            note += $" Installed software moved with it: {string.Join(", ", movedSoftware)}.";
+
+        if (skippedSoftware.Count > 0)
+            note += $" Could not auto-transfer: {string.Join("; ", skippedSoftware)} - please review manually.";
+
+        return note;
     }
 
     private async Task NotifyRequesterAsync(

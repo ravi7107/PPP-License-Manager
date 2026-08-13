@@ -6,7 +6,9 @@ public class ResourceReallocationResponse
 
     public Guid RequestReference { get; set; }
 
-    public int UserUnavailabilityId { get; set; }
+    public int? UserUnavailabilityId { get; set; }
+
+    public string RequestReason { get; set; } = "Unavailability";
 
     public int ResourceAllocationId { get; set; }
 

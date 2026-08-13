@@ -18,7 +18,17 @@ public class LicensePurchaseResponse
 
     public int CreatedLicenses { get; set; }
 
+    // Quota not yet turned into a license seat-row (TotalLicenses minus
+    // active License rows created under this purchase). Kept for backward
+    // compatibility with existing consumers of this field.
     public int AvailableLicenses { get; set; }
+
+    // The number of already-created license seats that can actually be
+    // allocated right now (Status == "Available", active, not expired).
+    // Unlike AvailableLicenses, this reflects real-time seat state - a
+    // seat that's Allocated/Suspended/Expired does NOT count here even
+    // though it was already "created" against the quota.
+    public int FreeToAllocateLicenses { get; set; }
 
     public DateOnly PurchaseDate { get; set; }
 
