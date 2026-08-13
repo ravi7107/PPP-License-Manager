@@ -922,12 +922,14 @@ export default function OfficeLocationsPage() {
                             {floor.isActive ? (
                               <Button
                                 size="sm"
-                                variant="ghost"
+                                variant="outline"
+                                className="text-red-600 hover:text-red-700"
                                 onClick={() =>
                                   void deactivateFloor(floor.id)
                                 }
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="mr-1 h-4 w-4" />
+                                Deactivate
                               </Button>
                             ) : (
                               <Button
@@ -1017,11 +1019,13 @@ export default function OfficeLocationsPage() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    className="text-red-600 hover:text-red-700"
                                     onClick={() =>
                                       void deactivateSeat(seat.id)
                                     }
                                   >
-                                    <Trash2 className="h-3 w-3" />
+                                    <Trash2 className="mr-1 h-3 w-3" />
+                                    Deactivate
                                   </Button>
                                 ) : (
                                   <Button
