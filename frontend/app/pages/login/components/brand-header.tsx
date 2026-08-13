@@ -8,28 +8,20 @@ interface BrandHeaderProps {
 
 // Served from frontend/public/pps-logo.jpg (Vite copies public/ verbatim
 // to the built site root, so "/pps-logo.jpg" resolves correctly both in
-// dev and behind nginx in production) - the actual PPS logo, not a
-// hand-drawn substitute.
+// dev and behind nginx in production) - the actual PPS logo. The
+// wordmark "PPS" text that used to sit next to it was dropped since the
+// logo already spells out "PPS" itself - having both was redundant.
 export function BrandHeader({ compact, className }: BrandHeaderProps) {
   return (
-    <div className={cn('flex items-center gap-3', className)}>
+    <div className={cn('flex items-center', className)}>
       <img
         src="/pps-logo.jpg"
-        alt="PPS logo"
+        alt="PPS"
         className={cn(
           'shrink-0 rounded-lg object-contain',
-          compact ? 'h-10 w-10' : 'h-12 w-12'
+          compact ? 'h-12 w-12' : 'h-14 w-14'
         )}
       />
-
-      <span
-        className={cn(
-          'font-bold tracking-tight text-foreground',
-          compact ? 'text-xl' : 'text-2xl'
-        )}
-      >
-        PPS
-      </span>
     </div>
   );
 }

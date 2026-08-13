@@ -25,7 +25,7 @@ export function HeroVisual({ variant = 'full', className }: HeroVisualProps) {
       className={cn(
         'relative flex items-center justify-center overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/[0.06] via-background to-primary/[0.12]',
         'animate-in fade-in-0 zoom-in-95 duration-700 fill-mode-both',
-        minimal ? 'rounded-2xl p-4' : 'p-4 lg:p-6',
+        minimal ? 'rounded-2xl p-3' : 'p-2',
         className
       )}
     >
