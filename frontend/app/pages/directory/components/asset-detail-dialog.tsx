@@ -65,6 +65,9 @@ interface AssetDetailDialogProps {
   // of the Hardware/Office Locations pages). Everyone else sees it
   // read-only.
   canEdit: boolean;
+  // Fires after a reallocation request is submitted successfully, so the
+  // parent page can refresh its own "My Reallocation Requests" list.
+  onRequestSubmitted?: () => void;
 }
 
 function DetailRow({
@@ -89,6 +92,7 @@ export function AssetDetailDialog({
   seats,
   canRequestReallocation,
   canEdit,
+  onRequestSubmitted,
 }: AssetDetailDialogProps) {
   const [detail, setDetail] = useState<AssetFullDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -310,6 +314,7 @@ export function AssetDetailDialog({
 
       setRequestOpen(false);
       onOpenChange(false);
+      onRequestSubmitted?.();
     } catch (err: any) {
       setRequestError(
         err?.response?.data?.message ||

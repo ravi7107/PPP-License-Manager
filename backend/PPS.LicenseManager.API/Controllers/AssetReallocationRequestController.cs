@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PPS.LicenseManager.API.Common;
 using PPS.LicenseManager.API.DTOs.AssetReallocation;
 using PPS.LicenseManager.API.Services.Interfaces;
 
@@ -39,11 +40,11 @@ public class AssetReallocationRequestController : ControllerBase
 
 
     // =========================================================
-    // MY REQUESTS (Team Lead)
+    // MY REQUESTS (Team Lead / Manager)
     // =========================================================
 
     [HttpGet("mine")]
-    [Authorize(Roles = "Team Lead")]
+    [Authorize(Roles = "Team Lead,Manager")]
     public async Task<IActionResult> GetMine()
     {
         var currentUserId = GetCurrentUserId();
@@ -90,21 +91,24 @@ public class AssetReallocationRequestController : ControllerBase
 
 
     // =========================================================
-    // CREATE (Team Lead)
+    // CREATE (Team Lead / Manager)
     // =========================================================
 
     [HttpPost]
-    [Authorize(Roles = "Team Lead")]
+    [Authorize(Roles = "Team Lead,Manager")]
     public async Task<IActionResult> Create(
         [FromBody] CreateReallocationRequest request)
     {
         try
         {
             var currentUserId = GetCurrentUserId();
+            var (isRestricted, companyId) = EntityScopeHelper.Resolve(User);
 
             var result = await _service.CreateAsync(
                 request,
-                currentUserId);
+                currentUserId,
+                isRestricted,
+                companyId);
 
             return Ok(result);
         }
@@ -170,11 +174,11 @@ public class AssetReallocationRequestController : ControllerBase
 
 
     // =========================================================
-    // CANCEL (Team Lead withdraws their own pending request)
+    // CANCEL (Team Lead / Manager withdraws their own pending request)
     // =========================================================
 
     [HttpPost("{id:int}/cancel")]
-    [Authorize(Roles = "Team Lead")]
+    [Authorize(Roles = "Team Lead,Manager")]
     public async Task<IActionResult> Cancel(int id)
     {
         try

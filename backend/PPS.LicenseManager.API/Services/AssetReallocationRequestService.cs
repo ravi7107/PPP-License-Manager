@@ -152,8 +152,14 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
 
     public async Task<AssetReallocationRequestResponse> CreateAsync(
         CreateReallocationRequest request,
-        int requestedByUserId)
+        int requestedByUserId,
+        bool isEntityRestricted = false,
+        int? companyId = null)
     {
+        if (isEntityRestricted && companyId == null)
+            throw new InvalidOperationException(
+                "Unable to resolve your entity - contact an administrator.");
+
         var requestType =
             string.IsNullOrWhiteSpace(request.RequestType)
                 ? "Reassign"
@@ -171,20 +177,26 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
                 "Requesting user not found or inactive.");
 
         var asset = await _context.Assets
+            .Include(x => x.Department)
             .FirstOrDefaultAsync(x => x.Id == request.AssetId);
 
         if (asset == null || !asset.IsActive)
             throw new InvalidOperationException(
                 "Selected asset does not exist or is inactive.");
 
-        // A Team Lead can only request reallocation for hardware in their
-        // own department - the same scoping already applied to what they
-        // can see on the Hardware page.
-        if (requestedBy.DepartmentId.HasValue &&
-            asset.DepartmentId != requestedBy.DepartmentId.Value)
+        // Team Lead and Manager can only request reallocation for hardware
+        // in their own entity (Company) - the same scoping already applied
+        // everywhere else a TL/Manager reads Asset/License data. Both
+        // roles share this check (EntityScopeHelper already treats them
+        // identically); it isn't narrowed further to just their own
+        // department, since a Manager oversees a whole entity, not one
+        // department within it.
+        if (isEntityRestricted &&
+            (asset.Department == null ||
+             asset.Department.CompanyId != companyId))
         {
             throw new InvalidOperationException(
-                "You can only request reallocation for hardware in your own department.");
+                "You can only request reallocation for hardware in your own entity.");
         }
 
         var currentAssignment = await _context.AssetAssignments

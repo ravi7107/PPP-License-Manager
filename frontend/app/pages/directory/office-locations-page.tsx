@@ -67,7 +67,13 @@ import OfficeFloorMap from '@/app/pages/directory/components/office-floor-map';
 import { AssetDetailDialog } from '@/app/pages/directory/components/asset-detail-dialog';
 
 import { useAuth } from '@/lib/auth/auth-context';
-import { canManage, isTeamLeader, type AppRole } from '@/lib/auth/roles';
+import {
+  canManage,
+  isTeamLeader,
+  isManagement,
+  type AppRole,
+} from '@/lib/auth/roles';
+import { ReallocationRequestsPanel } from '@/app/pages/hardware/components/reallocation-requests-panel';
 
 type DialogMode = 'create' | 'edit';
 
@@ -79,12 +85,19 @@ export default function OfficeLocationsPage() {
 
   const canEdit = canManage(userRoles);
 
-  // Only Team Lead can raise a hardware reallocation request (same
-  // role gate as AssetReallocationRequestController's Create endpoint) -
-  // Super Admin/IT Admin use direct Assign/Transfer from the Hardware
-  // page instead, and Manager currently has no hardware module access at
-  // all, so there's nothing for them to request here either.
-  const canRequestReallocation = isTeamLeader(userRoles);
+  // Team Lead and Manager can both raise a hardware reallocation request
+  // from here (same role gate as AssetReallocationRequestController's
+  // Create endpoint) - Super Admin/IT Admin use direct Assign/Transfer
+  // from the Hardware page instead. Manager doesn't have the separate
+  // "hardware" module, but they do reach this dialog through Office
+  // Locations, which they can already access - the request itself is
+  // entity-scoped server-side the same way every other Manager-visible
+  // hardware/license record already is.
+  const canRequestReallocation =
+    isTeamLeader(userRoles) || isManagement(userRoles);
+
+  const [reallocationRefreshToken, setReallocationRefreshToken] =
+    useState(0);
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -679,6 +692,13 @@ export default function OfficeLocationsPage() {
         </div>
       )}
 
+      {canRequestReallocation && (
+        <ReallocationRequestsPanel
+          mode="mine"
+          refreshToken={reallocationRefreshToken}
+        />
+      )}
+
       <Card>
         <CardContent className="pt-6">
           <div className="max-w-sm">
@@ -1006,21 +1026,19 @@ export default function OfficeLocationsPage() {
                             </div>
 
                             <div className="mt-3 text-xs text-muted-foreground">
+                              User:{' '}
+                              <span className="font-medium text-foreground">
+                                {seat.userName ?? 'Unassigned'}
+                              </span>
+                            </div>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
                               Department:{' '}
                               <span className="font-medium text-foreground">
                                 {seat.departmentName ??
                                   'Unassigned'}
                               </span>
                             </div>
-
-                            {(seat.xPosition !== null ||
-                              seat.yPosition !== null) && (
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                Map position: X{' '}
-                                {seat.xPosition ?? '-'} / Y{' '}
-                                {seat.yPosition ?? '-'}
-                              </div>
-                            )}
 
                             {canEdit && (
                               <div className="mt-3 flex gap-1">
@@ -1616,6 +1634,9 @@ export default function OfficeLocationsPage() {
         seats={seats}
         canRequestReallocation={canRequestReallocation}
         canEdit={canEdit}
+        onRequestSubmitted={() =>
+          setReallocationRefreshToken((t) => t + 1)
+        }
       />
     </div>
   );

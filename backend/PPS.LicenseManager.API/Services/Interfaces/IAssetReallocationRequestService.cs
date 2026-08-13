@@ -15,7 +15,9 @@ public interface IAssetReallocationRequestService
 
     Task<AssetReallocationRequestResponse> CreateAsync(
         CreateReallocationRequest request,
-        int requestedByUserId);
+        int requestedByUserId,
+        bool isEntityRestricted = false,
+        int? companyId = null);
 
     Task<AssetReallocationRequestResponse?> DecideAsAdminAsync(
         int id,
