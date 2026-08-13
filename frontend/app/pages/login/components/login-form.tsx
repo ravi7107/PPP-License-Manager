@@ -1,5 +1,5 @@
 import { useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
-import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,21 +51,27 @@ export function LoginForm({
       </h1>
 
       <p className="mt-1 text-sm text-muted-foreground">
-        Sign in to continue to your workspace.
+        Sign in to continue to your workspace
       </p>
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="login-email">Username / Email</Label>
+          {/* Visually the field is identified by its icon + placeholder
+              (matches the requested look), but it still has a real,
+              properly associated label for screen readers / keyboard
+              users - just visually hidden rather than removed. */}
+          <Label htmlFor="login-email" className="sr-only">
+            Username or Email
+          </Label>
 
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
             <Input
               id="login-email"
               type="email"
-              placeholder="admin@pps.com"
-              className="pl-9"
+              placeholder="Username or Email"
+              className="h-11 rounded-lg pl-9"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
@@ -76,17 +82,9 @@ export function LoginForm({
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="login-password">Password</Label>
-
-            <button
-              type="button"
-              onClick={() => setShowForgotHint((v) => !v)}
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Forgot Password?
-            </button>
-          </div>
+          <Label htmlFor="login-password" className="sr-only">
+            Password
+          </Label>
 
           <div className="relative">
             <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -94,8 +92,8 @@ export function LoginForm({
             <Input
               id="login-password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Enter password"
-              className="pl-9 pr-9"
+              placeholder="Password"
+              className="h-11 rounded-lg pl-9 pr-9"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -116,24 +114,34 @@ export function LoginForm({
               )}
             </button>
           </div>
-
-          {showForgotHint && (
-            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Self-service reset isn&apos;t available yet - please contact
-              your IT Administrator to reset your password.
-            </p>
-          )}
         </div>
 
-        <label className="flex select-none items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            className="h-4 w-4 rounded border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-          Remember Me
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="flex select-none items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 rounded border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            Remember me
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setShowForgotHint((v) => !v)}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Forgot Password?
+          </button>
+        </div>
+
+        {showForgotHint && (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            Self-service reset isn&apos;t available yet - please contact
+            your IT Administrator to reset your password.
+          </p>
+        )}
 
         {error && (
           <div
@@ -145,14 +153,21 @@ export function LoginForm({
           </div>
         )}
 
-        <Button type="submit" disabled={loading} className="w-full">
+        <Button
+          type="submit"
+          disabled={loading}
+          className="h-11 w-full rounded-lg text-sm font-semibold tracking-wide"
+        >
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Signing In...
+              SIGNING IN...
             </>
           ) : (
-            'Sign In'
+            <>
+              <Lock className="h-4 w-4" />
+              SIGN IN
+            </>
           )}
         </Button>
       </form>

@@ -1,4 +1,3 @@
-import { Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BrandHeaderProps {
@@ -8,43 +7,51 @@ interface BrandHeaderProps {
   className?: string;
 }
 
-// The app has no logo image anywhere in the project - its only existing
-// "mark" is the Building2 icon in a primary-colored rounded square, used
-// today in the sidebar header (components/layout/app-sidebar.tsx). This
-// reuses that exact mark at a larger size instead of inventing a new one,
-// so the login page and the authenticated app agree on what "the PPS
-// brand" looks like.
+// The app has no logo image asset anywhere in the project - its only
+// existing "mark" is a Building2 icon in a primary-colored square, used
+// today in the sidebar (components/layout/app-sidebar.tsx). This login
+// page instead draws a small hexagon mark directly in SVG using the same
+// --primary theme color, since a hexagon reads as a more distinctive
+// "brand mark" than a generic building icon in a square. It's plain
+// inline SVG - no new asset, no new dependency.
+function HexMark({ compact }: { compact?: boolean }) {
+  const size = compact ? 40 : 48;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      aria-hidden
+      className="shrink-0"
+    >
+      <path
+        d="M24 2 44 13.5v21L24 46 4 34.5v-21z"
+        fill="var(--primary)"
+        fillOpacity="0.08"
+        stroke="var(--primary)"
+        strokeWidth="2.5"
+      />
+      <circle cx="24" cy="24" r="9" fill="var(--primary)" />
+      <circle cx="24" cy="24" r="9" fill="none" stroke="white" strokeWidth="2" />
+    </svg>
+  );
+}
+
 export function BrandHeader({ compact, className }: BrandHeaderProps) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
-      <div
+      <HexMark compact={compact} />
+
+      <span
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm',
-          compact ? 'h-10 w-10' : 'h-12 w-12'
+          'font-bold tracking-tight text-foreground',
+          compact ? 'text-lg' : 'text-2xl'
         )}
       >
-        <Building2 className={compact ? 'h-5 w-5' : 'h-6 w-6'} />
-      </div>
-
-      <div className="flex flex-col leading-tight">
-        <span
-          className={cn(
-            'font-semibold tracking-tight text-foreground',
-            compact ? 'text-lg' : 'text-xl'
-          )}
-        >
-          PPS GROUP
-        </span>
-
-        <span
-          className={cn(
-            'text-muted-foreground',
-            compact ? 'text-xs' : 'text-sm'
-          )}
-        >
-          Digital Workplace &amp; IT Management
-        </span>
-      </div>
+        PPS GROUP
+      </span>
     </div>
   );
 }

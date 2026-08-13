@@ -7,6 +7,7 @@ import { FeatureHighlights } from "@/app/pages/login/components/feature-highligh
 import { LoginForm } from "@/app/pages/login/components/login-form";
 import { HeroVisual } from "@/app/pages/login/components/hero-visual";
 import { SecurityFooter } from "@/app/pages/login/components/security-footer";
+import { StatsStrip } from "@/app/pages/login/components/stats-strip";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -43,20 +44,26 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background md:grid md:grid-cols-2">
       {/* LEFT - branding + login form. Always first in DOM order, which
-          is also the correct mobile stacking order: brand, app name
-          (part of BrandHeader), login form, then a small illustration
-          appended below (rendered separately, md:hidden, further down). */}
-      <div className="flex flex-1 flex-col justify-center gap-8 px-6 py-10 sm:px-10 md:px-16 lg:py-16 xl:px-20">
+          is also the correct mobile stacking order: brand, app name,
+          login form, then a small illustration appended below (rendered
+          separately, md:hidden, further down). */}
+      <div className="flex flex-1 flex-col justify-center gap-6 px-6 py-10 sm:px-10 md:px-16 lg:py-16 xl:px-20">
         <div className="animate-in fade-in-0 duration-500 fill-mode-both">
           <BrandHeader />
         </div>
 
-        <p className="-mt-4 max-w-sm text-sm text-muted-foreground animate-in fade-in-0 duration-500 fill-mode-both [animation-delay:80ms]">
-          Manage People, Assets, Procurement &amp; Workspace — all in one
-          place.
-        </p>
+        <div className="animate-in fade-in-0 duration-500 fill-mode-both [animation-delay:80ms]">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Digital Workplace &amp; IT Management
+          </h2>
 
-        <FeatureHighlights className="hidden max-w-md sm:grid" />
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Manage People, Assets, Procurement &amp; Workspace — all in
+            one place.
+          </p>
+        </div>
+
+        <FeatureHighlights className="hidden max-w-xl sm:grid" />
 
         <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 fill-mode-both [animation-delay:120ms]">
           <LoginForm
@@ -83,7 +90,7 @@ export default function LoginPage() {
         />
         <HeroVisual
           variant="full"
-          className="hidden h-full max-h-[640px] w-full lg:block"
+          className="hidden h-full max-h-[720px] w-full lg:block"
         />
       </div>
 
@@ -92,6 +99,11 @@ export default function LoginPage() {
       <div className="px-6 pb-10 md:hidden">
         <HeroVisual variant="minimal" />
       </div>
+
+      {/* Full-width stats strip under both columns - tablet/desktop
+          only, skipped on mobile to keep the small screen focused on
+          branding + form rather than more numbers to scroll past. */}
+      <StatsStrip className="hidden md:col-span-2 md:grid" />
     </div>
   );
 }
