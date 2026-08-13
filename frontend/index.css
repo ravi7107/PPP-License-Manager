@@ -199,7 +199,22 @@ body.hardware-stripe-theme {
   --input: rgb(226 232 240);
   --ring: rgb(79 70 229 / 0.35);
 
-  --radius: 1rem; /* 16px cards; buttons/inputs land ~10-12px via the existing radius scale */
+  /* 8px stat cards (rounded-lg), 12px outer Card (rounded-xl = radius+4px),
+     ~6px buttons/inputs (rounded-md = radius-2px) - inside the modern
+     enterprise SaaS 8-12px guideline instead of the previous 16px/20px,
+     which read closer to a consumer app than an admin tool. */
+  --radius: 0.5rem;
+
+  /* font-sans (tailwind.config.js) resolves to var(--layout-text-font-family)
+     first, which is never defined anywhere in this codebase - so on every
+     page today that var() is invalid, the whole font-family declaration
+     falls through, and the browser's default serif typeface (e.g. Times)
+     shows instead of Inter. That's the root cause of the "serif-style"
+     look. Scoped here (like every other token above) rather than fixed in
+     tailwind.config.js/:root, so this redesign only changes the Hardware
+     module - the same underlying bug affects the rest of the app too, and
+     is a quick, separate global fix if wanted. */
+  font-family: var(--font-sans);
 
   --shadow-2xs: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
   --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);

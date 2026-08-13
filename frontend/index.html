@@ -4,6 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PPS License Manager</title>
+
+  <!-- Inter - index.css's --font-sans already points to "Inter, sans-serif",
+       but nothing previously loaded the Inter typeface itself, so it was
+       only ever going to resolve to the browser's default sans-serif
+       fallback (and, separately, a broken var() reference meant even that
+       fallback wasn't being applied - see index.css). This actually loads
+       the font so it renders as Inter, not just a generic system font. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
 </head>
 <body>
   <div id="root"></div>

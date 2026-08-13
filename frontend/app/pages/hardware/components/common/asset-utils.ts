@@ -58,6 +58,26 @@ export function warrantyStatus(date?: string | null) {
     };
 }
 
+/*
+ * Compact 3-state warranty health used by the redesigned Asset Inventory
+ * table (healthy / expiring soon / expired), separate from the 4-bucket
+ * warrantyStatus() above (which several existing dialogs already render
+ * as a Badge). Kept as a small, additive helper rather than changing
+ * warrantyStatus() itself, since that function's output shape/labels are
+ * relied on elsewhere.
+ */
+export type WarrantyHealth = "unknown" | "healthy" | "expiring" | "expired";
+
+export function warrantyHealth(date?: string | null): WarrantyHealth {
+    const days = daysRemaining(date);
+
+    if (days === null) return "unknown";
+    if (days < 0) return "expired";
+    if (days <= 60) return "expiring";
+
+    return "healthy";
+}
+
 export function statusVariant(
     status?: string
 ): BadgeProps["variant"] {

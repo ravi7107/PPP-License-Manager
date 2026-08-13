@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 
@@ -12,8 +12,20 @@ import {
   Eye,
   History,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   ArrowRightLeft,
   Undo2,
+  Ellipsis,
+  ChevronLeft,
+  ChevronRight,
+  UserCheck,
+  Wrench,
+  Archive,
+  Monitor,
+  MapPin,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 
 import {
@@ -26,7 +38,14 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { StatusPill } from '@/app/pages/hardware/components/status-pill';
+
+import {
+  formatDate,
+  daysRemaining,
+  warrantyHealth,
+} from '@/app/pages/hardware/components/common/asset-utils';
 
 import {
   Select,
@@ -97,6 +116,7 @@ import {
   AssetRecord,
   AssetFormValues,
   LookupOption,
+  ASSET_TYPES,
 } from '@/app/pages/hardware/types';
 
 import { exportAssetsToExcel } from '@/lib/utils/asset-excel';
@@ -155,6 +175,155 @@ type AssetWithAssignment = AssetRecord & {
   currentSeatLabel: string | null;
   currentWorkMode: string | null;
 };
+
+/*
+ * --------------------------------------------------------------------------
+ * PRESENTATIONAL HELPERS
+ * --------------------------------------------------------------------------
+ *
+ * Small, page-local components - none of them fetch data, call the API, or
+ * own business state. They only render values the page's existing state/
+ * memos already compute.
+ */
+
+function StatCard({
+  title,
+  value,
+  subLabel,
+  icon,
+}: {
+  title: string;
+  value: number;
+  subLabel?: string | null;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="hardware-stat-card flex items-start justify-between gap-3 p-4">
+      <div>
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+
+        <p className="mt-1.5 text-[28px] font-semibold leading-none tracking-tight text-foreground">
+          {value}
+        </p>
+
+        {subLabel ? (
+          <p className="mt-2 text-xs text-muted-foreground">{subLabel}</p>
+        ) : null}
+      </div>
+
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+// Native checkbox (same pattern already used for "Remember me" on the login
+// page) rather than a Radix Checkbox component - @radix-ui/react-checkbox
+// isn't an existing dependency of this project. Wrapped only so the
+// "some but not all rows on this page are selected" indeterminate visual
+// state can be set imperatively (the DOM property has no React prop).
+function SelectAllCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      aria-label="Select all assets on this page"
+      className="h-4 w-4 rounded border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+    />
+  );
+}
+
+function SortIndicator({
+  active,
+  dir,
+}: {
+  active: boolean;
+  dir: 'asc' | 'desc';
+}) {
+  if (!active) {
+    return <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />;
+  }
+
+  return dir === 'asc' ? (
+    <ArrowUp className="h-3 w-3 text-primary" />
+  ) : (
+    <ArrowDown className="h-3 w-3 text-primary" />
+  );
+}
+
+// Warranty expiry as "17 Jan 2027" + a "154 days left" (or "Expired 40 days
+// ago") line with a green/amber/red health dot - all derived from the
+// asset's own real warrantyExpiry value via the existing formatDate() /
+// daysRemaining() / warrantyHealth() helpers, nothing hardcoded.
+function WarrantyCell({ expiry }: { expiry?: string | null }) {
+  if (!expiry) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
+  const health = warrantyHealth(expiry);
+  const days = daysRemaining(expiry);
+
+  const dotColor =
+    health === 'expired'
+      ? 'bg-red-500'
+      : health === 'expiring'
+        ? 'bg-amber-500'
+        : 'bg-emerald-500';
+
+  const textColor =
+    health === 'expired'
+      ? 'text-red-700'
+      : health === 'expiring'
+        ? 'text-amber-700'
+        : 'text-emerald-700';
+
+  const daysLabel =
+    days === null
+      ? null
+      : days < 0
+        ? `Expired ${Math.abs(days)}d ago`
+        : `${days}d left`;
+
+  return (
+    <div className="leading-tight">
+      <div className="text-sm text-foreground">{formatDate(expiry)}</div>
+
+      {daysLabel ? (
+        <div
+          className={cn(
+            'mt-0.5 inline-flex items-center gap-1 text-xs font-medium',
+            textColor,
+          )}
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', dotColor)} aria-hidden />
+          {daysLabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function HardwarePage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
@@ -377,6 +546,36 @@ export default function HardwarePage() {
 
   const [sortDir, setSortDir] =
     useState<'asc' | 'desc'>('asc');
+
+  const [assetTypeFilter, setAssetTypeFilter] =
+    useState<string>('all');
+
+  const [warrantyFilter, setWarrantyFilter] =
+    useState<string>('all');
+
+  /*
+   * --------------------------------------------------------------------------
+   * ROW SELECTION (bulk export only - every other row action already goes
+   * through its own dialog/confirmation and stays a single-row action, since
+   * bulk-applying them safely would mean inventing new backend behavior).
+   * --------------------------------------------------------------------------
+   */
+
+  const [selectedIds, setSelectedIds] =
+    useState<Set<number>>(new Set());
+
+  /*
+   * --------------------------------------------------------------------------
+   * PAGINATION (client-side only - filteredAssets is already the full,
+   * already-loaded list, so this just slices it for display).
+   * --------------------------------------------------------------------------
+   */
+
+  const [pageSize, setPageSize] =
+    useState<number>(25);
+
+  const [currentPage, setCurrentPage] =
+    useState<number>(1);
 
   /*
    * --------------------------------------------------------------------------
@@ -628,6 +827,18 @@ export default function HardwarePage() {
         );
       }
 
+      if (assetTypeFilter !== 'all') {
+        list = list.filter(
+          (a) => a.assetType === assetTypeFilter,
+        );
+      }
+
+      if (warrantyFilter !== 'all') {
+        list = list.filter(
+          (a) => warrantyHealth(a.warrantyExpiry) === warrantyFilter,
+        );
+      }
+
       list.sort((a, b) => {
         const av =
           (a[sortKey] ?? '') as string;
@@ -651,11 +862,158 @@ export default function HardwarePage() {
       search,
       statusFilter,
       departmentFilter,
+      assetTypeFilter,
+      warrantyFilter,
       sortKey,
       sortDir,
       isTeamLeader,
       myDepartmentId,
     ]);
+
+  /*
+   * --------------------------------------------------------------------------
+   * PAGINATION / SELECTION (derived)
+   * --------------------------------------------------------------------------
+   */
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAssets.length / pageSize),
+  );
+
+  const paginatedAssets = useMemo(
+    () =>
+      filteredAssets.slice(
+        (currentPage - 1) * pageSize,
+        (currentPage - 1) * pageSize + pageSize,
+      ),
+    [filteredAssets, currentPage, pageSize],
+  );
+
+  // Jump back to page 1 whenever the underlying filtered set changes shape,
+  // so the user never lands on a page that no longer makes sense.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    statusFilter,
+    departmentFilter,
+    assetTypeFilter,
+    warrantyFilter,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const allVisibleSelected =
+    paginatedAssets.length > 0 &&
+    paginatedAssets.every((a) => selectedIds.has(a.id));
+
+  const someVisibleSelected =
+    !allVisibleSelected &&
+    paginatedAssets.some((a) => selectedIds.has(a.id));
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+
+      if (allVisibleSelected) {
+        paginatedAssets.forEach((a) => next.delete(a.id));
+      } else {
+        paginatedAssets.forEach((a) => next.add(a.id));
+      }
+
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  };
+
+  const selectedAssets = useMemo(
+    () =>
+      assetsWithAssignments.filter((a) => selectedIds.has(a.id)),
+    [assetsWithAssignments, selectedIds],
+  );
+
+  const handleExportSelected = () => {
+    exportAssetsToExcel(selectedAssets, 'selected-assets.xlsx');
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * ACTIVE FILTER CHIPS
+   * --------------------------------------------------------------------------
+   */
+
+  const WARRANTY_FILTER_LABELS: Record<string, string> = {
+    healthy: 'Healthy',
+    expiring: 'Expiring Soon',
+    expired: 'Expired',
+  };
+
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; onRemove: () => void }[] = [];
+
+    if (statusFilter !== 'all') {
+      chips.push({
+        key: 'status',
+        label: `Status: ${statusFilter}`,
+        onRemove: () => setStatusFilter('all'),
+      });
+    }
+
+    if (departmentFilter !== 'all') {
+      const dept = departments.find(
+        (d) => String(d.id) === departmentFilter,
+      );
+
+      chips.push({
+        key: 'department',
+        label: `Department: ${dept?.name ?? departmentFilter}`,
+        onRemove: () => setDepartmentFilter('all'),
+      });
+    }
+
+    if (assetTypeFilter !== 'all') {
+      chips.push({
+        key: 'type',
+        label: `Type: ${assetTypeFilter}`,
+        onRemove: () => setAssetTypeFilter('all'),
+      });
+    }
+
+    if (warrantyFilter !== 'all') {
+      chips.push({
+        key: 'warranty',
+        label: `Warranty: ${WARRANTY_FILTER_LABELS[warrantyFilter] ?? warrantyFilter}`,
+        onRemove: () => setWarrantyFilter('all'),
+      });
+    }
+
+    return chips;
+  }, [statusFilter, departmentFilter, assetTypeFilter, warrantyFilter, departments]);
+
+  const resetAllFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+    setDepartmentFilter('all');
+    setAssetTypeFilter('all');
+    setWarrantyFilter('all');
+  };
 
   /*
    * --------------------------------------------------------------------------
@@ -1174,49 +1532,71 @@ const handleSubmit = async (
    */
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* -------------------------------------------------------------- */}
+      {/* PAGE HEADER                                                     */}
+      {/* -------------------------------------------------------------- */}
+
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Hardware Assets
+        </h1>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          Track hardware assets, ownership, warranty and lifecycle status
+          across the organization.
+        </p>
+      </div>
+
+      {/* -------------------------------------------------------------- */}
+      {/* KPI CARDS                                                       */}
+      {/* -------------------------------------------------------------- */}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="hardware-stat-card p-4">
-          <p className="text-sm font-medium text-muted-foreground">
-            Total Assets
-          </p>
-          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
-            {assetStats.total}
-          </p>
-        </div>
+        <StatCard
+          title="Total Assets"
+          value={assetStats.total}
+          icon={<Monitor className="h-4 w-4" />}
+        />
 
-        <div className="hardware-stat-card p-4">
-          <p className="text-sm font-medium text-muted-foreground">
-            Assigned
-          </p>
-          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
-            {assetStats.assigned}
-          </p>
-        </div>
+        <StatCard
+          title="Assigned"
+          value={assetStats.assigned}
+          subLabel={
+            assetStats.total
+              ? `${((assetStats.assigned / assetStats.total) * 100).toFixed(1)}% of total`
+              : undefined
+          }
+          icon={<UserCheck className="h-4 w-4" />}
+        />
 
-        <div className="hardware-stat-card p-4">
-          <p className="text-sm font-medium text-muted-foreground">
-            In Maintenance
-          </p>
-          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
-            {assetStats.inMaintenance}
-          </p>
-        </div>
+        <StatCard
+          title="In Maintenance"
+          value={assetStats.inMaintenance}
+          subLabel={
+            assetStats.total
+              ? `${((assetStats.inMaintenance / assetStats.total) * 100).toFixed(1)}% of total`
+              : undefined
+          }
+          icon={<Wrench className="h-4 w-4" />}
+        />
 
-        <div className="hardware-stat-card p-4">
-          <p className="text-sm font-medium text-muted-foreground">
-            Retired
-          </p>
-          <p className="mt-1.5 text-2xl font-semibold tracking-tight">
-            {assetStats.retired}
-          </p>
-        </div>
+        <StatCard
+          title="Retired"
+          value={assetStats.retired}
+          subLabel={
+            assetStats.total
+              ? `${((assetStats.retired / assetStats.total) * 100).toFixed(1)}% of total`
+              : undefined
+          }
+          icon={<Archive className="h-4 w-4" />}
+        />
       </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>
+            <CardTitle className="text-lg">
               Asset Inventory
             </CardTitle>
 
@@ -1265,7 +1645,11 @@ const handleSubmit = async (
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
+          {/* ---------------------------------------------------------- */}
+          {/* SEARCH / FILTERS                                            */}
+          {/* ---------------------------------------------------------- */}
+
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1286,7 +1670,7 @@ const handleSubmit = async (
                 setStatusFilter
               }
             >
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
 
@@ -1324,7 +1708,7 @@ const handleSubmit = async (
                   setDepartmentFilter
                 }
               >
-                <SelectTrigger className="w-52">
+                <SelectTrigger className="w-48">
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
 
@@ -1349,276 +1733,490 @@ const handleSubmit = async (
               </Select>
             ) : null}
 
-            <span className="text-sm text-muted-foreground">
-              {filteredAssets.length}{' '}
-              asset(s)
-            </span>
+            <Select
+              value={assetTypeFilter}
+              onValueChange={setAssetTypeFilter}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">
+                  All Types
+                </SelectItem>
+
+                {ASSET_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={warrantyFilter}
+              onValueChange={setWarrantyFilter}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Warranty" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">
+                  All Warranty
+                </SelectItem>
+
+                <SelectItem value="healthy">
+                  Healthy
+                </SelectItem>
+
+                <SelectItem value="expiring">
+                  Expiring Soon
+                </SelectItem>
+
+                <SelectItem value="expired">
+                  Expired
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
+          {/* ---------------------------------------------------------- */}
+          {/* ACTIVE FILTER CHIPS                                         */}
+          {/* ---------------------------------------------------------- */}
+
+          {activeFilterChips.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+
+              {activeFilterChips.map((chip) => (
+                <span
+                  key={chip.key}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 py-1 pl-2.5 pr-1.5 text-xs font-medium text-foreground"
+                >
+                  {chip.label}
+
+                  <button
+                    type="button"
+                    onClick={chip.onRemove}
+                    aria-label={`Remove filter ${chip.label}`}
+                    className="rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+          ) : null}
+
+          {/* ---------------------------------------------------------- */}
+          {/* BULK ACTIONS                                                */}
+          {/* ---------------------------------------------------------- */}
+
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+              <span className="text-sm font-medium text-foreground">
+                {selectedIds.size} asset{selectedIds.size === 1 ? '' : 's'} selected
+              </span>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportSelected}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Selected
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* ---------------------------------------------------------- */}
+          {/* TABLE                                                       */}
+          {/* ---------------------------------------------------------- */}
+
           <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead
-                    className="cursor-pointer select-none"
-                    onClick={() =>
-                      toggleSort(
-                        'assetTag',
-                      )
-                    }
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      Asset ID
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </TableHead>
+            <div className="max-h-[65vh] overflow-auto">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-10 px-3">
+                      <SelectAllCheckbox
+                        checked={allVisibleSelected}
+                        indeterminate={someVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        disabled={paginatedAssets.length === 0}
+                      />
+                    </TableHead>
 
-                  <TableHead
-                    className="cursor-pointer select-none"
-                    onClick={() =>
-                      toggleSort(
-                        'hostName',
-                      )
-                    }
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      Host Name
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </TableHead>
-
-                  <TableHead>
-                    Serial Number
-                  </TableHead>
-
-                  <TableHead>
-                    Manufacturer / Model
-                  </TableHead>
-
-                  <TableHead>
-                    Current User
-                  </TableHead>
-
-                  <TableHead>
-                    Department
-                  </TableHead>
-
-                  <TableHead
-                    className="cursor-pointer select-none"
-                    onClick={() =>
-                      toggleSort(
-                        'warrantyExpiry',
-                      )
-                    }
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      Warranty Expiry
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </TableHead>
-
-                  <TableHead
-                    className="cursor-pointer select-none"
-                    onClick={() =>
-                      toggleSort('status')
-                    }
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      Status
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </TableHead>
-
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {loading ||
-                assignmentsLoading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() =>
+                        toggleSort(
+                          'assetTag',
+                        )
+                      }
                     >
-                      Loading assets…
-                    </TableCell>
-                  </TableRow>
-                ) : filteredAssets.length ===
-                  0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      <span className="inline-flex items-center gap-1">
+                        Asset
+                        <SortIndicator active={sortKey === 'assetTag'} dir={sortDir} />
+                      </span>
+                    </TableHead>
+
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() =>
+                        toggleSort(
+                          'hostName',
+                        )
+                      }
                     >
-                      No assets found.
-                    </TableCell>
+                      <span className="inline-flex items-center gap-1">
+                        Device
+                        <SortIndicator active={sortKey === 'hostName'} dir={sortDir} />
+                      </span>
+                    </TableHead>
+
+                    <TableHead>
+                      Current User
+                    </TableHead>
+
+                    <TableHead>
+                      Department
+                    </TableHead>
+
+                    <TableHead>
+                      Location
+                    </TableHead>
+
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() =>
+                        toggleSort(
+                          'warrantyExpiry',
+                        )
+                      }
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Warranty
+                        <SortIndicator active={sortKey === 'warrantyExpiry'} dir={sortDir} />
+                      </span>
+                    </TableHead>
+
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() =>
+                        toggleSort('status')
+                      }
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Status
+                        <SortIndicator active={sortKey === 'status'} dir={sortDir} />
+                      </span>
+                    </TableHead>
+
+                    <TableHead className="w-12 text-right">
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ) : (
-                  filteredAssets.map(
-                    (asset) => (
-                      <TableRow
-                        key={asset.id}
+                </TableHeader>
+
+                <TableBody>
+                  {loading ||
+                  assignmentsLoading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={9}
+                        className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        <TableCell className="font-mono text-xs font-medium">
-                          {asset.assetTag}
-                        </TableCell>
+                        Loading assets…
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredAssets.length ===
+                    0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={9}
+                        className="py-10 text-center text-sm text-muted-foreground"
+                      >
+                        {search || activeFilterChips.length > 0
+                          ? 'No assets match your search or filters.'
+                          : 'No assets found.'}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginatedAssets.map(
+                      (asset) => (
+                        <TableRow
+                          key={asset.id}
+                          data-state={selectedIds.has(asset.id) ? 'selected' : undefined}
+                        >
+                          <TableCell className="px-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(asset.id)}
+                              onChange={() => toggleSelectOne(asset.id)}
+                              aria-label={`Select ${asset.assetTag}`}
+                              className="h-4 w-4 rounded border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                          </TableCell>
 
-                        <TableCell>
-                          {asset.hostName ??
-                            '—'}
-                        </TableCell>
-
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {asset.serialNumber ??
-                            '—'}
-                        </TableCell>
-
-                        <TableCell>
-                          {asset.manufacturer ??
-                            '—'}{' '}
-                          {asset.model
-                            ? `/ ${asset.model}`
-                            : ''}
-                        </TableCell>
-
-                        <TableCell>
-                          {asset.assignedUserName ??
-                            'Unassigned'}
-                        </TableCell>
-
-                        <TableCell>
-                          {asset.departmentName ??
-                            '—'}
-                        </TableCell>
-
-                        <TableCell>
-                          {asset.warrantyExpiry?.slice(
-                            0,
-                            10,
-                          ) ?? '—'}
-                        </TableCell>
-
-                        <TableCell>
-                          <StatusPill status={asset.status} />
-                        </TableCell>
-
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              asChild
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => openView(asset)}
+                              className="block text-left font-mono text-xs font-semibold text-primary hover:underline"
                             >
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                              >
-                                Actions
-                              </Button>
-                            </DropdownMenuTrigger>
+                              {asset.assetTag}
+                            </button>
 
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  openView(
-                                    asset,
-                                  )
-                                }
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                View
-                              </DropdownMenuItem>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {[asset.manufacturer, asset.model]
+                                .filter(Boolean)
+                                .join(' ') || '—'}
+                            </div>
+                          </TableCell>
 
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  openHistory(
-                                    asset,
-                                  )
-                                }
-                              >
-                                <History className="mr-2 h-4 w-4" />
-                                Audit History
-                              </DropdownMenuItem>
+                          <TableCell>
+                            <div className="text-sm text-foreground">
+                              {asset.hostName ?? '—'}
+                            </div>
 
-                              {canEdit ? (
-                                <>
+                            <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                              {asset.serialNumber ?? '—'}
+                            </div>
+                          </TableCell>
+
+                          <TableCell>
+                            {asset.assignedUserName ? (
+                              <span className="text-sm text-foreground">
+                                {asset.assignedUserName}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                Unassigned
+                              </span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="text-sm text-foreground">
+                              {asset.departmentName ?? '—'}
+                            </span>
+                          </TableCell>
+
+                          <TableCell>
+                            {asset.currentSeatLabel ? (
+                              <span className="inline-flex items-center gap-1 text-sm text-foreground">
+                                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                {asset.currentSeatLabel}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            <WarrantyCell expiry={asset.warrantyExpiry} />
+                          </TableCell>
+
+                          <TableCell>
+                            <StatusPill status={asset.status} />
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                asChild
+                              >
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label={`Actions for ${asset.assetTag}`}
+                                >
+                                  <Ellipsis className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    openView(
+                                      asset,
+                                    )
+                                  }
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Asset
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    openHistory(
+                                      asset,
+                                    )
+                                  }
+                                >
+                                  <History className="mr-2 h-4 w-4" />
+                                  Asset History
+                                </DropdownMenuItem>
+
+                                {canEdit ? (
+                                  <>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        openEdit(
+                                          asset,
+                                        )
+                                      }
+                                    >
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Edit Asset
+                                    </DropdownMenuItem>
+
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        openTransfer(
+                                          asset,
+                                        )
+                                      }
+                                    >
+                                      <ArrowRightLeft className="mr-2 h-4 w-4" />
+
+                                      {asset.assignedUserId
+                                        ? 'Reassign'
+                                        : 'Allocate'}
+                                    </DropdownMenuItem>
+
+                                    {asset.assignedUserId ? (
+                                      <DropdownMenuItem
+                                        disabled={assignmentSaving}
+                                        onClick={() =>
+                                          handleReturn(
+                                            asset,
+                                          )
+                                        }
+                                      >
+                                        <Undo2 className="mr-2 h-4 w-4" />
+                                        Return
+                                      </DropdownMenuItem>
+                                    ) : null}
+
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() =>
+                                        openDelete(
+                                          asset,
+                                        )
+                                      }
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Retire Asset
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
+
+                                {!canEdit &&
+                                isTeamLeader &&
+                                asset.assignedUserId ? (
                                   <DropdownMenuItem
                                     onClick={() =>
-                                      openEdit(
-                                        asset,
-                                      )
-                                    }
-                                  >
-                                    <Pencil className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      openTransfer(
+                                      openRequest(
                                         asset,
                                       )
                                     }
                                   >
                                     <ArrowRightLeft className="mr-2 h-4 w-4" />
-
-                                    {asset.assignedUserId
-                                      ? 'Reassign'
-                                      : 'Allocate'}
+                                    Request Reallocation
                                   </DropdownMenuItem>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
-                                  {asset.assignedUserId ? (
-                                    <DropdownMenuItem
-                                      disabled={assignmentSaving}
-                                      onClick={() =>
-                                        handleReturn(
-                                          asset,
-                                        )
-                                      }
-                                    >
-                                      <Undo2 className="mr-2 h-4 w-4" />
-                                      Return
-                                    </DropdownMenuItem>
-                                  ) : null}
+          {/* ---------------------------------------------------------- */}
+          {/* PAGINATION                                                  */}
+          {/* ---------------------------------------------------------- */}
 
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() =>
-                                      openDelete(
-                                        asset,
-                                      )
-                                    }
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Retire / Delete
-                                  </DropdownMenuItem>
-                                </>
-                              ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span>Rows per page</span>
 
-                              {!canEdit &&
-                              isTeamLeader &&
-                              asset.assignedUserId ? (
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    openRequest(
-                                      asset,
-                                    )
-                                  }
-                                >
-                                  <ArrowRightLeft className="mr-2 h-4 w-4" />
-                                  Request Reallocation
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ),
-                  )
-                )}
-              </TableBody>
-            </Table>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => setPageSize(Number(value))}
+              >
+                <SelectTrigger className="h-8 w-[72px]">
+                  <SelectValue />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span>
+                {filteredAssets.length === 0
+                  ? '0 of 0'
+                  : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredAssets.length)} of ${filteredAssets.length}`}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
