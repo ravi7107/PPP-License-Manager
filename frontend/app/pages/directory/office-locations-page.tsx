@@ -116,6 +116,10 @@ export default function OfficeLocationsPage() {
   const [mapUploadingFloorId, setMapUploadingFloorId] =
     useState<number | null>(null);
 
+  // When on, clicking the map places a brand-new seat at that position
+  // instead of the default drag-to-reposition/click-to-edit behavior.
+  const [mapAddSeatMode, setMapAddSeatMode] = useState(false);
+
   // Double-click detail panel - available to every role that can open the
   // map (Team Lead/Manager included), unlike single-click-to-edit which
   // stays canEdit-only.
@@ -347,7 +351,10 @@ export default function OfficeLocationsPage() {
     }
   };
 
-  const openCreateSeat = (floor: OfficeFloor) => {
+  const openCreateSeat = (
+    floor: OfficeFloor,
+    initialPosition?: { x: number; y: number }
+  ) => {
     setSeatMode('create');
     setSelectedSeat(null);
 
@@ -356,8 +363,8 @@ export default function OfficeLocationsPage() {
       seatCode: '',
       seatName: '',
       departmentId: 'none',
-      xPosition: '',
-      yPosition: '',
+      xPosition: initialPosition ? String(initialPosition.x) : '',
+      yPosition: initialPosition ? String(initialPosition.y) : '',
       isActive: true,
     });
 
@@ -440,6 +447,7 @@ export default function OfficeLocationsPage() {
 
   const openFloorMap = (floor: OfficeFloor) => {
     setMapFloor(floor);
+    setMapAddSeatMode(false);
     setMapDialog(true);
   };
 
@@ -528,6 +536,19 @@ export default function OfficeLocationsPage() {
   const deactivateSeat = async (id: number) => {
     if (!window.confirm('Deactivate this seat?')) return;
     await deleteOfficeSeat(id);
+    await loadData();
+  };
+
+  // Same as deactivateSeat, but also closes the Add/Edit Seat dialog -
+  // lets you delete a seat without leaving the dialog you opened it from
+  // (including when that dialog was opened by clicking a marker on the
+  // interactive floor map).
+  const deleteSeatFromDialog = async () => {
+    if (!selectedSeat) return;
+    if (!window.confirm('Deactivate this seat?')) return;
+
+    await deleteOfficeSeat(selectedSeat.id);
+    setSeatDialog(false);
     await loadData();
   };
 
@@ -903,6 +924,7 @@ export default function OfficeLocationsPage() {
 
           if (!open) {
             setMapFloor(null);
+            setMapAddSeatMode(false);
           }
         }}
       >
@@ -919,8 +941,27 @@ export default function OfficeLocationsPage() {
             <OfficeFloorMap
               floor={mapFloor}
               seats={getFloorSeats(mapFloor.id)}
-              onSeatClick={
+              addMode={mapAddSeatMode}
+              onMapClick={
                 canEdit
+                  ? (xPosition, yPosition) => {
+                      const floor = mapFloor;
+
+                      if (!floor) return;
+
+                      setMapAddSeatMode(false);
+                      setMapDialog(false);
+                      setMapFloor(null);
+
+                      openCreateSeat(floor, {
+                        x: xPosition,
+                        y: yPosition,
+                      });
+                    }
+                  : undefined
+              }
+              onSeatClick={
+                canEdit && !mapAddSeatMode
                   ? (seat) => {
                       setMapDialog(false);
                       setMapFloor(null);
@@ -932,7 +973,7 @@ export default function OfficeLocationsPage() {
                 setDetailSeat(seat);
                 setDetailDialog(true);
               }}
-              onSeatMove={canEdit ? async (
+              onSeatMove={canEdit && !mapAddSeatMode ? async (
                 seat,
                 xPosition,
                 yPosition
@@ -981,6 +1022,19 @@ export default function OfficeLocationsPage() {
           )}
 
           <DialogFooter>
+            {mapFloor && canEdit && (
+              <Button
+                variant={mapAddSeatMode ? 'default' : 'outline'}
+                onClick={() =>
+                  setMapAddSeatMode((current) => !current)
+                }
+              >
+                <Plus className="mr-2 h-4 w-4" />
+
+                {mapAddSeatMode ? 'Cancel Add Seat' : 'Add Seat Here'}
+              </Button>
+            )}
+
             {mapFloor && canEdit && (
               <Button
                 variant="outline"
@@ -1343,11 +1397,27 @@ export default function OfficeLocationsPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              X/Y coordinates will later identify this workstation on the interactive floor map.
+              X/Y coordinates place this workstation on the interactive floor
+              map - leave them blank and it just won&apos;t show up there
+              until positioned. Tip: open the floor map and use
+              &quot;Add Seat Here&quot; to place a new seat by clicking,
+              instead of typing coordinates by hand.
             </p>
           </div>
 
           <DialogFooter>
+            {seatMode === 'edit' && selectedSeat && (
+              <Button
+                variant="ghost"
+                className="mr-auto text-red-600 hover:text-red-700"
+                disabled={saving}
+                onClick={() => void deleteSeatFromDialog()}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            )}
+
             <Button
               variant="outline"
               onClick={() => setSeatDialog(false)}

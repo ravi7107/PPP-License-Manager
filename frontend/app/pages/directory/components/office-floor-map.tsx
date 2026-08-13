@@ -5,8 +5,8 @@ import {
 } from 'react';
 
 import {
-  Map,
   MapPin,
+  Map,
   Move,
   Search,
   X,
@@ -38,6 +38,13 @@ interface OfficeFloorMapProps {
     xPosition: number,
     yPosition: number
   ) => Promise<void> | void;
+
+  // When true, clicking anywhere on the map background (not on an
+  // existing seat marker) fires onMapClick with the clicked position -
+  // used to place a brand-new seat directly on the map instead of
+  // guessing X/Y numbers in a form.
+  addMode?: boolean;
+  onMapClick?: (xPosition: number, yPosition: number) => void;
 }
 
 function buildMapUrl(
@@ -103,6 +110,8 @@ export default function OfficeFloorMap({
   onSeatClick,
   onSeatDoubleClick,
   onSeatMove,
+  addMode,
+  onMapClick,
 }: OfficeFloorMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
 
@@ -387,31 +396,56 @@ export default function OfficeFloorMap({
         )}
       </div>
 
-      {/* DRAG MESSAGE */}
-      {onSeatMove && (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          <Move className="h-4 w-4" />
-          Drag a workstation dot to reposition it.
-          The new position is saved automatically.
-        </div>
-      )}
-
-      {onSeatDoubleClick && (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      {/* ADD-SEAT MESSAGE */}
+      {addMode && onMapClick ? (
+        <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
           <MapPin className="h-4 w-4" />
-          Double-click a workstation to see the system, installed software,
-          and who it&apos;s assigned to.
+          Click anywhere on the map to place a new workstation there.
         </div>
+      ) : (
+        <>
+          {/* DRAG MESSAGE */}
+          {onSeatMove && (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              <Move className="h-4 w-4" />
+              Drag a workstation dot to reposition it.
+              The new position is saved automatically.
+            </div>
+          )}
+
+          {onSeatDoubleClick && (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              <MapPin className="h-4 w-4" />
+              Double-click a workstation to see the system, installed software,
+              and who it&apos;s assigned to.
+            </div>
+          )}
+        </>
       )}
 
       {/* MAP */}
       <div className="overflow-auto rounded-lg border bg-muted/20 p-2">
         <div
           ref={mapRef}
-          className="relative mx-auto w-full overflow-hidden rounded-md bg-background"
+          className={[
+            'relative mx-auto w-full overflow-hidden rounded-md bg-background',
+            addMode && onMapClick ? 'cursor-crosshair' : '',
+          ].join(' ')}
           style={{
             maxWidth: '1400px',
             touchAction: 'none',
+          }}
+          onClick={(event) => {
+            if (!addMode || !onMapClick) return;
+
+            const position = getPosition(
+              event.clientX,
+              event.clientY
+            );
+
+            if (position) {
+              onMapClick(position.x, position.y);
+            }
           }}
         >
           <img
