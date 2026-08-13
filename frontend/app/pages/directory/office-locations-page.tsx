@@ -778,6 +778,13 @@ export default function OfficeLocationsPage() {
                       ? ` • ${location.city}`
                       : ''}
                   </p>
+
+                  {!location.isActive && canEdit && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Inactive - click Activate to add floors or seats under
+                      this office again.
+                    </p>
+                  )}
                 </div>
 
                 {canEdit && (
@@ -791,14 +798,16 @@ export default function OfficeLocationsPage() {
                       Edit
                     </Button>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openCreateFloor(location)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Floor
-                    </Button>
+                    {location.isActive && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openCreateFloor(location)}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Floor
+                      </Button>
+                    )}
 
                     {location.isActive ? (
                       <Button
@@ -910,14 +919,16 @@ export default function OfficeLocationsPage() {
                                   : 'Upload Map'}
                             </Button>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openCreateSeat(floor)}
-                            >
-                              <Plus className="mr-1 h-4 w-4" />
-                              Add Seat
-                            </Button>
+                            {floor.isActive && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openCreateSeat(floor)}
+                              >
+                                <Plus className="mr-1 h-4 w-4" />
+                                Add Seat
+                              </Button>
+                            )}
 
                             {floor.isActive ? (
                               <Button
@@ -947,6 +958,13 @@ export default function OfficeLocationsPage() {
                         )}
                       </div>
                     </div>
+
+                    {!floor.isActive && canEdit && (
+                      <p className="mb-3 text-xs text-amber-600">
+                        Inactive - click Activate above to add seats to this
+                        floor again.
+                      </p>
+                    )}
 
                     {getFloorSeats(floor.id).length === 0 ? (
                       <div className="rounded-md bg-muted/40 p-4 text-sm text-muted-foreground">
