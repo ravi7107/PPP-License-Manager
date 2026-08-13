@@ -3,11 +3,9 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth/auth-context";
 
 import { BrandHeader } from "@/app/pages/login/components/brand-header";
-import { FeatureHighlights } from "@/app/pages/login/components/feature-highlights";
 import { LoginForm } from "@/app/pages/login/components/login-form";
 import { HeroVisual } from "@/app/pages/login/components/hero-visual";
 import { SecurityFooter } from "@/app/pages/login/components/security-footer";
-import { StatsStrip } from "@/app/pages/login/components/stats-strip";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -43,27 +41,30 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background md:grid md:grid-cols-2">
-      {/* LEFT - branding + login form. Always first in DOM order, which
-          is also the correct mobile stacking order: brand, app name,
-          login form, then a small illustration appended below (rendered
-          separately, md:hidden, further down). */}
-      <div className="flex flex-1 flex-col justify-center gap-6 px-6 py-10 sm:px-10 md:px-16 lg:py-16 xl:px-20">
+      {/* LEFT - branding + login form. Kept deliberately compact top to
+          bottom (small gaps, no oversized padding) so the whole column -
+          including the password field and Sign In button - fits inside
+          one screen on ordinary laptop/desktop viewports without having
+          to scroll. The feature-highlight tiles and the stats strip from
+          the previous version were dropped for the same reason: both are
+          now shown inside the hero image itself (badges + a stats row
+          baked into the artwork), so keeping separate HTML copies here
+          was redundant weight, not extra information. */}
+      <div className="flex flex-1 flex-col justify-center gap-5 px-6 py-8 sm:px-10 md:px-12 lg:px-16">
         <div className="animate-in fade-in-0 duration-500 fill-mode-both">
           <BrandHeader />
         </div>
 
         <div className="animate-in fade-in-0 duration-500 fill-mode-both [animation-delay:80ms]">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
             Digital Workplace &amp; IT Management
           </h2>
 
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
             Manage People, Assets, Procurement &amp; Workspace — all in
             one place.
           </p>
         </div>
-
-        <FeatureHighlights className="hidden max-w-xl sm:grid" />
 
         <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 fill-mode-both [animation-delay:120ms]">
           <LoginForm
@@ -80,30 +81,22 @@ export default function LoginPage() {
         <SecurityFooter />
       </div>
 
-      {/* RIGHT - hero visual. Hidden on mobile (a small simplified
-          version is appended after the form instead, see below), a
-          reduced variant on tablet, the full illustration from lg up. */}
+      {/* RIGHT - hero image. Hidden on mobile (a smaller version is
+          appended after the form instead, see below); scales up via
+          max-width at each breakpoint rather than swapping content,
+          since it's the same picture throughout. */}
       <div className="hidden items-center justify-center bg-muted/30 p-6 md:flex lg:p-10">
         <HeroVisual
-          variant="reduced"
-          className="hidden h-full max-h-[560px] w-full md:block lg:hidden"
-        />
-        <HeroVisual
           variant="full"
-          className="hidden h-full max-h-[720px] w-full lg:block"
+          className="w-full max-w-sm md:max-w-md lg:max-w-xl"
         />
       </div>
 
-      {/* Small simplified illustration for mobile only, placed after the
-          login form per the requested stacking order. */}
-      <div className="px-6 pb-10 md:hidden">
+      {/* Small illustration for mobile only, placed after the login form
+          per the requested stacking order. */}
+      <div className="px-6 pb-8 md:hidden">
         <HeroVisual variant="minimal" />
       </div>
-
-      {/* Full-width stats strip under both columns - tablet/desktop
-          only, skipped on mobile to keep the small screen focused on
-          branding + form rather than more numbers to scroll past. */}
-      <StatsStrip className="hidden md:col-span-2 md:grid" />
     </div>
   );
 }

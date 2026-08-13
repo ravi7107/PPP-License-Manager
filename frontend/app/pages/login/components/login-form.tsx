@@ -46,7 +46,7 @@ export function LoginForm({
 
   return (
     <div className={cn('w-full max-w-sm', className)}>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">
         Welcome Back
       </h1>
 
@@ -54,7 +54,7 @@ export function LoginForm({
         Sign in to continue to your workspace
       </p>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
+      <form onSubmit={onSubmit} className="mt-4 space-y-3">
         <div className="space-y-1.5">
           {/* Visually the field is identified by its icon + placeholder
               (matches the requested look), but it still has a real,
@@ -71,7 +71,7 @@ export function LoginForm({
               id="login-email"
               type="email"
               placeholder="Username or Email"
-              className="h-11 rounded-lg pl-9"
+              className="h-10 rounded-lg pl-9"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
@@ -93,7 +93,7 @@ export function LoginForm({
               id="login-password"
               type={showPassword ? 'text' : 'password'}
               placeholder="Password"
-              className="h-11 rounded-lg pl-9 pr-9"
+              className="h-10 rounded-lg pl-9 pr-9"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -156,7 +156,7 @@ export function LoginForm({
         <Button
           type="submit"
           disabled={loading}
-          className="h-11 w-full rounded-lg text-sm font-semibold tracking-wide"
+          className="h-10 w-full rounded-lg text-sm font-semibold tracking-wide"
         >
           {loading ? (
             <>

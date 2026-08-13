@@ -22,8 +22,8 @@ export function SecurityFooter({ className }: { className?: string }) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} PPS Group &middot; IT
-        Infrastructure &amp; Security
+        &copy; {new Date().getFullYear()} PPS &middot; IT Infrastructure
+        &amp; Security
       </p>
     </div>
   );
