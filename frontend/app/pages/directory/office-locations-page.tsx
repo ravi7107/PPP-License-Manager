@@ -522,9 +522,43 @@ export default function OfficeLocationsPage() {
   };
 
   const deactivateLocation = async (id: number) => {
-    if (!window.confirm('Deactivate this office location?')) return;
+    if (
+      !window.confirm(
+        'Deactivate this office location? This also deactivates every floor and seat under it.'
+      )
+    )
+      return;
+
     await deleteOfficeLocation(id);
     await loadData();
+  };
+
+  // Reactivating only flips this location back on - it deliberately does
+  // NOT cascade back down to floors/seats (deactivating cascades down on
+  // purpose, but bringing things back should be a deliberate per-level
+  // choice, not an automatic bulk undo).
+  const activateLocation = async (location: OfficeLocation) => {
+    setError(null);
+
+    try {
+      await updateOfficeLocation(location.id, {
+        companyId: location.companyId,
+        locationCode: location.locationCode,
+        locationName: location.locationName,
+        address: location.address,
+        city: location.city,
+        state: location.state,
+        country: location.country,
+        isActive: true,
+      });
+
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ??
+        'Unable to activate this office location.'
+      );
+    }
   };
 
   const deactivateFloor = async (id: number) => {
@@ -533,10 +567,58 @@ export default function OfficeLocationsPage() {
     await loadData();
   };
 
+  const activateFloor = async (floor: OfficeFloor) => {
+    setError(null);
+
+    try {
+      await updateOfficeFloor(floor.id, {
+        officeLocationId: floor.officeLocationId,
+        floorCode: floor.floorCode,
+        floorName: floor.floorName,
+        sortOrder: floor.sortOrder,
+        isActive: true,
+      });
+
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ??
+        'Unable to activate this floor. If its office location is still ' +
+        'inactive, activate that first.'
+      );
+    }
+  };
+
   const deactivateSeat = async (id: number) => {
     if (!window.confirm('Deactivate this seat?')) return;
     await deleteOfficeSeat(id);
     await loadData();
+  };
+
+  const activateSeat = async (seat: OfficeSeat) => {
+    setError(null);
+
+    try {
+      await updateOfficeSeat(seat.id, {
+        officeFloorId: seat.officeFloorId,
+        seatCode: seat.seatCode,
+        seatName: seat.seatName,
+        departmentId: seat.departmentId,
+        assetId: seat.assetId,
+        userId: seat.userId,
+        xPosition: seat.xPosition,
+        yPosition: seat.yPosition,
+        isActive: true,
+      });
+
+      await loadData();
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ??
+        'Unable to activate this seat. If its floor is still inactive, ' +
+        'activate that first.'
+      );
+    }
   };
 
   // Same as deactivateSeat, but also closes the Add/Edit Seat dialog -
@@ -550,6 +632,12 @@ export default function OfficeLocationsPage() {
     await deleteOfficeSeat(selectedSeat.id);
     setSeatDialog(false);
     await loadData();
+  };
+
+  const activateSeatFromDialog = async () => {
+    if (!selectedSeat) return;
+    await activateSeat(selectedSeat);
+    setSeatDialog(false);
   };
 
   return (
@@ -712,7 +800,7 @@ export default function OfficeLocationsPage() {
                       Add Floor
                     </Button>
 
-                    {location.isActive && (
+                    {location.isActive ? (
                       <Button
                         size="sm"
                         variant="destructive"
@@ -722,6 +810,17 @@ export default function OfficeLocationsPage() {
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Deactivate
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void activateLocation(location)
+                        }
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Activate
                       </Button>
                     )}
                   </div>
@@ -750,6 +849,18 @@ export default function OfficeLocationsPage() {
 
                         <Badge variant="outline">
                           {floor.floorCode}
+                        </Badge>
+
+                        <Badge
+                          variant={
+                            floor.isActive
+                              ? 'default'
+                              : 'secondary'
+                          }
+                        >
+                          {floor.isActive
+                            ? 'Active'
+                            : 'Inactive'}
                         </Badge>
 
                         <span className="text-xs text-muted-foreground">
@@ -808,7 +919,7 @@ export default function OfficeLocationsPage() {
                               Add Seat
                             </Button>
 
-                            {floor.isActive && (
+                            {floor.isActive ? (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -817,6 +928,17 @@ export default function OfficeLocationsPage() {
                                 }
                               >
                                 <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  void activateFloor(floor)
+                                }
+                              >
+                                <RefreshCw className="mr-1 h-4 w-4" />
+                                Activate
                               </Button>
                             )}
                           </>
@@ -891,7 +1013,7 @@ export default function OfficeLocationsPage() {
                                   Edit
                                 </Button>
 
-                                {seat.isActive && (
+                                {seat.isActive ? (
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -900,6 +1022,17 @@ export default function OfficeLocationsPage() {
                                     }
                                   >
                                     <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      void activateSeat(seat)
+                                    }
+                                  >
+                                    <RefreshCw className="mr-1 h-3 w-3" />
+                                    Activate
                                   </Button>
                                 )}
                               </div>
@@ -1406,17 +1539,29 @@ export default function OfficeLocationsPage() {
           </div>
 
           <DialogFooter>
-            {seatMode === 'edit' && selectedSeat && (
-              <Button
-                variant="ghost"
-                className="mr-auto text-red-600 hover:text-red-700"
-                disabled={saving}
-                onClick={() => void deleteSeatFromDialog()}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-            )}
+            {seatMode === 'edit' &&
+              selectedSeat &&
+              (selectedSeat.isActive ? (
+                <Button
+                  variant="ghost"
+                  className="mr-auto text-red-600 hover:text-red-700"
+                  disabled={saving}
+                  onClick={() => void deleteSeatFromDialog()}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="mr-auto"
+                  disabled={saving}
+                  onClick={() => void activateSeatFromDialog()}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Activate
+                </Button>
+              ))}
 
             <Button
               variant="outline"
