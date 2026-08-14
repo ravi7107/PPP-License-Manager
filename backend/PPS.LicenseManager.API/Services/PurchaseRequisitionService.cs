@@ -427,6 +427,21 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             DeletePhysicalFile(webRootPath, attachment.StoredPath);
         }
 
+        // PurchaseRequisitionAuditLogs is ON DELETE RESTRICT by design, so
+        // a submitted/approved/rejected PR's history can never silently
+        // disappear - but a still-Draft PR always has at least its
+        // "Created" entry (and possibly "Updated" ones from edits), which
+        // would otherwise block every single draft deletion outright. A
+        // draft that's being deleted was never submitted, so there is no
+        // approval history worth preserving; clear its own audit trail
+        // along with it. This is only reachable here because the Status
+        // == "Draft" check above guarantees no Submitted/StepApproved/
+        // FullyApproved/etc. entries exist for this PR yet.
+        var draftAuditLogs = await _context.PurchaseRequisitionAuditLogs
+            .Where(x => x.PurchaseRequisitionId == id)
+            .ToListAsync();
+        _context.PurchaseRequisitionAuditLogs.RemoveRange(draftAuditLogs);
+
         // Line items/attachments/approval steps all cascade-delete with
         // the parent row (see AddPurchaseRequisitionModule migration).
         _context.PurchaseRequisitions.Remove(record);
