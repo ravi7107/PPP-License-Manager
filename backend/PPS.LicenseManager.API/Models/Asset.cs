@@ -36,6 +36,17 @@ public class Asset
 
     public Department? Department { get; set; }
 
+    // Material Movement Management module - current physical location, kept
+    // in sync by MaterialMovementService whenever a movement carrying this
+    // asset completes. Independent of AssetAssignment's seat-based location
+    // (which only resolves when WorkMode == "Office"); this column is the
+    // source of truth once the asset has ever been through a movement.
+    // Nullable/additive - existing assets and pages are unaffected until a
+    // movement sets it.
+    public int? CurrentLocationId { get; set; }
+
+    public OfficeLocation? CurrentLocation { get; set; }
+
     // Available, Assigned, Maintenance, Reserved, Retired
     public string Status { get; set; } = "Available";
 

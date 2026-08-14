@@ -71,6 +71,19 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<PurchaseRequisitionFinanceNotification> PurchaseRequisitionFinanceNotifications =>
         Set<PurchaseRequisitionFinanceNotification>();
 
+    // Material Movement Management module
+    public DbSet<MaterialItemCategory> MaterialItemCategories =>
+        Set<MaterialItemCategory>();
+
+    public DbSet<MaterialItem> MaterialItems =>
+        Set<MaterialItem>();
+
+    public DbSet<MaterialCostCenter> MaterialCostCenters =>
+        Set<MaterialCostCenter>();
+
+    public DbSet<MaterialTransporter> MaterialTransporters =>
+        Set<MaterialTransporter>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -571,6 +584,76 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // ------------------------------------------------------------------
+        // Material Movement Management module - masters (Phase 3 foundation;
+        // the movement/approval/dispatch/receipt/return transaction tables
+        // land in a follow-up migration).
+        // ------------------------------------------------------------------
+
+        modelBuilder.Entity<MaterialItemCategory>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<MaterialItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ItemCode).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ItemName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.MaterialType).HasMaxLength(30).HasDefaultValue("Stock").IsRequired();
+            entity.Property(x => x.UnitOfMeasure).HasMaxLength(20);
+            entity.Property(x => x.IsSerialized).HasDefaultValue(false);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.ItemCode).IsUnique();
+            entity.HasIndex(x => x.CategoryId);
+            entity.HasIndex(x => x.MaterialType);
+
+            entity.HasOne(x => x.Category)
+                  .WithMany()
+                  .HasForeignKey(x => x.CategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialCostCenter>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.CompanyId);
+
+            // Optional - global (usable by every entity) when null, matching
+            // how MaterialTransporters has no company scope at all.
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .IsRequired(false);
+        });
+
+        modelBuilder.Entity<MaterialTransporter>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.ContactName).HasMaxLength(100);
+            entity.Property(x => x.ContactPhone).HasMaxLength(30);
+            entity.Property(x => x.ContactEmail).HasMaxLength(150);
+            entity.Property(x => x.VehicleDetails).HasMaxLength(300);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+        });
+
         // Notification
         modelBuilder.Entity<Notification>(entity =>
         {
@@ -700,6 +783,16 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(a => a.DepartmentId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Material Movement Management module - see Asset.CurrentLocationId's
+            // comment. SetNull (not Restrict) because a location being retired
+            // shouldn't block deleting it just because an asset once sat there.
+            entity.HasIndex(a => a.CurrentLocationId);
+
+            entity.HasOne(a => a.CurrentLocation)
+                  .WithMany()
+                  .HasForeignKey(a => a.CurrentLocationId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Asset Software
