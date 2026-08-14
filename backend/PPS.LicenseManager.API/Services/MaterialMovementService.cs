@@ -283,10 +283,28 @@ public class MaterialMovementService : IMaterialMovementService
             throw new InvalidOperationException(
                 "Only Draft movements can be deleted.");
 
-        // A still-Draft movement always has only its own items/audit log
-        // rows attached (no approvals/dispatch/receipt exist until
-        // submission, a later phase) - a hard delete here is safe and has
-        // no orphaned-history risk, same reasoning as PR's DeleteDraftAsync.
+        // MaterialMovementAuditLogs is ON DELETE RESTRICT by design, so a
+        // submitted/approved/rejected movement's history can never
+        // silently disappear - but a still-Draft movement always has at
+        // least its "Created" entry (and possibly "Updated" ones from
+        // edits), which would otherwise block every single draft
+        // deletion outright with a foreign-key violation. A draft being
+        // deleted was never submitted, so there is no approval history
+        // worth preserving; clear its own audit trail along with it.
+        // This is only reachable here because the Status == "Draft"
+        // check above guarantees no Submitted/Approved/etc. entries
+        // exist for this movement yet. Same reasoning, and same fix, as
+        // PurchaseRequisitionService.DeleteDraftAsync.
+        var draftAuditLogs = await _context.MaterialMovementAuditLogs
+            .Where(a => a.MovementId == id)
+            .ToListAsync();
+        _context.MaterialMovementAuditLogs.RemoveRange(draftAuditLogs);
+
+        // MaterialMovementItems cascade-deletes at the database level
+        // (ON DELETE CASCADE), so removing the movement itself is enough
+        // for those - no orphaned-history risk either, since a Draft
+        // never has approvals/dispatch/receipt rows (those don't exist
+        // until submission, a later phase).
         _context.MaterialMovements.Remove(movement);
 
         await _context.SaveChangesAsync();
