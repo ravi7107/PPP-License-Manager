@@ -273,7 +273,18 @@ public class AnalyticsService : IAnalyticsService
         List<ResourceAllocation> activeAllocations,
         Dictionary<int, int> licenseToPurchase)
     {
-        var purchaseClientById = purchases.ToDictionary(p => p.Id, p => p.ClientId);
+        // Only purchases actually tied to a Client - most purchases are
+        // Entity-scoped and have ClientId == null. Dictionary<TKey,TValue>
+        // throws ArgumentNullException on a null key even when TKey is a
+        // nullable value type, so grouping by the raw (nullable) ClientId
+        // below crashed this entire endpoint the moment any purchase had
+        // no client - which is the common case, not an edge case. Filtering
+        // to HasValue up front (same pattern BuildDepartmentEfficiency
+        // already uses for its own nullable DepartmentId groupings below)
+        // keeps every downstream key a plain non-nullable int.
+        var purchaseClientById = purchases
+            .Where(p => p.ClientId.HasValue)
+            .ToDictionary(p => p.Id, p => p.ClientId!.Value);
 
         var allocatedSeatsByClient = activeAllocations
             .Where(a => licenseToPurchase.ContainsKey(a.LicenseId))
@@ -290,7 +301,10 @@ public class AnalyticsService : IAnalyticsService
                 SoftwareTitles = g.Select(p => p.SoftwareId).Distinct().Count(),
                 TotalSeats = g.Sum(p => p.TotalLicenses),
                 TotalCost = g.Sum(p => p.Cost ?? 0m),
-                AllocatedSeats = allocatedSeatsByClient.TryGetValue(g.Key.ClientId, out var v) ? v : 0,
+                AllocatedSeats = g.Key.ClientId.HasValue &&
+                    allocatedSeatsByClient.TryGetValue(g.Key.ClientId.Value, out var v)
+                        ? v
+                        : 0,
             })
             .OrderByDescending(r => r.TotalCost)
             .ToList();
