@@ -84,6 +84,39 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<MaterialTransporter> MaterialTransporters =>
         Set<MaterialTransporter>();
 
+    public DbSet<MaterialMovement> MaterialMovements =>
+        Set<MaterialMovement>();
+
+    public DbSet<MaterialMovementItem> MaterialMovementItems =>
+        Set<MaterialMovementItem>();
+
+    public DbSet<MaterialApprovalWorkflow> MaterialApprovalWorkflows =>
+        Set<MaterialApprovalWorkflow>();
+
+    public DbSet<MaterialApprovalWorkflowStep> MaterialApprovalWorkflowSteps =>
+        Set<MaterialApprovalWorkflowStep>();
+
+    public DbSet<MaterialMovementApproval> MaterialMovementApprovals =>
+        Set<MaterialMovementApproval>();
+
+    public DbSet<MaterialMovementDispatch> MaterialMovementDispatches =>
+        Set<MaterialMovementDispatch>();
+
+    public DbSet<MaterialMovementReceipt> MaterialMovementReceipts =>
+        Set<MaterialMovementReceipt>();
+
+    public DbSet<MaterialMovementReceiptItem> MaterialMovementReceiptItems =>
+        Set<MaterialMovementReceiptItem>();
+
+    public DbSet<MaterialMovementReturn> MaterialMovementReturns =>
+        Set<MaterialMovementReturn>();
+
+    public DbSet<MaterialMovementAttachment> MaterialMovementAttachments =>
+        Set<MaterialMovementAttachment>();
+
+    public DbSet<MaterialMovementAuditLog> MaterialMovementAuditLogs =>
+        Set<MaterialMovementAuditLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -652,6 +685,294 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.Property(x => x.ContactEmail).HasMaxLength(150);
             entity.Property(x => x.VehicleDetails).HasMaxLength(300);
             entity.Property(x => x.IsActive).HasDefaultValue(true);
+        });
+
+        // ------------------------------------------------------------------
+        // Material Movement Management module - core transaction tables
+        // (movements, items, approval matrix + per-movement approvals,
+        // dispatch, receipt, return, attachments, audit log).
+        // ------------------------------------------------------------------
+
+        modelBuilder.Entity<MaterialMovement>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.MovementNumber).HasMaxLength(30);
+            entity.Property(x => x.MovementType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).HasDefaultValue("Draft").IsRequired();
+
+            entity.HasIndex(x => x.MovementNumber).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.MovementType);
+            entity.HasIndex(x => x.FromCompanyId);
+            entity.HasIndex(x => x.FromLocationId);
+            entity.HasIndex(x => x.FromDepartmentId);
+            entity.HasIndex(x => x.FromCostCenterId);
+            entity.HasIndex(x => x.ToCompanyId);
+            entity.HasIndex(x => x.ToLocationId);
+            entity.HasIndex(x => x.ToDepartmentId);
+            entity.HasIndex(x => x.ToCostCenterId);
+            entity.HasIndex(x => x.VendorId);
+            entity.HasIndex(x => x.RequestedByUserId);
+            entity.HasIndex(x => x.ApprovalWorkflowId);
+
+            entity.HasOne(x => x.FromCompany).WithMany().HasForeignKey(x => x.FromCompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FromLocation).WithMany().HasForeignKey(x => x.FromLocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FromDepartment).WithMany().HasForeignKey(x => x.FromDepartmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FromCostCenter).WithMany().HasForeignKey(x => x.FromCostCenterId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ToCompany).WithMany().HasForeignKey(x => x.ToCompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToLocation).WithMany().HasForeignKey(x => x.ToLocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToDepartment).WithMany().HasForeignKey(x => x.ToDepartmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToCostCenter).WithMany().HasForeignKey(x => x.ToCostCenterId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Vendor).WithMany().HasForeignKey(x => x.VendorId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RequestedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.RequestedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional - no reverse collection on MaterialApprovalWorkflow,
+            // same one-way-lookup shape as PurchaseRequisition.Vendor.
+            entity.HasOne(x => x.ApprovalWorkflow)
+                  .WithMany()
+                  .HasForeignKey(x => x.ApprovalWorkflowId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitOfMeasure).HasMaxLength(20);
+            entity.Property(x => x.SerialNumbers).HasMaxLength(500);
+            entity.Property(x => x.Condition).HasMaxLength(30);
+            entity.Property(x => x.Remarks).HasMaxLength(500);
+
+            entity.HasIndex(x => x.MovementId);
+            entity.HasIndex(x => x.ItemId);
+            entity.HasIndex(x => x.AssetId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany(x => x.Items)
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Item)
+                  .WithMany()
+                  .HasForeignKey(x => x.ItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Asset)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialApprovalWorkflow>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.MovementType).HasMaxLength(30);
+            entity.Property(x => x.MinValue).HasPrecision(18, 2);
+            entity.Property(x => x.MaxValue).HasPrecision(18, 2);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.Property(x => x.Priority).HasDefaultValue(100);
+
+            entity.HasIndex(x => x.MovementType);
+            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.Priority);
+            entity.HasIndex(x => x.FromCompanyId);
+            entity.HasIndex(x => x.ToCompanyId);
+
+            entity.HasOne(x => x.FromCompany).WithMany().HasForeignKey(x => x.FromCompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToCompany).WithMany().HasForeignKey(x => x.ToCompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialApprovalWorkflowStep>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ApproverRole).HasMaxLength(50);
+            entity.Property(x => x.IsMandatory).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.WorkflowId);
+            entity.HasIndex(x => new { x.WorkflowId, x.StepOrder }).IsUnique();
+            entity.HasIndex(x => x.ApproverUserId);
+            entity.HasIndex(x => x.ApproverDepartmentId);
+
+            entity.HasOne(x => x.Workflow)
+                  .WithMany(x => x.Steps)
+                  .HasForeignKey(x => x.WorkflowId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ApproverUser).WithMany().HasForeignKey(x => x.ApproverUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ApproverDepartment).WithMany().HasForeignKey(x => x.ApproverDepartmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementApproval>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("Pending").IsRequired();
+            entity.Property(x => x.Comments).HasMaxLength(500);
+
+            entity.HasIndex(x => x.MovementId);
+            entity.HasIndex(x => new { x.MovementId, x.StepOrder }).IsUnique();
+            entity.HasIndex(x => x.ApproverUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany(x => x.Approvals)
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ApproverUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ApproverUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementDispatch>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.VehicleNumber).HasMaxLength(30);
+            entity.Property(x => x.GatePassNumber).HasMaxLength(30);
+            entity.Property(x => x.GatePassPdfPath).HasMaxLength(300);
+            entity.Property(x => x.QrPayload).HasMaxLength(500);
+
+            entity.HasIndex(x => x.MovementId).IsUnique();
+            entity.HasIndex(x => x.GatePassNumber).IsUnique();
+            entity.HasIndex(x => x.TransporterId);
+            entity.HasIndex(x => x.DispatchedByUserId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany()
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.DispatchedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.DispatchedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Transporter)
+                  .WithMany()
+                  .HasForeignKey(x => x.TransporterId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementReceipt>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.DiscrepancyNotes).HasColumnType("text");
+
+            entity.HasIndex(x => x.MovementId).IsUnique();
+            entity.HasIndex(x => x.ReceivedByUserId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany()
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ReceivedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ReceivedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementReceiptItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.QuantityReceived).HasPrecision(18, 2);
+            entity.Property(x => x.Condition).HasMaxLength(30);
+            entity.Property(x => x.DiscrepancyNotes).HasMaxLength(500);
+
+            entity.HasIndex(x => x.ReceiptId);
+            entity.HasIndex(x => x.MovementItemId);
+
+            entity.HasOne(x => x.Receipt)
+                  .WithMany(x => x.ReceiptItems)
+                  .HasForeignKey(x => x.ReceiptId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.MovementItem)
+                  .WithMany()
+                  .HasForeignKey(x => x.MovementItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementReturn>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("Pending").IsRequired();
+            entity.Property(x => x.Remarks).HasMaxLength(500);
+
+            entity.HasIndex(x => x.MovementId).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.ReturnedByUserId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany()
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ReturnedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ReturnedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementAttachment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.StoredPath).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+
+            entity.HasIndex(x => x.MovementId);
+            entity.HasIndex(x => x.UploadedByUserId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany(x => x.Attachments)
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MaterialMovementAuditLog>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Action).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Details).HasColumnType("text");
+            entity.Property(x => x.IpAddress).HasMaxLength(50);
+
+            entity.HasIndex(x => x.MovementId);
+            entity.HasIndex(x => x.ActionAt);
+            entity.HasIndex(x => x.ActorUserId);
+
+            entity.HasOne(x => x.Movement)
+                  .WithMany()
+                  .HasForeignKey(x => x.MovementId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ActorUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ActorUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Notification
