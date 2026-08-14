@@ -28,7 +28,8 @@ export type ModuleKey =
   | 'materialItemCategories'
   | 'materialItems'
   | 'materialCostCenters'
-  | 'materialTransporters';
+  | 'materialTransporters'
+  | 'materialApprovalWorkflows';
 
 /*
  * Default module permissions.
@@ -183,6 +184,14 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   ],
 
   materialTransporters: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  // The approval matrix config screen - Super Admin/IT Admin only, same
+  // as the other Material Movement masters (not opened up to Team Lead/
+  // Manager the way the eventual movement-creation screens will be).
+  materialApprovalWorkflows: [
     'Super Admin',
     'IT Admin',
   ],

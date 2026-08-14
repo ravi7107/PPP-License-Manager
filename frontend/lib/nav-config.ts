@@ -13,7 +13,7 @@ import {
   Building,
   Landmark,
   Briefcase,
-  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet
+  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch
 } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
@@ -44,6 +44,7 @@ export const navItems: NavItem[] = [
   { key: 'materialItems', label: 'Material Items', path: '/material-items', icon: Package },
   { key: 'materialCostCenters', label: 'Material Cost Centers', path: '/material-cost-centers', icon: Wallet },
   { key: 'materialTransporters', label: 'Material Transporters', path: '/material-transporters', icon: Truck },
+  { key: 'materialApprovalWorkflows', label: 'Approval Workflows', path: '/material-approval-workflows', icon: GitBranch },
   { key: 'officeLocations', label: 'Office Locations', path: '/office-locations', icon: MapPinned },
   { key: 'accessManagement', label: 'Access Management', path: '/access-management', icon: ShieldCheck },
   { key: 'search', label: 'Global Search', path: '/search', icon: Search },

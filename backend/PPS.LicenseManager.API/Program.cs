@@ -194,6 +194,10 @@ builder.Services.AddScoped<
     IMaterialTransporterService,
     MaterialTransporterService>();
 
+builder.Services.AddScoped<
+    IMaterialApprovalWorkflowService,
+    MaterialApprovalWorkflowService>();
+
 // Log-only stub until real SMTP/API credentials are provided - see
 // LogOnlyEmailService's comment. Swap this one registration for a real
 // implementation when they're available; every caller already depends on
