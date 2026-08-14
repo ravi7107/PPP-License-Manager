@@ -163,15 +163,19 @@ body {
 }
 
 /* ------------------------------------------------------------------------
-   Hardware page re-skin — Stripe Dashboard / Apple design aesthetic.
-   Scoped to `body.hardware-stripe-theme` (toggled on by hardware-page.tsx
-   on mount, off on unmount) rather than :root, so it only affects the
-   Hardware module and leaves every other page's theme untouched. Since
+   Shared premium enterprise re-skin — Stripe Dashboard / Apple design
+   aesthetic. Originally built for the Hardware Assets page (as
+   `hardware-stripe-theme`); renamed to `app-premium-theme` when the
+   Executive Dashboard adopted the same tokens, so both modules share one
+   design system instead of duplicating this block. Scoped to
+   `body.app-premium-theme` (toggled on by each opted-in page on mount,
+   off on unmount) rather than :root, so it only affects pages that ask
+   for it and leaves the rest of the app's theme untouched. Since
    shadcn's Select/Dialog/DropdownMenu content renders through a Radix
    portal onto <body>, scoping the class to body (not a wrapper div) is
    what lets those portaled elements pick up the new theme too.
    ---------------------------------------------------------------------- */
-body.hardware-stripe-theme {
+body.app-premium-theme {
   --background: rgb(248 250 252); /* #F8FAFC canvas */
   --foreground: rgb(15 23 42); /* #0F172A ink primary */
 
@@ -207,13 +211,14 @@ body.hardware-stripe-theme {
 
   /* font-sans (tailwind.config.js) resolves to var(--layout-text-font-family)
      first, which is never defined anywhere in this codebase - so on every
-     page today that var() is invalid, the whole font-family declaration
-     falls through, and the browser's default serif typeface (e.g. Times)
-     shows instead of Inter. That's the root cause of the "serif-style"
-     look. Scoped here (like every other token above) rather than fixed in
-     tailwind.config.js/:root, so this redesign only changes the Hardware
-     module - the same underlying bug affects the rest of the app too, and
-     is a quick, separate global fix if wanted. */
+     page that doesn't opt into this theme, that var() is invalid, the
+     whole font-family declaration falls through, and the browser's
+     default serif typeface (e.g. Times) shows instead of Inter. That's
+     the root cause of the "serif-style" look. Scoped here (like every
+     other token above) rather than fixed in tailwind.config.js/:root, so
+     this only changes pages that opt in - the same underlying bug
+     affects the rest of the app too, and is a quick, separate global fix
+     if wanted. */
   font-family: var(--font-sans);
 
   --shadow-2xs: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
@@ -225,11 +230,36 @@ body.hardware-stripe-theme {
   --shadow-xl: 0 4px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
 }
 
-body.hardware-stripe-theme .hardware-stat-card {
+body.app-premium-theme .hardware-stat-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
+}
+
+/* Executive Dashboard's auto-generated insight strip (executive/insights.ts) -
+   a compact colored card per tone, reusing the same tone vocabulary
+   (default/warning/danger/success) as KpiCard. */
+body.app-premium-theme .exec-insight-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-xs);
+}
+
+body.app-premium-theme .exec-insight-card[data-tone='warning'] {
+  border-color: rgb(245 158 11 / 0.35);
+  background: rgb(245 158 11 / 0.06);
+}
+
+body.app-premium-theme .exec-insight-card[data-tone='danger'] {
+  border-color: rgb(239 68 68 / 0.35);
+  background: rgb(239 68 68 / 0.06);
+}
+
+body.app-premium-theme .exec-insight-card[data-tone='success'] {
+  border-color: rgb(16 185 129 / 0.35);
+  background: rgb(16 185 129 / 0.06);
 }
 
 @layer base {

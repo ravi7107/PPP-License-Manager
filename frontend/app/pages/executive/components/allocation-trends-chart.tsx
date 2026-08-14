@@ -1,6 +1,8 @@
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Line, LineChart } from 'recharts';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from '@/components/ui/chart';
+import { Badge } from '@/components/ui/badge';
 import { AllocationTrendRow } from '@/app/pages/executive/types';
 
 const config: ChartConfig = {
@@ -17,11 +19,37 @@ export function AllocationTrendsChart({ rows }: { rows: AllocationTrendRow[] | u
     active_allocations: Number(r.active_allocations),
   }));
 
+  // Real month-over-month delta from the same 12 monthly rows already
+  // plotted below - not a separate estimate. Only shown once there are
+  // at least two months to compare.
+  const monthDelta =
+    data.length >= 2
+      ? data[data.length - 1].active_allocations - data[data.length - 2].active_allocations
+      : null;
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Software Allocation Trends</CardTitle>
-        <CardDescription>New monthly allocations vs. cumulative active allocations (last 12 months)</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+        <div>
+          <CardTitle className="text-base">Software Allocation Trends</CardTitle>
+          <CardDescription>New monthly allocations vs. cumulative active allocations (last 12 months)</CardDescription>
+        </div>
+
+        {monthDelta !== null && (
+          <Badge
+            variant="outline"
+            className="shrink-0 gap-1 whitespace-nowrap"
+          >
+            {monthDelta > 0 ? (
+              <TrendingUp className="h-3 w-3 text-emerald-600" />
+            ) : monthDelta < 0 ? (
+              <TrendingDown className="h-3 w-3 text-red-600" />
+            ) : (
+              <Minus className="h-3 w-3 text-muted-foreground" />
+            )}
+            {monthDelta > 0 ? `+${monthDelta}` : monthDelta} vs. last month
+          </Badge>
+        )}
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="h-80 w-full">

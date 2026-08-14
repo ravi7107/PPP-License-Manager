@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,16 @@ function renewalTone(days: number | null): 'destructive' | 'secondary' | 'outlin
   if (days <= 30) return 'destructive';
   if (days <= 60) return 'secondary';
   return 'outline';
+}
+
+// Same urgency read as the badge tone above, applied to the row itself so
+// the most pressing renewals are visible at a glance, not just once you
+// spot the badge.
+function renewalRowClass(days: number | null): string {
+  if (days === null) return '';
+  if (days <= 30) return 'bg-red-500/5 hover:bg-red-500/10';
+  if (days <= 60) return 'bg-amber-500/5 hover:bg-amber-500/10';
+  return '';
 }
 
 export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] | unknown }) {
@@ -41,7 +52,10 @@ export function UpcomingRenewalsCard({ rows }: { rows: UpcomingRenewalRow[] | un
               </TableRow>
             )}
             {safeRows.map((r) => (
-              <TableRow key={r.id}>
+              <TableRow
+                key={r.id}
+                className={cn(renewalRowClass(r.days_to_expiry))}
+              >
                 <TableCell className="font-medium">
                   {r.software_name}
                   <div className="text-xs text-muted-foreground">{r.vendor ?? '—'}</div>

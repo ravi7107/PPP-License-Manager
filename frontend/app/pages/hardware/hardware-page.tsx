@@ -334,15 +334,16 @@ export default function HardwarePage() {
   const isSuperAdmin = isSuperAdminRole(roles);
   const isITAdmin = isITAdminRole(roles);
 
-  // Scope the Stripe/Apple-style re-skin (index.css) to just this page —
-  // toggling a class on <body> (rather than a wrapper div) so it also
-  // reaches Select/Dialog/DropdownMenu content, which Radix portals onto
-  // <body> outside this component's own DOM subtree.
+  // Scope the shared premium Stripe/Apple-style re-skin (index.css,
+  // `app-premium-theme` - also used by the Executive Dashboard) to just
+  // this page - toggling a class on <body> (rather than a wrapper div) so
+  // it also reaches Select/Dialog/DropdownMenu content, which Radix
+  // portals onto <body> outside this component's own DOM subtree.
   useEffect(() => {
-    document.body.classList.add('hardware-stripe-theme');
+    document.body.classList.add('app-premium-theme');
 
     return () => {
-      document.body.classList.remove('hardware-stripe-theme');
+      document.body.classList.remove('app-premium-theme');
     };
   }, []);
 

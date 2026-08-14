@@ -12,10 +12,11 @@ export function useUser() {
 export function useLoadAction(action: any, defaultValue: any = [], params?: any) {
   const [data, setData] = useState(defaultValue);
   const [loading, setLoading] = useState(false);
-  const [error] = useState<Error | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   const reload = async () => {
     setLoading(true);
+    setError(null);
 
     try {
       if (typeof action === "function") {
@@ -23,7 +24,13 @@ export function useLoadAction(action: any, defaultValue: any = [], params?: any)
         setData(result ?? defaultValue);
       }
     } catch (e) {
+      // Previously this only logged - every caller that destructures
+      // `error` (typed as `Error | null` throughout the app) was always
+      // getting `null` back even on a failed load, so nothing could ever
+      // show a real error state or offer a retry. No caller currently
+      // reads this value, so surfacing it here is additive.
       console.error(e);
+      setError(e instanceof Error ? e : new Error(String(e)));
     }
 
     setLoading(false);
