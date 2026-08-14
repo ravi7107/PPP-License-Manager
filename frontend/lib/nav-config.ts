@@ -13,7 +13,7 @@ import {
   Building,
   Landmark,
   Briefcase,
-  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch
+  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight
 } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
@@ -40,6 +40,7 @@ export const navItems: NavItem[] = [
   { key: 'entities', label: 'Entities', path: '/entities', icon: Landmark },
   { key: 'clients', label: 'Clients', path: '/clients', icon: Briefcase },
   { key: 'vendors', label: 'Vendors', path: '/vendors', icon: Truck },
+  { key: 'materialMovements', label: 'Material Movements', path: '/material-movements', icon: ArrowLeftRight },
   { key: 'materialItemCategories', label: 'Material Categories', path: '/material-item-categories', icon: Tags },
   { key: 'materialItems', label: 'Material Items', path: '/material-items', icon: Package },
   { key: 'materialCostCenters', label: 'Material Cost Centers', path: '/material-cost-centers', icon: Wallet },

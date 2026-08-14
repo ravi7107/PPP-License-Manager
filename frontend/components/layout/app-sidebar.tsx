@@ -48,6 +48,7 @@ const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
   {
     label: 'Material Movement',
     keys: [
+      'materialMovements',
       'materialItemCategories',
       'materialItems',
       'materialCostCenters',

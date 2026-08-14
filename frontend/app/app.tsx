@@ -32,6 +32,7 @@ import MaterialItemsPage from '@/app/pages/material-movement/masters/material-it
 import MaterialCostCentersPage from '@/app/pages/material-movement/masters/material-cost-centers-page';
 import MaterialTransportersPage from '@/app/pages/material-movement/masters/material-transporters-page';
 import MaterialApprovalWorkflowsPage from '@/app/pages/material-movement/masters/material-approval-workflows-page';
+import MaterialMovementsPage from '@/app/pages/material-movement/movements/material-movements-page';
 
 function App() {
   return (
@@ -72,6 +73,7 @@ function App() {
           <Route path="entities" element={<EntitiesPage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="vendors" element={<VendorsPage />} />
+          <Route path="material-movements" element={<MaterialMovementsPage />} />
           <Route path="office-locations" element={<OfficeLocationsPage />} />
           <Route path="access-management" element={<AccessManagementPage />} />
           <Route path="material-item-categories" element={<MaterialItemCategoriesPage />} />

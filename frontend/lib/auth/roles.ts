@@ -29,7 +29,8 @@ export type ModuleKey =
   | 'materialItems'
   | 'materialCostCenters'
   | 'materialTransporters'
-  | 'materialApprovalWorkflows';
+  | 'materialApprovalWorkflows'
+  | 'materialMovements';
 
 /*
  * Default module permissions.
@@ -194,6 +195,17 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   materialApprovalWorkflows: [
     'Super Admin',
     'IT Admin',
+  ],
+
+  // Raising/editing/deleting a movement Draft is open to any employee,
+  // same as Purchase Requisitions - it's not an admin-only masters
+  // screen like the four above.
+  materialMovements: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+    'Employee',
   ],
 };
 
