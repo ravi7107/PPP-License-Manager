@@ -27,6 +27,10 @@ import ClientsPage from '@/app/pages/directory/clients-page';
 import VendorsPage from '@/app/pages/directory/vendors-page';
 import OfficeLocationsPage from '@/app/pages/directory/office-locations-page';
 import AccessManagementPage from '@/app/pages/access/access-management-page';
+import MaterialItemCategoriesPage from '@/app/pages/material-movement/masters/material-item-categories-page';
+import MaterialItemsPage from '@/app/pages/material-movement/masters/material-items-page';
+import MaterialCostCentersPage from '@/app/pages/material-movement/masters/material-cost-centers-page';
+import MaterialTransportersPage from '@/app/pages/material-movement/masters/material-transporters-page';
 
 function App() {
   return (
@@ -69,6 +73,10 @@ function App() {
           <Route path="vendors" element={<VendorsPage />} />
           <Route path="office-locations" element={<OfficeLocationsPage />} />
           <Route path="access-management" element={<AccessManagementPage />} />
+          <Route path="material-item-categories" element={<MaterialItemCategoriesPage />} />
+          <Route path="material-items" element={<MaterialItemsPage />} />
+          <Route path="material-cost-centers" element={<MaterialCostCentersPage />} />
+          <Route path="material-transporters" element={<MaterialTransportersPage />} />
         </Route>
 
       </Routes>

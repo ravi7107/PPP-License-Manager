@@ -178,6 +178,22 @@ builder.Services.AddScoped<
     IAnalyticsService,
     AnalyticsService>();
 
+builder.Services.AddScoped<
+    IMaterialItemCategoryService,
+    MaterialItemCategoryService>();
+
+builder.Services.AddScoped<
+    IMaterialItemService,
+    MaterialItemService>();
+
+builder.Services.AddScoped<
+    IMaterialCostCenterService,
+    MaterialCostCenterService>();
+
+builder.Services.AddScoped<
+    IMaterialTransporterService,
+    MaterialTransporterService>();
+
 // Log-only stub until real SMTP/API credentials are provided - see
 // LogOnlyEmailService's comment. Swap this one registration for a real
 // implementation when they're available; every caller already depends on

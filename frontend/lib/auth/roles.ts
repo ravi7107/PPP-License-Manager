@@ -24,7 +24,11 @@ export type ModuleKey =
   | 'accessManagement'
   | 'purchaseRequisitions'
   | 'purchaseRequisitionApprovals'
-  | 'vendors';
+  | 'vendors'
+  | 'materialItemCategories'
+  | 'materialItems'
+  | 'materialCostCenters'
+  | 'materialTransporters';
 
 /*
  * Default module permissions.
@@ -159,6 +163,28 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'Team Lead',
     'Manager',
     'Employee',
+  ],
+
+  // Material Movement Management masters - same access level as the other
+  // Directory admin modules (Departments/Entities/Clients/Vendors).
+  materialItemCategories: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  materialItems: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  materialCostCenters: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  materialTransporters: [
+    'Super Admin',
+    'IT Admin',
   ],
 };
 
