@@ -88,10 +88,16 @@ interface ApiResponse<T> {
 }
 
 export async function getAssets(): Promise<Asset[]> {
-  const response =
-    await api.get<ApiResponse<Asset[]>>("/Asset");
+  // GET /Asset (AssetController.GetAll) returns the asset list directly -
+  // Ok(assets) - not wrapped in the { success, message, data } envelope
+  // used elsewhere. Confirmed against actions/assets/loadAssets.ts, which
+  // the Hardware Assets page uses and reads response.data the same way.
+  // The old response.data.data here silently resolved to undefined
+  // (axios never throws for this), so every caller of getAssets() -
+  // Dashboard and Allocations - was always getting an empty asset list.
+  const response = await api.get<Asset[]>("/Asset");
 
-  return response.data.data;
+  return response.data;
 }
 
 export async function getAsset(
