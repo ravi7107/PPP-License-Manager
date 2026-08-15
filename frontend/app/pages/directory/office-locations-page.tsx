@@ -12,10 +12,8 @@ import {
   Upload,
 } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 
 import {
@@ -655,31 +653,29 @@ export default function OfficeLocationsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="nova-cmdbar">
         <div>
-          <h1 className="text-2xl font-semibold">
-            Office Location Master
-          </h1>
-
-          <p className="text-sm text-muted-foreground">
+          <h1 className="nova-cmdbar-title">Office Location Master</h1>
+          <p className="nova-cmdbar-desc">
             {canEdit
               ? 'Manage entities, offices, floors and physical workstation locations.'
               : 'View offices, floors and physical workstation locations.'}
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="nova-cmdbar-actions">
           <Button
+            size="sm"
             variant="outline"
             onClick={() => void loadData()}
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="mr-1.5 h-4 w-4" />
             Refresh
           </Button>
 
           {canEdit && (
-            <Button onClick={openCreateLocation}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button size="sm" onClick={openCreateLocation}>
+              <Plus className="mr-1.5 h-4 w-4" />
               Add Office
             </Button>
           )}
@@ -687,7 +683,7 @@ export default function OfficeLocationsPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -699,49 +695,47 @@ export default function OfficeLocationsPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="max-w-sm">
-            <Label>Entity</Label>
+      <div className="nova-panel">
+        <div className="p-4 max-w-sm">
+          <Label>Entity</Label>
 
-            <Select
-              value={selectedCompanyId}
-              onValueChange={setSelectedCompanyId}
-            >
-              <SelectTrigger className="mt-2">
-                <SelectValue />
-              </SelectTrigger>
+          <Select
+            value={selectedCompanyId}
+            onValueChange={setSelectedCompanyId}
+          >
+            <SelectTrigger className="mt-2">
+              <SelectValue />
+            </SelectTrigger>
 
-              <SelectContent>
-                <SelectItem value="all">
-                  All Entities
-                </SelectItem>
+            <SelectContent>
+              <SelectItem value="all">
+                All Entities
+              </SelectItem>
 
-                {companies
-                  .filter((x) => x.isActive)
-                  .map((company) => (
-                    <SelectItem
-                      key={company.id}
-                      value={String(company.id)}
-                    >
-                      {company.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+              {companies
+                .filter((x) => x.isActive)
+                .map((company) => (
+                  <SelectItem
+                    key={company.id}
+                    value={String(company.id)}
+                  >
+                    {company.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {loading ? (
-        <Card>
-          <CardContent className="p-10 text-center text-muted-foreground">
-            Loading office locations...
-          </CardContent>
-        </Card>
+        <div className="nova-panel">
+          <div className="p-10 text-center text-sm text-muted-foreground">
+            Loading office locations…
+          </div>
+        </div>
       ) : visibleLocations.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-12 text-center">
+        <div className="nova-panel">
+          <div className="flex flex-col items-center gap-3 p-12 text-center">
             <Building2 className="h-10 w-10 text-muted-foreground" />
 
             <div>
@@ -761,35 +755,32 @@ export default function OfficeLocationsPage() {
                 Add Office
               </Button>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : (
         visibleLocations.map((location) => (
-          <Card key={location.id}>
-            <CardHeader>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="nova-panel" key={location.id}>
+            <div className="nova-panel-toolbar">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between w-full">
                 <div>
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
+                    <MapPin className="h-5 w-5 text-muted-foreground" />
 
-                    <CardTitle>
+                    <span className="text-sm font-semibold text-foreground">
                       {location.locationName}
-                    </CardTitle>
+                    </span>
 
-                    <Badge
-                      variant={
-                        location.isActive
-                          ? 'default'
-                          : 'secondary'
-                      }
+                    <span
+                      className={`nova-pill ${location.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                     >
+                      <span className="nova-dot" />
                       {location.isActive
                         ? 'Active'
                         : 'Inactive'}
-                    </Badge>
+                    </span>
                   </div>
 
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <p className="mt-1.5 text-xs text-muted-foreground">
                     {location.companyName}
                     {' • '}
                     {location.locationCode}
@@ -855,9 +846,9 @@ export default function OfficeLocationsPage() {
                   </div>
                 )}
               </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="space-y-4">
+            <div className="space-y-4 p-4">
               {getLocationFloors(location.id).length === 0 ? (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                   No floors configured.
@@ -876,21 +867,18 @@ export default function OfficeLocationsPage() {
                           {floor.floorName}
                         </span>
 
-                        <Badge variant="outline">
+                        <span className="nova-mono text-xs text-muted-foreground">
                           {floor.floorCode}
-                        </Badge>
+                        </span>
 
-                        <Badge
-                          variant={
-                            floor.isActive
-                              ? 'default'
-                              : 'secondary'
-                          }
+                        <span
+                          className={`nova-pill ${floor.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                         >
+                          <span className="nova-dot" />
                           {floor.isActive
                             ? 'Active'
                             : 'Inactive'}
-                        </Badge>
+                        </span>
 
                         <span className="text-xs text-muted-foreground">
                           {getFloorSeats(floor.id).length} seats
@@ -1012,17 +1000,14 @@ export default function OfficeLocationsPage() {
                                 </div>
                               </div>
 
-                              <Badge
-                                variant={
-                                  seat.isActive
-                                    ? 'outline'
-                                    : 'secondary'
-                                }
+                              <span
+                                className={`nova-pill ${seat.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                               >
+                                <span className="nova-dot" />
                                 {seat.isActive
                                   ? 'Active'
                                   : 'Inactive'}
-                              </Badge>
+                              </span>
                             </div>
 
                             <div className="mt-3 text-xs text-muted-foreground">
@@ -1084,8 +1069,8 @@ export default function OfficeLocationsPage() {
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))
       )}
 
