@@ -53,6 +53,56 @@ export const navItems: NavItem[] = [
 ];
 
 /*
+ * Groups every nav item into labeled sections for the sidebar (and the
+ * topbar breadcrumb, which needs to know which group the current page
+ * belongs to). Presentation-only - doesn't add, remove, or rename any
+ * module, route, or permission. Every key in navItems must appear here
+ * exactly once; getNavGroupLabel() returns undefined for anything
+ * missed, which just means that page's breadcrumb skips the group
+ * prefix rather than crashing.
+ */
+export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
+  { label: 'Overview', keys: ['dashboard', 'executive'] },
+  { label: 'Assets', keys: ['hardware', 'licenses', 'allocations'] },
+  {
+    label: 'Procurement',
+    keys: ['purchaseRequisitions', 'purchaseRequisitionApprovals'],
+  },
+  {
+    label: 'Management',
+    keys: ['availability', 'approvals', 'myRequests'],
+  },
+  {
+    label: 'Administration',
+    keys: [
+      'users',
+      'departments',
+      'entities',
+      'clients',
+      'vendors',
+      'officeLocations',
+      'accessManagement',
+    ],
+  },
+  {
+    label: 'Material Movement',
+    keys: [
+      'materialMovements',
+      'materialItemCategories',
+      'materialItems',
+      'materialCostCenters',
+      'materialTransporters',
+      'materialApprovalWorkflows',
+    ],
+  },
+  { label: 'Tools', keys: ['search', 'reports'] },
+];
+
+export function getNavGroupLabel(key: ModuleKey): string | undefined {
+  return NAV_GROUPS.find((group) => group.keys.includes(key))?.label;
+}
+
+/*
  * First nav item (in navItems order) a role actually has access to -
  * used to send a user somewhere sensible when they land on a route their
  * role can no longer see (e.g. an Employee hitting "/" now that the

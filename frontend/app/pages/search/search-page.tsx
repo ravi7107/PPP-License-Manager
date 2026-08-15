@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLoadAction } from '@/lib/uibakery';
 import { Search, Monitor, Users, KeySquare, Building2, Briefcase, Landmark, ShieldCheck, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -28,9 +29,28 @@ import { SimpleEntityResultCard } from '@/app/pages/search/components/simple-ent
 import { LicenseResultCard } from '@/app/pages/search/components/license-result-card';
 
 export default function SearchPage() {
-  const [input, setInput] = useState('');
-  const [term, setTerm] = useState('');
+  const [searchParams] = useSearchParams();
+
+  // Lets the topbar's global search box (any page) land here with
+  // results already showing, instead of an empty search form the user
+  // has to retype into - e.g. navigating to /search?q=laptop.
+  const initialQuery = searchParams.get('q') ?? '';
+
+  const [input, setInput] = useState(initialQuery);
+  const [term, setTerm] = useState(initialQuery);
   const likeParam = term.trim() ? `%${term.trim()}%` : '%\u0000no-match\u0000%';
+
+  useEffect(() => {
+    const q = searchParams.get('q') ?? '';
+
+    if (q.trim()) {
+      setInput(q);
+      setTerm(q);
+    }
+    // Only re-run when the URL's q param itself changes (e.g. a second
+    // topbar search while already on this page) - not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('q')]);
 
   const [computers, loadingComputers]: [ComputerSearchResult[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(searchComputers, [], { q: likeParam }, { enabled: term.trim().length > 0 });

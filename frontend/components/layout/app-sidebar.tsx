@@ -10,54 +10,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { navItems, NavItem } from '@/lib/nav-config';
+import { navItems, NavItem, NAV_GROUPS } from '@/lib/nav-config';
 import { AppRole, canAccessModule } from '@/lib/auth/roles';
-
-/*
- * Groups every existing nav item (nav-config.ts) into labeled sections.
- * This is presentation-only - it doesn't add, remove, or rename any
- * module, route, or permission, it just organizes the same flat list
- * app-sidebar.tsx used to render into the logical groups a bigger module
- * count like this needs to stay scannable (the same pattern Linear,
- * Intune, etc. use). Every key from nav-config.ts must appear exactly
- * once below - see the safety check right after this table.
- */
-const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
-  { label: 'Overview', keys: ['dashboard', 'executive'] },
-  { label: 'Assets', keys: ['hardware', 'licenses', 'allocations'] },
-  {
-    label: 'Procurement',
-    keys: ['purchaseRequisitions', 'purchaseRequisitionApprovals'],
-  },
-  {
-    label: 'Management',
-    keys: ['availability', 'approvals', 'myRequests'],
-  },
-  {
-    label: 'Administration',
-    keys: [
-      'users',
-      'departments',
-      'entities',
-      'clients',
-      'vendors',
-      'officeLocations',
-      'accessManagement',
-    ],
-  },
-  {
-    label: 'Material Movement',
-    keys: [
-      'materialMovements',
-      'materialItemCategories',
-      'materialItems',
-      'materialCostCenters',
-      'materialTransporters',
-      'materialApprovalWorkflows',
-    ],
-  },
-  { label: 'Tools', keys: ['search', 'reports'] },
-];
 
 export function AppSidebar({ roles, accessOverride }: { roles: AppRole[]; accessOverride?: Record<string, AppRole[]> | null }) {
   const location = useLocation();

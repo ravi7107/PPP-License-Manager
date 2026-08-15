@@ -11,11 +11,12 @@ import { AppTopbar } from '@/components/layout/app-topbar';
 import {
   resolveAppRoles,
   buildAccessOverride,
+  canAccessModule,
   RoleModuleAccessRow,
   AppRole,
 } from '@/lib/auth/roles';
 
-import { navItems } from '@/lib/nav-config';
+import { navItems, getNavGroupLabel } from '@/lib/nav-config';
 import { useAuth } from '@/lib/auth/auth-context';
 
 export function AppLayout() {
@@ -54,6 +55,12 @@ export function AppLayout() {
     user?.email ||
     'User';
 
+  const breadcrumbGroup = currentItem
+    ? getNavGroupLabel(currentItem.key)
+    : undefined;
+
+  const canSearch = canAccessModule(roles, 'search', accessOverride);
+
   return (
     <SidebarProvider>
       <AppSidebar
@@ -66,6 +73,8 @@ export function AppLayout() {
           userName={userName}
           roles={roles}
           pageTitle={currentItem?.label ?? 'Dashboard'}
+          breadcrumbGroup={breadcrumbGroup}
+          canSearch={canSearch}
           companyName={user?.companyName}
         />
 
