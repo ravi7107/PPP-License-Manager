@@ -30,16 +30,6 @@ import {
 } from 'lucide-react';
 
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
-
-import { Badge } from '@/components/ui/badge';
-
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -396,27 +386,25 @@ export default function DashboardPage() {
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
 
-              <Badge
-                variant="outline"
-                className="gap-1.5 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
-              >
+              <span className="nova-pill nova-pill-success">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                 </span>
 
                 Operational
-              </Badge>
+              </span>
 
-              <Badge variant="secondary">
+              <span className="nova-pill nova-pill-neutral">
+                <span className="nova-dot" />
                 IT Operations
-              </Badge>
+              </span>
 
               {companyName && (
-                <Badge variant="outline" className="gap-1.5">
+                <span className="nova-pill nova-pill-neutral">
                   <Landmark className="h-3 w-3" />
                   {companyName}
-                </Badge>
+                </span>
               )}
 
             </div>
@@ -471,51 +459,63 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-        <Card className="relative overflow-hidden">
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Gauge className="h-6 w-6" />
+        <div className="nova-kpi-card">
+          <div className="flex items-center gap-4">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: 'var(--nova-teal-50)' }}
+            >
+              <Gauge
+                className="h-6 w-6 text-[var(--nova-teal-500)]"
+                strokeWidth={2}
+              />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="nova-kpi-label">
                 Asset Utilization Rate
               </p>
               {coreDataLoading ? (
                 <div className="mt-1.5 h-8 w-20 animate-pulse rounded bg-muted" />
               ) : (
-                <p className="text-2xl font-bold tracking-tight text-foreground">
+                <p className="nova-kpi-value mt-0">
                   {assetUtilizationRate}%
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {assetKpis.allocatedAssets} of {assetKpis.totalAssets} assets in active use
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="relative overflow-hidden">
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <TrendingUp className="h-6 w-6" />
+        <div className="nova-kpi-card">
+          <div className="flex items-center gap-4">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: 'var(--nova-blue-50)' }}
+            >
+              <TrendingUp
+                className="h-6 w-6 text-[var(--nova-blue-500)]"
+                strokeWidth={2}
+              />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="nova-kpi-label">
                 License Utilization Rate
               </p>
               {coreDataLoading ? (
                 <div className="mt-1.5 h-8 w-20 animate-pulse rounded bg-muted" />
               ) : (
-                <p className="text-2xl font-bold tracking-tight text-foreground">
+                <p className="nova-kpi-value mt-0">
                   {licenseUtilizationRate}%
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {licenseKpis.totalLicenseSeats - licenseKpis.availableLicenseSeats} of {licenseKpis.totalLicenseSeats} seats issued
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
       </div>
 
@@ -647,18 +647,20 @@ export default function DashboardPage() {
         {coreDataLoading ? (
           <ChartCardSkeleton heightClassName="h-72" />
         ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              License Utilization
-            </CardTitle>
+        <div className="nova-panel">
+          <div className="nova-panel-toolbar">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                License Utilization
+              </div>
 
-            <CardDescription>
-              Seats used vs. available per software title
-            </CardDescription>
-          </CardHeader>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Seats used vs. available per software title
+              </p>
+            </div>
+          </div>
 
-          <CardContent>
+          <div className="p-4">
             {utilizationData.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 No license purchases recorded yet.
@@ -711,8 +713,8 @@ export default function DashboardPage() {
               </BarChart>
             </ChartContainer>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         )}
 
 
@@ -722,20 +724,20 @@ export default function DashboardPage() {
         {coreDataLoading ? (
           <ChartCardSkeleton heightClassName="h-72" />
         ) : (
-        <Card>
-          <CardHeader>
+        <div className="nova-panel">
+          <div className="nova-panel-toolbar">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Department-wise Assets
+              </div>
 
-            <CardTitle className="text-base">
-              Department-wise Assets
-            </CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Hardware asset distribution by team/department
+              </p>
+            </div>
+          </div>
 
-            <CardDescription>
-              Hardware asset distribution by team/department
-            </CardDescription>
-
-          </CardHeader>
-
-          <CardContent>
+          <div className="p-4">
 
             {departmentAssetsData.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
@@ -786,8 +788,8 @@ export default function DashboardPage() {
             </ChartContainer>
             )}
 
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         )}
 
 
@@ -796,20 +798,20 @@ export default function DashboardPage() {
         {pendingApprovalsLoading ? (
           <ChartCardSkeleton heightClassName="h-72" />
         ) : (
-        <Card>
-          <CardHeader>
+        <div className="nova-panel">
+          <div className="nova-panel-toolbar">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Monthly Request Volume
+              </div>
 
-            <CardTitle className="text-base">
-              Monthly Request Volume
-            </CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Allocation requests submitted per month
+              </p>
+            </div>
+          </div>
 
-            <CardDescription>
-              Allocation requests submitted per month
-            </CardDescription>
-
-          </CardHeader>
-
-          <CardContent>
+          <div className="p-4">
 
             <ChartContainer
               config={requestTrendConfig}
@@ -852,8 +854,8 @@ export default function DashboardPage() {
 
             </ChartContainer>
 
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         )}
 
 
@@ -862,20 +864,20 @@ export default function DashboardPage() {
         {pendingApprovalsLoading ? (
           <ChartCardSkeleton heightClassName="h-72" />
         ) : (
-        <Card>
-          <CardHeader>
+        <div className="nova-panel">
+          <div className="nova-panel-toolbar">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Requests by Status
+              </div>
 
-            <CardTitle className="text-base">
-              Requests by Status
-            </CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Approval funnel across all allocation requests
+              </p>
+            </div>
+          </div>
 
-            <CardDescription>
-              Approval funnel across all allocation requests
-            </CardDescription>
-
-          </CardHeader>
-
-          <CardContent>
+          <div className="p-4">
 
             {requestStatusData.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
@@ -929,8 +931,8 @@ export default function DashboardPage() {
             </ChartContainer>
             )}
 
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         )}
 
 
@@ -939,22 +941,22 @@ export default function DashboardPage() {
         {coreDataLoading ? (
           <ChartCardSkeleton heightClassName="h-72" />
         ) : (
-        <Card className="lg:col-span-2">
+        <div className="nova-panel lg:col-span-2">
 
-          <CardHeader>
+          <div className="nova-panel-toolbar">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Software Expiry Timeline
+              </div>
 
-            <CardTitle className="text-base">
-              Software Expiry Timeline
-            </CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Days remaining until each license
+                renews or expires
+              </p>
+            </div>
+          </div>
 
-            <CardDescription>
-              Days remaining until each license
-              renews or expires
-            </CardDescription>
-
-          </CardHeader>
-
-          <CardContent>
+          <div className="p-4">
 
             {expiryTimelineData.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
@@ -1015,9 +1017,9 @@ export default function DashboardPage() {
             </ChartContainer>
             )}
 
-          </CardContent>
+          </div>
 
-        </Card>
+        </div>
         )}
 
       </div>
@@ -1032,22 +1034,22 @@ export default function DashboardPage() {
 
           {/* REAL PENDING APPROVALS */}
 
-          <Card>
+          <div className="nova-panel">
 
-            <CardHeader>
+            <div className="nova-panel-toolbar">
+              <div>
+                <div className="text-sm font-semibold text-foreground">
+                  Pending Approvals
+                </div>
 
-              <CardTitle className="text-base">
-                Pending Approvals
-              </CardTitle>
-
-              <CardDescription>
-                Requests awaiting your review
-              </CardDescription>
-
-            </CardHeader>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Requests awaiting your review
+                </p>
+              </div>
+            </div>
 
 
-            <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 p-4">
 
 
               {pendingApprovalsLoading && (
@@ -1125,50 +1127,50 @@ export default function DashboardPage() {
                       </div>
 
 
-                      <Badge
-                        variant={
+                      <span
+                        className={
                           String(
                             req.priority ?? ''
                           ).toLowerCase() ===
                           'high'
-                            ? 'destructive'
-                            : 'outline'
+                            ? 'nova-pill nova-pill-danger'
+                            : 'nova-pill nova-pill-neutral'
                         }
                       >
-
+                        <span className="nova-dot" />
                         {req.priority ||
                           'Normal'}
 
-                      </Badge>
+                      </span>
 
                     </div>
 
                   )
                 )}
 
-            </CardContent>
+            </div>
 
-          </Card>
+          </div>
 
 
           {/* LOW AVAILABILITY / EXPIRING */}
 
-          <Card>
+          <div className="nova-panel">
 
-            <CardHeader>
+            <div className="nova-panel-toolbar">
+              <div>
+                <div className="text-sm font-semibold text-foreground">
+                  Low Availability &amp; Expiring Licenses
+                </div>
 
-              <CardTitle className="text-base">
-                Low Availability &amp; Expiring Licenses
-              </CardTitle>
-
-              <CardDescription>
-                Licenses needing attention soon
-              </CardDescription>
-
-            </CardHeader>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Licenses needing attention soon
+                </p>
+              </div>
+            </div>
 
 
-            <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 p-4">
 
 
               {coreDataLoading && (
@@ -1205,9 +1207,10 @@ export default function DashboardPage() {
                   </div>
 
 
-                  <Badge variant="secondary">
+                  <span className="nova-pill nova-pill-pending">
+                    <span className="nova-dot" />
                     Low availability
-                  </Badge>
+                  </span>
 
                 </div>
 
@@ -1234,9 +1237,10 @@ export default function DashboardPage() {
                   </div>
 
 
-                  <Badge variant="destructive">
+                  <span className="nova-pill nova-pill-danger">
+                    <span className="nova-dot" />
                     Expiring soon
-                  </Badge>
+                  </span>
 
                 </div>
 
@@ -1253,9 +1257,9 @@ export default function DashboardPage() {
 
                 )}
 
-            </CardContent>
+            </div>
 
-          </Card>
+          </div>
 
         </div>
 
