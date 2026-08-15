@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LicenseUtilizationReport } from '@/app/pages/reports/components/license-utilization-report';
 import { SoftwareCostReport } from '@/app/pages/reports/components/software-cost-report';
@@ -58,15 +57,16 @@ export default function ReportsPage() {
   const active = REPORTS.find((r) => r.key === selected) ?? REPORTS[0];
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Management Reports</CardTitle>
-          <CardDescription>{active.description}</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Management Reports</h1>
+          <p className="nova-cmdbar-desc">{active.description}</p>
+        </div>
+
+        <div className="nova-cmdbar-actions">
           <Select value={selected} onValueChange={(v) => setSelected(v as ReportKey)}>
-            <SelectTrigger className="w-full max-w-sm">
+            <SelectTrigger className="w-full min-w-[260px] sm:w-auto">
               <SelectValue placeholder="Select a report…" />
             </SelectTrigger>
             <SelectContent>
@@ -80,8 +80,8 @@ export default function ReportsPage() {
               ))}
             </SelectContent>
           </Select>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {selected === 'licenseUtilization' && <LicenseUtilizationReport />}
       {selected === 'softwareCost' && <SoftwareCostReport />}

@@ -1,10 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { Check, X, History, ClipboardCheck, AlertTriangle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KpiCard } from '@/components/layout/kpi-card';
 import loadRequests from '@/actions/requests/loadRequests';
 import approveRequest from '@/actions/requests/approveRequest';
@@ -14,14 +11,14 @@ import { RequestHistoryDialog } from '@/app/pages/requests/components/request-hi
 import { DecisionDialog } from '@/app/pages/requests/components/decision-dialog';
 import { RequestRecord } from '@/app/pages/requests/types';
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusPillClass(status: string): string {
   switch (status) {
     case 'Approved':
-      return 'default';
+      return 'nova-pill-success';
     case 'Rejected':
-      return 'destructive';
+      return 'nova-pill-danger';
     default:
-      return 'secondary';
+      return 'nova-pill-pending';
   }
 }
 
@@ -97,10 +94,12 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Approvals</h2>
-        <p className="text-sm text-muted-foreground">Review and decide on pending license and reallocation requests.</p>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Approvals</h1>
+          <p className="nova-cmdbar-desc">Review and decide on pending license and reallocation requests.</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -121,45 +120,54 @@ export default function ApprovalsPage() {
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pending Requests</CardTitle>
-          <CardDescription>Awaiting your decision.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Requester</TableHead>
-                <TableHead>Software</TableHead>
-                <TableHead>For</TableHead>
-                <TableHead>Requested</TableHead>
-                <TableHead className="text-right">Decision</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Pending Requests</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">Awaiting your decision.</p>
+          </div>
+
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {pending.length} pending
+          </span>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Requester</th>
+                <th>Software</th>
+                <th>For</th>
+                <th>Requested</th>
+                <th className="nova-right">Decision</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     Loading requests…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : pending.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     No pending requests right now.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 pending.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.request_type}</TableCell>
-                    <TableCell>{r.requester_name ?? '—'}</TableCell>
-                    <TableCell>{r.software_name ?? '—'}</TableCell>
-                    <TableCell>{targetLabel(r)}</TableCell>
-                    <TableCell>{r.requested_date}</TableCell>
-                    <TableCell className="text-right">
+                  <tr key={r.id}>
+                    <td>{r.request_type}</td>
+                    <td className="nova-cell-sub">{r.requester_name ?? '—'}</td>
+                    <td className="nova-cell-sub">{r.software_name ?? '—'}</td>
+                    <td className="nova-cell-sub">{targetLabel(r)}</td>
+                    <td className="nova-cell-faint">{r.requested_date}</td>
+                    <td className="nova-right">
                       <div className="flex justify-end gap-1.5">
                         <Button variant="ghost" size="sm" onClick={() => setHistoryRecord(r)}>
                           <History className="h-3.5 w-3.5" />
@@ -171,60 +179,66 @@ export default function ApprovalsPage() {
                           <Check className="mr-1 h-3.5 w-3.5" /> Approve
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Decision History</CardTitle>
-          <CardDescription>Previously decided requests.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Requester</TableHead>
-                <TableHead>Software</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Decision History</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">Previously decided requests.</p>
+          </div>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Requester</th>
+                <th>Software</th>
+                <th>Status</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {requests
                 .filter((r) => r.status !== 'Pending')
                 .map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.request_type}</TableCell>
-                    <TableCell>{r.requester_name ?? '—'}</TableCell>
-                    <TableCell>{r.software_name ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
+                  <tr key={r.id}>
+                    <td>{r.request_type}</td>
+                    <td className="nova-cell-sub">{r.requester_name ?? '—'}</td>
+                    <td className="nova-cell-sub">{r.software_name ?? '—'}</td>
+                    <td>
+                      <span className={`nova-pill ${statusPillClass(r.status)}`}>
+                        <span className="nova-dot" />
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="nova-right">
                       <Button variant="ghost" size="sm" onClick={() => setHistoryRecord(r)}>
                         <History className="mr-1 h-3.5 w-3.5" /> History
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
               {requests.filter((r) => r.status !== 'Pending').length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                     No decisions recorded yet.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <RequestHistoryDialog open={Boolean(historyRecord)} onOpenChange={(o) => !o && setHistoryRecord(null)} record={historyRecord} />
       <DecisionDialog

@@ -1,10 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { Plus, FileText, History, Ban } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KpiCard } from '@/components/layout/kpi-card';
 import loadRequests from '@/actions/requests/loadRequests';
 import createRequest from '@/actions/requests/createRequest';
@@ -21,16 +18,16 @@ import { RequestHistoryDialog } from '@/app/pages/requests/components/request-hi
 import { RequestRecord, RequestFormValues, LookupOption, SoftwareAvailabilityOption } from '@/app/pages/requests/types';
 
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusPillClass(status: string): string {
   switch (status) {
     case 'Approved':
-      return 'default';
+      return 'nova-pill-success';
     case 'Rejected':
-      return 'destructive';
+      return 'nova-pill-danger';
     case 'Cancelled':
-      return 'outline';
+      return 'nova-pill-neutral';
     default:
-      return 'secondary';
+      return 'nova-pill-pending';
   }
 }
 
@@ -135,15 +132,18 @@ export default function MyRequestsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">My Requests</h2>
-          <p className="text-sm text-muted-foreground">Submit and track license or reallocation requests.</p>
+          <h1 className="nova-cmdbar-title">My Requests</h1>
+          <p className="nova-cmdbar-desc">Submit and track license or reallocation requests.</p>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> New Request
-        </Button>
+
+        <div className="nova-cmdbar-actions">
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" /> New Request
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -152,47 +152,59 @@ export default function MyRequestsPage() {
         <KpiCard title="Rejected" value={rejectedCount} icon={FileText} tone={rejectedCount > 0 ? 'danger' : 'default'} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Request History</CardTitle>
-          <CardDescription>All requests you have submitted.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Software</TableHead>
-                <TableHead>For</TableHead>
-                <TableHead>Requested</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Request History</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">All requests you have submitted.</p>
+          </div>
+
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {requests.length} request{requests.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Software</th>
+                <th>For</th>
+                <th>Requested</th>
+                <th>Status</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     Loading requests…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : requests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     You have not submitted any requests yet.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 requests.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.request_type}</TableCell>
-                    <TableCell>{r.software_name ?? '—'}</TableCell>
-                    <TableCell>{targetLabel(r)}</TableCell>
-                    <TableCell>{r.requested_date}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
+                  <tr key={r.id}>
+                    <td>{r.request_type}</td>
+                    <td className="nova-cell-sub">{r.software_name ?? '—'}</td>
+                    <td className="nova-cell-sub">{targetLabel(r)}</td>
+                    <td className="nova-cell-faint">{r.requested_date}</td>
+                    <td>
+                      <span className={`nova-pill ${statusPillClass(r.status)}`}>
+                        <span className="nova-dot" />
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="nova-right space-x-1">
                       <Button variant="ghost" size="sm" onClick={() => setHistoryRecord(r)}>
                         <History className="mr-1 h-3.5 w-3.5" /> History
                       </Button>
@@ -201,14 +213,14 @@ export default function MyRequestsPage() {
                           <Ban className="mr-1 h-3.5 w-3.5" /> Cancel
                         </Button>
                       ) : null}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <RequestFormDialog
         open={formOpen}
