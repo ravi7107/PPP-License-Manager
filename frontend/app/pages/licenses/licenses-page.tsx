@@ -13,18 +13,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -204,18 +194,16 @@ function formatCurrency(value: number) {
   }).format(value || 0);
 }
 
-function licenseStatusVariant(
-  status: string
-): "default" | "secondary" | "destructive" | "outline" {
+function licenseStatusPillClass(status: string): string {
   const normalized = status.toLowerCase();
 
-  if (normalized === "available") return "default";
-  if (normalized === "expired") return "destructive";
+  if (normalized === "available") return "nova-pill nova-pill-success";
+  if (normalized === "expired") return "nova-pill nova-pill-danger";
   if (normalized === "allocated" || normalized === "assigned") {
-    return "secondary";
+    return "nova-pill nova-pill-info";
   }
 
-  return "outline";
+  return "nova-pill nova-pill-neutral";
 }
 
 export default function LicensesPage() {
@@ -770,7 +758,7 @@ export default function LicensesPage() {
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
@@ -820,14 +808,18 @@ export default function LicensesPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
           <div>
-            <CardTitle>Software Titles</CardTitle>
-            <CardDescription>
+            <div className="text-sm font-semibold text-foreground">
+              Software Titles
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Manage software products available for licensing.
-            </CardDescription>
+            </p>
           </div>
+
+          <span className="nova-spacer" />
 
           {canEdit ? (
             <Button size="sm" onClick={openAddSoftware}>
@@ -835,66 +827,68 @@ export default function LicensesPage() {
               Add Software
             </Button>
           ) : null}
-        </CardHeader>
+        </div>
 
-        <CardContent>
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Software</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>License Type</TableHead>
-                  <TableHead>Status</TableHead>
+        <div className="nova-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Software</th>
+                  <th>Vendor</th>
+                  <th>Version</th>
+                  <th>Category</th>
+                  <th>License Type</th>
+                  <th>Status</th>
                   {canEdit ? (
-                    <TableHead className="text-right">Actions</TableHead>
+                    <th className="nova-right">Actions</th>
                   ) : null}
-                </TableRow>
-              </TableHeader>
+                </tr>
+              </thead>
 
-              <TableBody>
+              <tbody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={7}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Loading…
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : software.length === 0 ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={7}
                       className="py-8 text-center text-muted-foreground"
                     >
                       No software configured.
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : (
                   software.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">
+                    <tr key={item.id}>
+                      <td className="font-medium">
                         {item.name}
-                      </TableCell>
-                      <TableCell>{item.vendor}</TableCell>
-                      <TableCell>{item.version || "—"}</TableCell>
-                      <TableCell>{item.category}</TableCell>
-                      <TableCell>{item.licenseType}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            item.isActive ? "default" : "secondary"
+                      </td>
+                      <td className="nova-cell-sub">{item.vendor}</td>
+                      <td className="nova-cell-sub">{item.version || "—"}</td>
+                      <td className="nova-cell-sub">{item.category}</td>
+                      <td className="nova-cell-sub">{item.licenseType}</td>
+                      <td>
+                        <span
+                          className={
+                            item.isActive
+                              ? "nova-pill nova-pill-success"
+                              : "nova-pill nova-pill-neutral"
                           }
                         >
+                          <span className="nova-dot" />
                           {item.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
+                        </span>
+                      </td>
 
                       {canEdit ? (
-                        <TableCell className="text-right">
+                        <td className="nova-right">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -902,134 +896,134 @@ export default function LicensesPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                        </TableCell>
+                        </td>
                       ) : null}
-                    </TableRow>
+                    </tr>
                   ))
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              </tbody>
+            </table>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle>License Purchases</CardTitle>
-              <CardDescription>
-                Track purchased license batches, seat usage and availability.
-              </CardDescription>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">
+              License Purchases
             </div>
-
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                {licensePurchases.length} purchase(s)
-              </Badge>
-
-              {canEdit ? (
-                <Button onClick={openAddPurchase}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Purchase
-                </Button>
-              ) : null}
-            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Track purchased license batches, seat usage and availability.
+            </p>
           </div>
-        </CardHeader>
 
-        <CardContent>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Software</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>License Type</TableHead>
-                  <TableHead>PO Number</TableHead>
-                  <TableHead className="text-center">
+          <span className="nova-spacer" />
+
+          <span className="nova-pill nova-pill-neutral">
+            <span className="nova-dot" />
+            {licensePurchases.length} purchase(s)
+          </span>
+
+          {canEdit ? (
+            <Button onClick={openAddPurchase}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Purchase
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="nova-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Software</th>
+                  <th>Vendor</th>
+                  <th>License Type</th>
+                  <th>PO Number</th>
+                  <th className="nova-right">
                     Purchased
-                  </TableHead>
-                  <TableHead className="text-center">
+                  </th>
+                  <th className="nova-right">
                     Created
-                  </TableHead>
-                  <TableHead className="text-center">
+                  </th>
+                  <th className="nova-right">
                     Available
-                  </TableHead>
-                  <TableHead>Expiry</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Status</TableHead>
+                  </th>
+                  <th>Expiry</th>
+                  <th>Cost</th>
+                  <th>Status</th>
                   {canEdit ? (
-                    <TableHead className="text-right">
+                    <th className="nova-right">
                       Actions
-                    </TableHead>
+                    </th>
                   ) : null}
-                </TableRow>
-              </TableHeader>
+                </tr>
+              </thead>
 
-              <TableBody>
+              <tbody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={canEdit ? 11 : 10}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Loading purchases...
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : licensePurchases.length === 0 ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={canEdit ? 11 : 10}
                       className="py-8 text-center text-muted-foreground"
                     >
                       No license purchases configured.
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : (
                   licensePurchases.map((purchase) => (
-                    <TableRow key={purchase.id}>
-                      <TableCell className="font-medium">
+                    <tr key={purchase.id}>
+                      <td className="font-medium">
                         {purchase.softwareName}
-                      </TableCell>
+                      </td>
 
-                      <TableCell>
+                      <td className="nova-cell-sub">
                         {purchase.vendor}
-                      </TableCell>
+                      </td>
 
-                      <TableCell>
+                      <td className="nova-cell-sub">
                         {purchase.licenseType}
-                      </TableCell>
+                      </td>
 
-                      <TableCell>
+                      <td className="nova-cell-sub">
                         {purchase.poNumber || "—"}
-                      </TableCell>
+                      </td>
 
-                      <TableCell className="text-center font-medium">
+                      <td className="nova-right font-medium">
                         {purchase.totalLicenses}
-                      </TableCell>
+                      </td>
 
-                      <TableCell className="text-center">
+                      <td className="nova-right">
                         {purchase.createdLicenses}
-                      </TableCell>
+                      </td>
 
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={
+                      <td className="nova-right">
+                        <span
+                          className={
                             purchase.availableLicenses > 0
-                              ? "default"
-                              : "secondary"
+                              ? "nova-pill nova-pill-success"
+                              : "nova-pill nova-pill-neutral"
                           }
                         >
+                          <span className="nova-dot" />
                           {purchase.availableLicenses}
-                        </Badge>
-                      </TableCell>
+                        </span>
+                      </td>
 
-                      <TableCell>
+                      <td className="nova-cell-sub">
                         {formatDate(purchase.expiryDate)}
-                      </TableCell>
+                      </td>
 
-                      <TableCell>
+                      <td className="nova-mono">
                         {purchase.cost != null
                           ? new Intl.NumberFormat("en-US", {
                               style: "currency",
@@ -1037,24 +1031,25 @@ export default function LicensesPage() {
                               maximumFractionDigits: 2,
                             }).format(purchase.cost)
                           : "—"}
-                      </TableCell>
+                      </td>
 
-                      <TableCell>
-                        <Badge
-                          variant={
+                      <td>
+                        <span
+                          className={
                             purchase.isActive
-                              ? "default"
-                              : "secondary"
+                              ? "nova-pill nova-pill-success"
+                              : "nova-pill nova-pill-neutral"
                           }
                         >
+                          <span className="nova-dot" />
                           {purchase.isActive
                             ? "Active"
                             : "Inactive"}
-                        </Badge>
-                      </TableCell>
+                        </span>
+                      </td>
 
                       {canEdit ? (
-                        <TableCell className="text-right">
+                        <td className="nova-right">
                           <Button
                             type="button"
                             variant="ghost"
@@ -1066,151 +1061,148 @@ export default function LicensesPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                        </TableCell>
+                        </td>
                       ) : null}
-                    </TableRow>
+                    </tr>
                   ))
                 )}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
+        </div>
+      </div>
+
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">
+              License Inventory
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Track individual licenses, subscriptions, cost and expiry.
+            </p>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle>License Inventory</CardTitle>
-              <CardDescription>
-                Track individual licenses, subscriptions, cost and expiry.
-              </CardDescription>
-            </div>
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadData}
-                disabled={loading}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
-              </Button>
-
-              {canEdit ? (
-                <Button
-                  size="sm"
-                  onClick={openAddLicense}
-                  disabled={software.length === 0}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add License
-                </Button>
-              ) : null}
-            </div>
+            <Input
+              className="pl-8"
+              placeholder="Search license, software, email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Select
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
 
-              <Input
-                className="pl-8"
-                placeholder="Search license, software, email…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="Available">Available</SelectItem>
+              <SelectItem value="Allocated">Allocated</SelectItem>
+              <SelectItem value="Expired">Expired</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select
-              value={statusFilter}
-              onValueChange={setStatusFilter}
+          <span className="nova-muted-count">
+            {filteredLicenses.length} license(s)
+          </span>
+
+          <span className="nova-spacer" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+
+          {canEdit ? (
+            <Button
+              size="sm"
+              onClick={openAddLicense}
+              disabled={software.length === 0}
             >
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
+              <Plus className="mr-2 h-4 w-4" />
+              Add License
+            </Button>
+          ) : null}
+        </div>
 
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Available">Available</SelectItem>
-                <SelectItem value="Allocated">Allocated</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <span className="self-center text-sm text-muted-foreground">
-              {filteredLicenses.length} license(s)
-            </span>
-          </div>
-
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Alias</TableHead>
-                  <TableHead>Software</TableHead>
-                  <TableHead>Licensed Email</TableHead>
-                  <TableHead>Subscription ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Purchase Date</TableHead>
-                  <TableHead>Expiry Date</TableHead>
-                  <TableHead>Cost</TableHead>
+        <div className="nova-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Alias</th>
+                  <th>Software</th>
+                  <th>Licensed Email</th>
+                  <th>Subscription ID</th>
+                  <th>Status</th>
+                  <th>Purchase Date</th>
+                  <th>Expiry Date</th>
+                  <th>Cost</th>
                   {canEdit ? (
-                    <TableHead className="text-right">Actions</TableHead>
+                    <th className="nova-right">Actions</th>
                   ) : null}
-                </TableRow>
-              </TableHeader>
+                </tr>
+              </thead>
 
-              <TableBody>
+              <tbody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={9}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Loading licenses…
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : filteredLicenses.length === 0 ? (
-                  <TableRow>
-                    <TableCell
+                  <tr>
+                    <td
                       colSpan={9}
                       className="py-8 text-center text-muted-foreground"
                     >
                       No licenses found.
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : (
                   filteredLicenses.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">
+                    <tr key={item.id}>
+                      <td className="font-medium">
                         {item.aliasCode}
-                      </TableCell>
-                      <TableCell>{item.softwareName}</TableCell>
-                      <TableCell>{item.licensedEmail}</TableCell>
-                      <TableCell>
+                      </td>
+                      <td>{item.softwareName}</td>
+                      <td className="nova-cell-sub">{item.licensedEmail}</td>
+                      <td className="nova-cell-sub">
                         {item.subscriptionId || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={licenseStatusVariant(item.status)}>
+                      </td>
+                      <td>
+                        <span className={licenseStatusPillClass(item.status)}>
+                          <span className="nova-dot" />
                           {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
+                        </span>
+                      </td>
+                      <td className="nova-cell-sub">
                         {formatDate(item.purchaseDate)}
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="nova-cell-sub">
                         {formatDate(item.expiryDate)}
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="nova-mono">
                         {formatCurrency(Number(item.purchaseCost))}
-                      </TableCell>
+                      </td>
 
                       {canEdit ? (
-                        <TableCell className="text-right">
+                        <td className="nova-right">
                           <div className="flex justify-end gap-1">
                             <Button
                               variant="ghost"
@@ -1228,16 +1220,15 @@ export default function LicensesPage() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </TableCell>
+                        </td>
                       ) : null}
-                    </TableRow>
+                    </tr>
                   ))
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              </tbody>
+            </table>
+        </div>
+      </div>
 
       <Dialog
         open={purchaseDialogOpen}
