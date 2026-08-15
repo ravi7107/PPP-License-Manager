@@ -14,10 +14,7 @@ import {
   CalendarX,
   TrendingDown,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/layout/kpi-card';
 import { AppRole, canManage, isTeamLeader as checkIsTeamLeader } from '@/lib/auth/roles';
@@ -60,31 +57,29 @@ import {
   UnderutilizedReallocationFormValues,
 } from '@/app/pages/availability/types';
 
-function periodStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function periodStatusPillClass(status: string): string {
   switch (status) {
     case 'Active':
-      return 'default';
+      return 'nova-pill-success';
     case 'Upcoming':
-      return 'secondary';
-    case 'Ended':
-      return 'outline';
+      return 'nova-pill-pending';
     case 'Cancelled':
-      return 'destructive';
+      return 'nova-pill-danger';
     default:
-      return 'outline';
+      return 'nova-pill-neutral';
   }
 }
 
-function requestStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function requestStatusPillClass(status: string): string {
   switch (status) {
     case 'Approved':
-      return 'default';
+      return 'nova-pill-success';
     case 'Pending':
-      return 'secondary';
+      return 'nova-pill-pending';
     case 'Rejected':
-      return 'destructive';
+      return 'nova-pill-danger';
     default:
-      return 'outline';
+      return 'nova-pill-neutral';
   }
 }
 
@@ -772,7 +767,7 @@ export default function AvailabilityPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard title="Currently Unavailable" value={activeCount} icon={UserX} hint="Users away right now" />
         <KpiCard title="Upcoming Unavailability" value={upcomingCount} icon={UserX} hint="Scheduled future windows" />
@@ -825,17 +820,19 @@ export default function AvailabilityPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>License Availability</CardTitle>
-          <CardDescription>
-            Current availability of individual software licenses from the central license inventory.
-          </CardDescription>
-        </CardHeader>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">License Availability</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Current availability of individual software licenses from the central license inventory.
+            </p>
+          </div>
+        </div>
 
-        <CardContent className="space-y-4">
+        <div className="space-y-4 p-4">
           {licensesError ? (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {licensesError}
             </div>
           ) : null}
@@ -844,36 +841,37 @@ export default function AvailabilityPage() {
             licenses={licenses}
             loading={licensesLoading}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>Temporary Resource Availability</CardTitle>
-            <CardDescription>
-              Mark users unavailable to free up their systems and license seats for temporary sharing. Reallocation
-              always requires IT Administrator approval.
-            </CardDescription>
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Temporary Resource Availability</h1>
+          <p className="nova-cmdbar-desc">
+            Mark users unavailable to free up their systems and license seats for temporary sharing. Reallocation
+            always requires IT Administrator approval.
+          </p>
+        </div>
+        {canMarkOrRequest ? (
+          <div className="nova-cmdbar-actions">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openUnderutilizedDialog(null)}
+            >
+              <TrendingDown className="mr-1.5 h-4 w-4" />
+              Flag Underutilized License
+            </Button>
+            <Button size="sm" onClick={() => setMarkOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Mark User Unavailable
+            </Button>
           </div>
-          {canMarkOrRequest ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openUnderutilizedDialog(null)}
-              >
-                <TrendingDown className="mr-2 h-4 w-4" />
-                Flag Underutilized License
-              </Button>
-              <Button size="sm" onClick={() => setMarkOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Mark User Unavailable
-              </Button>
-            </div>
-          ) : null}
-        </CardHeader>
-        <CardContent>
+        ) : null}
+      </div>
+
+      <div className="nova-panel">
+        <div className="p-4">
           <Tabs defaultValue="available">
             <TabsList>
               <TabsTrigger value="available">Available Resources</TabsTrigger>
@@ -892,123 +890,127 @@ export default function AvailabilityPage() {
             </TabsContent>
 
             <TabsContent value="periods" className="mt-4">
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Window</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <div className="nova-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Department</th>
+                      <th>Window</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                      <th className="nova-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {periodsLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                           Loading unavailability periods…
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : operationalPeriods.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                           No active or upcoming unavailability periods.
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : (
                       operationalPeriods.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">{p.user_name}</TableCell>
-                          <TableCell>{p.department_name ?? '—'}</TableCell>
-                          <TableCell className="text-sm">
+                        <tr key={p.id}>
+                          <td className="font-medium">{p.user_name}</td>
+                          <td className="nova-cell-sub">{p.department_name ?? '—'}</td>
+                          <td className="nova-cell-sub">
                             {p.start_date} → {p.end_date}
-                          </TableCell>
-                          <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">{p.reason}</TableCell>
-                          <TableCell>
-                            <Badge variant={periodStatusVariant(p.effective_status)}>{p.effective_status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
+                          </td>
+                          <td className="max-w-[220px] truncate nova-cell-faint">{p.reason}</td>
+                          <td>
+                            <span className={`nova-pill ${periodStatusPillClass(p.effective_status)}`}>
+                              <span className="nova-dot" />
+                              {p.effective_status}
+                            </span>
+                          </td>
+                          <td className="nova-right">
                             {canMarkOrRequest && p.status === 'Active' ? (
                               <Button variant="ghost" size="sm" disabled={cancelling} onClick={() => handleCancelPeriod(p)}>
                                 End Now
                               </Button>
                             ) : null}
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Window</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
+              <div className="nova-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Department</th>
+                      <th>Window</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
 
-                  <TableBody>
+                  <tbody>
                     {periodsLoading ? (
-                      <TableRow>
-                        <TableCell
+                      <tr>
+                        <td
                           colSpan={5}
                           className="py-8 text-center text-sm text-muted-foreground"
                         >
                           Loading history…
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : historicalPeriods.length === 0 ? (
-                      <TableRow>
-                        <TableCell
+                      <tr>
+                        <td
                           colSpan={5}
                           className="py-8 text-center text-sm text-muted-foreground"
                         >
                           No unavailability history yet.
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : (
                       historicalPeriods.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">
+                        <tr key={p.id}>
+                          <td className="font-medium">
                             {p.user_name}
-                          </TableCell>
+                          </td>
 
-                          <TableCell>
+                          <td className="nova-cell-sub">
                             {p.department_name ?? '—'}
-                          </TableCell>
+                          </td>
 
-                          <TableCell className="text-sm">
+                          <td className="nova-cell-sub">
                             {p.start_date} → {p.end_date}
-                          </TableCell>
+                          </td>
 
-                          <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">
+                          <td className="max-w-[220px] truncate nova-cell-faint">
                             {p.reason}
-                          </TableCell>
+                          </td>
 
-                          <TableCell>
-                            <Badge
-                              variant={periodStatusVariant(
+                          <td>
+                            <span
+                              className={`nova-pill ${periodStatusPillClass(
                                 p.effective_status
-                              )}
+                              )}`}
                             >
+                              <span className="nova-dot" />
                               {p.effective_status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
+                            </span>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
 
               <div className="mt-6">
@@ -1022,38 +1024,38 @@ export default function AvailabilityPage() {
                   </p>
                 </div>
 
-                <div className="rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Resource</TableHead>
-                        <TableHead>From</TableHead>
-                        <TableHead>To</TableHead>
-                        <TableHead>Requested By</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="nova-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Resource</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Requested By</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
 
-                    <TableBody>
+                    <tbody>
                       {requestsLoading ? (
-                        <TableRow>
-                          <TableCell
+                        <tr>
+                          <td
                             colSpan={6}
                             className="py-8 text-center text-sm text-muted-foreground"
                           >
                             Loading reallocation history…
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ) : historicalRequests.length === 0 ? (
-                        <TableRow>
-                          <TableCell
+                        <tr>
+                          <td
                             colSpan={6}
                             className="py-8 text-center text-sm text-muted-foreground"
                           >
                             No reallocation history yet.
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ) : (
                         historicalRequests.map((r) => {
                           const isSuperseded =
@@ -1066,118 +1068,124 @@ export default function AvailabilityPage() {
                               : r.status;
 
                           return (
-                            <TableRow key={r.id}>
-                              <TableCell>
+                            <tr key={r.id}>
+                              <td>
                                 <div className="font-medium">
                                   {r.resource_type === 'Asset'
                                     ? r.asset_tag
                                     : r.software_name}
                                 </div>
 
-                                <div className="text-xs text-muted-foreground">
+                                <div className="nova-cell-faint">
                                   {r.resource_type}
                                 </div>
-                              </TableCell>
+                              </td>
 
-                              <TableCell>
+                              <td className="nova-cell-sub">
                                 {r.source_user_name}
-                              </TableCell>
+                              </td>
 
-                              <TableCell>
+                              <td className="nova-cell-sub">
                                 {r.target_user_name ?? '—'}
-                              </TableCell>
+                              </td>
 
-                              <TableCell>
+                              <td className="nova-cell-sub">
                                 {r.requested_by ?? '—'}
-                              </TableCell>
+                              </td>
 
-                              <TableCell>
+                              <td>
                                 {isSuperseded ? (
-                                  <Badge variant="outline">
+                                  <span className="nova-pill nova-pill-neutral">
+                                    <span className="nova-dot" />
                                     Superseded
-                                  </Badge>
+                                  </span>
                                 ) : (
-                                  <Badge
-                                    variant={requestStatusVariant(
+                                  <span
+                                    className={`nova-pill ${requestStatusPillClass(
                                       r.status
-                                    )}
+                                    )}`}
                                   >
+                                    <span className="nova-dot" />
                                     {displayStatus}
-                                  </Badge>
+                                  </span>
                                 )}
-                              </TableCell>
+                              </td>
 
-                              <TableCell className="text-sm text-muted-foreground">
+                              <td className="nova-cell-faint">
                                 {r.returned_at ??
                                   r.decided_at ??
                                   r.created_at}
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           );
                         })
                       )}
-                    </TableBody>
-                  </Table>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="requests" className="mt-4">
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Resource</TableHead>
-                      <TableHead>From</TableHead>
-                      <TableHead>To</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Requested By</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <div className="nova-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Resource</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Reason</th>
+                      <th>Requested By</th>
+                      <th>Status</th>
+                      <th className="nova-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {requestsLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                           Loading reallocation requests…
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : operationalRequests.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                           No pending or active reallocation requests.
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ) : (
                       operationalRequests.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell>
+                        <tr key={r.id}>
+                          <td>
                             <div className="font-medium">
                               {r.resource_type === 'Asset' ? r.asset_tag : r.software_name}
                             </div>
-                            <div className="text-xs text-muted-foreground">{r.resource_type}</div>
-                          </TableCell>
-                          <TableCell>{r.source_user_name}</TableCell>
-                          <TableCell>{r.target_user_name ?? '—'}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
+                            <div className="nova-cell-faint">{r.resource_type}</div>
+                          </td>
+                          <td className="nova-cell-sub">{r.source_user_name}</td>
+                          <td className="nova-cell-sub">{r.target_user_name ?? '—'}</td>
+                          <td>
+                            <span
+                              className={`nova-pill ${
                                 r.reallocation_reason === 'Underutilization'
-                                  ? 'secondary'
-                                  : 'outline'
-                              }
+                                  ? 'nova-pill-info'
+                                  : 'nova-pill-neutral'
+                              }`}
                             >
+                              <span className="nova-dot" />
                               {r.reallocation_reason === 'Underutilization'
                                 ? 'Underutilized'
                                 : 'Unavailability'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{r.requested_by ?? '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant={requestStatusVariant(r.status)}>{r.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
+                            </span>
+                          </td>
+                          <td className="nova-cell-sub">{r.requested_by ?? '—'}</td>
+                          <td>
+                            <span className={`nova-pill ${requestStatusPillClass(r.status)}`}>
+                              <span className="nova-dot" />
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="nova-right">
                             {canApprove && r.status === 'Pending' ? (
                               <Button
                                 variant="outline"
@@ -1204,26 +1212,28 @@ export default function AvailabilityPage() {
                                 Return to {r.source_user_name}
                               </Button>
                             ) : r.status === 'Returned' ? (
-                              <Badge variant="outline">
+                              <span className="nova-pill nova-pill-neutral">
+                                <span className="nova-dot" />
                                 Returned
-                              </Badge>
+                              </span>
                             ) : r.status === 'Approved' &&
                               r.reallocation_reason === 'Underutilization' ? (
-                              <Badge variant="outline">
+                              <span className="nova-pill nova-pill-neutral">
+                                <span className="nova-dot" />
                                 Permanent
-                              </Badge>
+                              </span>
                             ) : null}
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <MarkUnavailableDialog open={markOpen} onOpenChange={setMarkOpen} saving={saving} users={users} onSubmit={handleMarkUnavailable} />
 
