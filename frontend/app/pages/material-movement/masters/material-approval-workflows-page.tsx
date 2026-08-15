@@ -1,33 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import {
-  Plus,
-  Search,
-  Pencil,
-  Trash2,
-  GitBranch,
-} from 'lucide-react';
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   AlertDialog,
@@ -295,23 +271,19 @@ export default function MaterialApprovalWorkflowsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <GitBranch className="h-5 w-5" />
-              Approval Workflows
-            </CardTitle>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Approval Workflows</h1>
+          <p className="nova-cmdbar-desc">
+            The configurable approval matrix a material movement
+            resolves to at submission time, based on its type, value,
+            and entities.
+          </p>
+        </div>
 
-            <CardDescription>
-              The configurable approval matrix a material
-              movement resolves to at submission time, based on
-              its type, value, and entities.
-            </CardDescription>
-          </div>
-
-          {canEdit ? (
+        {canEdit ? (
+          <div className="nova-cmdbar-actions">
             <Button
               size="sm"
               onClick={() => {
@@ -319,25 +291,26 @@ export default function MaterialApprovalWorkflowsPage() {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Add Workflow
             </Button>
-          ) : null}
-        </CardHeader>
+          </div>
+        ) : null}
+      </div>
 
-        <CardContent className="flex flex-col gap-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search workflows…"
-              className="pl-8"
+              className="h-8 pl-8 text-xs"
               value={search}
               onChange={(event) =>
                 setSearch(event.target.value)
@@ -345,67 +318,69 @@ export default function MaterialApprovalWorkflowsPage() {
             />
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Movement Type</TableHead>
-                <TableHead>Value Range</TableHead>
-                <TableHead>Entities</TableHead>
-                <TableHead>Steps</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Status</TableHead>
+          <div className="nova-spacer" />
 
-                {canEdit ? (
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                ) : null}
-              </TableRow>
-            </TableHeader>
+          <span className="nova-muted-count">
+            {filtered.length} workflow{filtered.length === 1 ? '' : 's'}
+          </span>
+        </div>
 
-            <TableBody>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Movement Type</th>
+                <th>Value Range</th>
+                <th>Entities</th>
+                <th>Steps</th>
+                <th>Priority</th>
+                <th>Status</th>
+
+                {canEdit ? <th className="nova-right">Actions</th> : null}
+              </tr>
+            </thead>
+
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 8 : 7}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading workflows…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 8 : 7}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No approval workflows found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map((workflow) => (
-                  <TableRow key={workflow.id}>
-                    <TableCell className="font-medium">
-                      {workflow.name}
-                    </TableCell>
+                  <tr key={workflow.id}>
+                    <td className="font-medium">{workflow.name}</td>
 
-                    <TableCell>
+                    <td className="nova-cell-sub">
                       {workflow.movementType
                         ? MOVEMENT_TYPE_LABELS[
                             workflow.movementType
                           ] ?? workflow.movementType
                         : 'Any'}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
+                    <td className="nova-cell-sub">
                       {formatValueRange(
                         workflow.minValue,
                         workflow.maxValue
                       )}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
+                    <td>
                       <div className="flex flex-col text-xs">
                         <span>
                           From:{' '}
@@ -415,30 +390,27 @@ export default function MaterialApprovalWorkflowsPage() {
                           To: {workflow.toCompanyName ?? 'Any'}
                         </span>
                       </div>
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
+                    <td className="nova-cell-sub">
                       {workflow.steps.length}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>{workflow.priority}</TableCell>
+                    <td className="nova-cell-sub">{workflow.priority}</td>
 
-                    <TableCell>
-                      <Badge
-                        variant={
-                          workflow.isActive
-                            ? 'default'
-                            : 'secondary'
-                        }
+                    <td>
+                      <span
+                        className={`nova-pill ${workflow.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                       >
+                        <span className="nova-dot" />
                         {workflow.isActive
                           ? 'Active'
                           : 'Inactive'}
-                      </Badge>
-                    </TableCell>
+                      </span>
+                    </td>
 
                     {canEdit ? (
-                      <TableCell className="text-right">
+                      <td className="nova-right space-x-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -463,15 +435,15 @@ export default function MaterialApprovalWorkflowsPage() {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
-                      </TableCell>
+                      </td>
                     ) : null}
-                  </TableRow>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <MaterialApprovalWorkflowFormDialog
         open={formOpen}

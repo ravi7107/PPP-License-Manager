@@ -1,27 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, Tags } from 'lucide-react';
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   AlertDialog,
@@ -191,22 +173,18 @@ export default function MaterialItemCategoriesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Tags className="h-5 w-5" />
-              Material Item Categories
-            </CardTitle>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Material Item Categories</h1>
+          <p className="nova-cmdbar-desc">
+            Categories used to group material items for movement and
+            reporting.
+          </p>
+        </div>
 
-            <CardDescription>
-              Categories used to group material items for
-              movement and reporting.
-            </CardDescription>
-          </div>
-
-          {canEdit ? (
+        {canEdit ? (
+          <div className="nova-cmdbar-actions">
             <Button
               size="sm"
               onClick={() => {
@@ -214,25 +192,26 @@ export default function MaterialItemCategoriesPage() {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Add Category
             </Button>
-          ) : null}
-        </CardHeader>
+          </div>
+        ) : null}
+      </div>
 
-        <CardContent className="flex flex-col gap-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search categories…"
-              className="pl-8"
+              className="h-8 pl-8 text-xs"
               value={search}
               onChange={(event) =>
                 setSearch(event.target.value)
@@ -240,68 +219,67 @@ export default function MaterialItemCategoriesPage() {
             />
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Status</TableHead>
+          <div className="nova-spacer" />
 
-                {canEdit ? (
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                ) : null}
-              </TableRow>
-            </TableHeader>
+          <span className="nova-muted-count">
+            {filtered.length} categor{filtered.length === 1 ? 'y' : 'ies'}
+          </span>
+        </div>
 
-            <TableBody>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Items</th>
+                <th>Status</th>
+
+                {canEdit ? <th className="nova-right">Actions</th> : null}
+              </tr>
+            </thead>
+
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 5 : 4}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading categories…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 5 : 4}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No categories found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map((category) => (
-                  <TableRow key={category.id}>
-                    <TableCell className="font-medium">
-                      {category.name}
-                    </TableCell>
+                  <tr key={category.id}>
+                    <td className="font-medium">{category.name}</td>
 
-                    <TableCell>{category.code}</TableCell>
+                    <td className="nova-mono">{category.code}</td>
 
-                    <TableCell>{category.itemCount}</TableCell>
+                    <td className="nova-cell-sub">{category.itemCount}</td>
 
-                    <TableCell>
-                      <Badge
-                        variant={
-                          category.isActive
-                            ? 'default'
-                            : 'secondary'
-                        }
+                    <td>
+                      <span
+                        className={`nova-pill ${category.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                       >
+                        <span className="nova-dot" />
                         {category.isActive
                           ? 'Active'
                           : 'Inactive'}
-                      </Badge>
-                    </TableCell>
+                      </span>
+                    </td>
 
                     {canEdit ? (
-                      <TableCell className="text-right">
+                      <td className="nova-right space-x-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -326,15 +304,15 @@ export default function MaterialItemCategoriesPage() {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
-                      </TableCell>
+                      </td>
                     ) : null}
-                  </TableRow>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <MaterialItemCategoryFormDialog
         open={formOpen}

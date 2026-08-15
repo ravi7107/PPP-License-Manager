@@ -1,27 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, Truck } from 'lucide-react';
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   AlertDialog,
@@ -189,22 +171,17 @@ export default function MaterialTransportersPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              Material Transporters
-            </CardTitle>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Material Transporters</h1>
+          <p className="nova-cmdbar-desc">
+            Third-party carriers available for material dispatch.
+          </p>
+        </div>
 
-            <CardDescription>
-              Third-party carriers available for material
-              dispatch.
-            </CardDescription>
-          </div>
-
-          {canEdit ? (
+        {canEdit ? (
+          <div className="nova-cmdbar-actions">
             <Button
               size="sm"
               onClick={() => {
@@ -212,25 +189,26 @@ export default function MaterialTransportersPage() {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Add Transporter
             </Button>
-          ) : null}
-        </CardHeader>
+          </div>
+        ) : null}
+      </div>
 
-        <CardContent className="flex flex-col gap-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search transporters…"
-              className="pl-8"
+              className="h-8 pl-8 text-xs"
               value={search}
               onChange={(event) =>
                 setSearch(event.target.value)
@@ -238,86 +216,85 @@ export default function MaterialTransportersPage() {
             />
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Vehicle Details</TableHead>
-                <TableHead>Status</TableHead>
+          <div className="nova-spacer" />
 
-                {canEdit ? (
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                ) : null}
-              </TableRow>
-            </TableHeader>
+          <span className="nova-muted-count">
+            {filtered.length} transporter{filtered.length === 1 ? '' : 's'}
+          </span>
+        </div>
 
-            <TableBody>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Vehicle Details</th>
+                <th>Status</th>
+
+                {canEdit ? <th className="nova-right">Actions</th> : null}
+              </tr>
+            </thead>
+
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 5 : 4}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading transporters…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 5 : 4}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No transporters found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map((transporter) => (
-                  <TableRow key={transporter.id}>
-                    <TableCell className="font-medium">
-                      {transporter.name}
-                    </TableCell>
+                  <tr key={transporter.id}>
+                    <td className="font-medium">{transporter.name}</td>
 
-                    <TableCell>
+                    <td>
                       <div className="flex flex-col text-xs">
                         <span>
                           {transporter.contactName ?? '—'}
                         </span>
 
-                        <span className="text-muted-foreground">
+                        <span className="nova-cell-faint">
                           {transporter.contactEmail ?? ''}
                         </span>
 
                         {transporter.contactPhone ? (
-                          <span className="text-muted-foreground">
+                          <span className="nova-cell-faint">
                             {transporter.contactPhone}
                           </span>
                         ) : null}
                       </div>
-                    </TableCell>
+                    </td>
 
-                    <TableCell className="max-w-xs truncate">
+                    <td className="max-w-xs truncate nova-cell-sub">
                       {transporter.vehicleDetails ?? '—'}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
-                      <Badge
-                        variant={
-                          transporter.isActive
-                            ? 'default'
-                            : 'secondary'
-                        }
+                    <td>
+                      <span
+                        className={`nova-pill ${transporter.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
                       >
+                        <span className="nova-dot" />
                         {transporter.isActive
                           ? 'Active'
                           : 'Inactive'}
-                      </Badge>
-                    </TableCell>
+                      </span>
+                    </td>
 
                     {canEdit ? (
-                      <TableCell className="text-right">
+                      <td className="nova-right space-x-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -342,15 +319,15 @@ export default function MaterialTransportersPage() {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
-                      </TableCell>
+                      </td>
                     ) : null}
-                  </TableRow>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <MaterialTransporterFormDialog
         open={formOpen}
