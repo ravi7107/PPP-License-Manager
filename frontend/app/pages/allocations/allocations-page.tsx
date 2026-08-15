@@ -2,13 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { Plus, Search, Repeat, Undo2, History, KeySquare, Timer, CalendarClock, PackageCheck } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { KpiCard } from '@/components/layout/kpi-card';
 import { AppRole, canManage } from '@/lib/auth/roles';
 import loadAllocations from '@/actions/allocations/loadAllocations';
@@ -616,9 +612,9 @@ export default function AllocationsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5">
       {resourceAllocationsError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {resourceAllocationsError}
         </div>
       ) : null}
@@ -653,215 +649,214 @@ export default function AllocationsPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>License Allocations</CardTitle>
-            <CardDescription>
-              Allocate and manage individual software licenses across employees and assigned devices.
-            </CardDescription>
-          </div>
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">License Allocations</h1>
+          <p className="nova-cmdbar-desc">
+            Allocate and manage individual software licenses across employees and assigned devices.
+          </p>
+        </div>
 
-          {canEdit ? (
+        {canEdit ? (
+          <div className="nova-cmdbar-actions">
             <Button size="sm" onClick={openAllocate}>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Allocate License
             </Button>
-          ) : null}
-        </CardHeader>
+          </div>
+        ) : null}
+      </div>
 
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 
-              <Input
-                placeholder="Search license, software, employee or asset..."
-                className="pl-8"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-
-            <Select
-              value={statusFilter}
-              onValueChange={setStatusFilter}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Statuses
-                </SelectItem>
-
-                <SelectItem value="Allocated">
-                  Allocated
-                </SelectItem>
-
-                <SelectItem value="Released">
-                  Released
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            <span className="text-sm text-muted-foreground">
-              {filteredResourceAllocations.length} allocation(s)
-            </span>
+            <Input
+              placeholder="Search license, software, employee or asset…"
+              className="h-8 pl-8 text-xs"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>License</TableHead>
-                  <TableHead>Software</TableHead>
-                  <TableHead>Allocated To</TableHead>
-                  <TableHead>Asset</TableHead>
-                  <TableHead>Allocated On</TableHead>
-                  <TableHead>Expected Return</TableHead>
-                  <TableHead>Returned On</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Allocated By</TableHead>
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+          <Select
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+          >
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
 
-              <TableBody>
-                {resourceAllocationsLoading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="py-8 text-center text-sm text-muted-foreground"
-                    >
-                      Loading allocations...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredResourceAllocations.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="py-8 text-center text-sm text-muted-foreground"
-                    >
-                      No allocations found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredResourceAllocations.map((allocation) => (
-                    <TableRow key={allocation.id}>
-                      <TableCell className="font-medium">
-                        {allocation.licenseAliasCode}
-                      </TableCell>
+            <SelectContent>
+              <SelectItem value="all">
+                All Statuses
+              </SelectItem>
 
-                      <TableCell>
-                        {allocation.softwareName}
-                      </TableCell>
+              <SelectItem value="Allocated">
+                Allocated
+              </SelectItem>
 
-                      <TableCell>
-                        {allocation.userName}
-                      </TableCell>
+              <SelectItem value="Released">
+                Released
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-                      <TableCell>
-                        {allocation.assetName || '—'}
-                      </TableCell>
+          <div className="nova-spacer" />
 
-                      <TableCell>
-                        {formatAllocationDate(
-                          allocation.allocatedOn
-                        )}
-                      </TableCell>
+          <span className="nova-muted-count">
+            {filteredResourceAllocations.length} allocation{filteredResourceAllocations.length === 1 ? '' : 's'}
+          </span>
+        </div>
 
-                      <TableCell>
-                        {formatAllocationDate(
-                          allocation.expectedReturnDate
-                        )}
-                      </TableCell>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>License</th>
+                <th>Software</th>
+                <th>Allocated To</th>
+                <th>Asset</th>
+                <th>Allocated On</th>
+                <th>Expected Return</th>
+                <th>Returned On</th>
+                <th>Status</th>
+                <th>Allocated By</th>
+                <th className="nova-right">
+                  Actions
+                </th>
+              </tr>
+            </thead>
 
-                      <TableCell>
-                        {formatAllocationDate(
-                          allocation.actualReturnDate
-                        )}
-                      </TableCell>
+            <tbody>
+              {resourceAllocationsLoading ? (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Loading allocations…
+                  </td>
+                </tr>
+              ) : filteredResourceAllocations.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No allocations found.
+                  </td>
+                </tr>
+              ) : (
+                filteredResourceAllocations.map((allocation) => (
+                  <tr key={allocation.id}>
+                    <td className="nova-mono">
+                      {allocation.licenseAliasCode}
+                    </td>
 
-                      <TableCell>
-                        <Badge
-                          variant={
-                            allocation.status === 'Allocated'
-                              ? 'default'
-                              : 'outline'
-                          }
+                    <td>
+                      {allocation.softwareName}
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {allocation.userName}
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {allocation.assetName || '—'}
+                    </td>
+
+                    <td className="nova-cell-faint">
+                      {formatAllocationDate(
+                        allocation.allocatedOn
+                      )}
+                    </td>
+
+                    <td className="nova-cell-faint">
+                      {formatAllocationDate(
+                        allocation.expectedReturnDate
+                      )}
+                    </td>
+
+                    <td className="nova-cell-faint">
+                      {formatAllocationDate(
+                        allocation.actualReturnDate
+                      )}
+                    </td>
+
+                    <td>
+                      <span
+                        className={`nova-pill ${allocation.status === 'Allocated' ? 'nova-pill-success' : 'nova-pill-neutral'}`}
+                      >
+                        <span className="nova-dot" />
+                        {allocation.status}
+                      </span>
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {allocation.allocatedBy}
+                    </td>
+
+                    <td className="nova-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setHistoryResourceAllocation(
+                              allocation
+                            );
+                            setResourceHistoryOpen(true);
+                          }}
                         >
-                          {allocation.status}
-                        </Badge>
-                      </TableCell>
+                          <History className="mr-1 h-4 w-4" />
+                          History
+                        </Button>
 
-                      <TableCell>
-                        {allocation.allocatedBy}
-                      </TableCell>
+                        {canEdit &&
+                        allocation.isActive &&
+                        allocation.status === 'Allocated' ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedResourceAllocation(
+                                  allocation
+                                );
+                                setTransferOpen(true);
+                              }}
+                            >
+                              Transfer
+                            </Button>
 
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setHistoryResourceAllocation(
-                                allocation
-                              );
-                              setResourceHistoryOpen(true);
-                            }}
-                          >
-                            <History className="mr-1 h-4 w-4" />
-                            History
-                          </Button>
-
-                          {canEdit &&
-                          allocation.isActive &&
-                          allocation.status === 'Allocated' ? (
-                            <>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedResourceAllocation(
-                                    allocation
-                                  );
-                                  setTransferOpen(true);
-                                }}
-                              >
-                                Transfer
-                              </Button>
-
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedResourceAllocation(
-                                    allocation
-                                  );
-                                  setReleaseOpen(true);
-                                }}
-                              >
-                                Release
-                              </Button>
-                            </>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedResourceAllocation(
+                                  allocation
+                                );
+                                setReleaseOpen(true);
+                              }}
+                            >
+                              Release
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <AllocationFormDialog
         open={formOpen}
