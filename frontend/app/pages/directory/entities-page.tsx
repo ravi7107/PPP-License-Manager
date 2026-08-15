@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
   Building2,
-  Loader2,
-  MoreHorizontal,
+  CheckCircle2,
   Pencil,
   Plus,
   RefreshCw,
   Search,
   Trash2,
+  XCircle,
 } from 'lucide-react';
 
 import { AppRole, canManage } from '@/lib/auth/roles';
@@ -30,32 +30,6 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 import {
   AlertDialog,
@@ -245,258 +219,233 @@ export default function EntitiesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
         <div>
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">
-              Entities
-            </h2>
-          </div>
-
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="nova-cmdbar-title">Entities</h1>
+          <p className="nova-cmdbar-desc">
             Manage legal entities and companies used across assets,
             departments, and software licensing.
           </p>
         </div>
 
-        {manageable && (
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Entity
-          </Button>
-        )}
+        {manageable ? (
+          <div className="nova-cmdbar-actions">
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Entity
+            </Button>
+          </div>
+        ) : null}
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
-      )}
+      ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Entities</CardDescription>
-            <CardTitle className="text-2xl">
-              {loading ? '—' : companies.length}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+      <div className="nova-kpi-grid">
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Total Entities</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-blue-50)' }}
+            >
+              <Building2
+                className="text-[var(--nova-blue-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">
+            {loading ? '—' : companies.length}
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Active Entities</CardDescription>
-            <CardTitle className="text-2xl">
-              {loading ? '—' : activeCount}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Active Entities</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-teal-50)' }}
+            >
+              <CheckCircle2
+                className="text-[var(--nova-teal-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">
+            {loading ? '—' : activeCount}
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Inactive Entities</CardDescription>
-            <CardTitle className="text-2xl">
-              {loading ? '—' : inactiveCount}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Inactive Entities</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-slate-100)' }}
+            >
+              <XCircle
+                className="text-[var(--nova-slate-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">
+            {loading ? '—' : inactiveCount}
+          </div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base">
-                Entity Directory
-              </CardTitle>
-
-              <CardDescription>
-                Company master records stored in the PPS License Manager.
-              </CardDescription>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search entities..."
-                  className="pl-9"
-                />
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                disabled={loading}
-                onClick={() => void loadCompanies()}
-                title="Refresh"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${
-                    loading ? 'animate-spin' : ''
-                  }`}
-                />
-              </Button>
-            </div>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search entities…"
+              className="h-8 pl-8 text-xs"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-        </CardHeader>
 
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>GST Number</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Status</TableHead>
+          <div className="nova-spacer" />
 
-                  {manageable && (
-                    <TableHead className="w-12 text-right">
-                      Actions
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
+          <span className="nova-muted-count">
+            {filteredCompanies.length} entit
+            {filteredCompanies.length === 1 ? 'y' : 'ies'}
+          </span>
 
-              <TableBody>
-                {loading && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={manageable ? 6 : 5}
-                      className="h-28 text-center"
-                    >
-                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading entities...
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={() => void loadCompanies()}
+            title="Refresh"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+            />
+          </Button>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Code</th>
+                <th>GST Number</th>
+                <th>Contact</th>
+                <th>Status</th>
+
+                {manageable ? (
+                  <th className="nova-right">Actions</th>
+                ) : null}
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={manageable ? 6 : 5}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Loading entities…
+                  </td>
+                </tr>
+              ) : filteredCompanies.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={manageable ? 6 : 5}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    {search.trim()
+                      ? 'No entities match your search.'
+                      : 'No entities found. Add the first entity to get started.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredCompanies.map((company) => (
+                  <tr key={company.id}>
+                    <td>
+                      <div className="font-medium">{company.name}</div>
+
+                      <div className="nova-cell-faint max-w-xs truncate">
+                        {company.address || 'No address'}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                )}
+                    </td>
 
-                {!loading && filteredCompanies.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={manageable ? 6 : 5}
-                      className="h-28 text-center text-sm text-muted-foreground"
-                    >
-                      {search.trim()
-                        ? 'No entities match your search.'
-                        : 'No entities found. Add the first entity to get started.'}
-                    </TableCell>
-                  </TableRow>
-                )}
+                    <td className="nova-cell-sub">
+                      {company.code || '—'}
+                    </td>
 
-                {!loading &&
-                  filteredCompanies.map((company) => (
-                    <TableRow key={company.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {company.name}
-                        </div>
+                    <td className="nova-cell-sub">
+                      {company.gstNumber || '—'}
+                    </td>
 
-                        <div className="max-w-xs truncate text-xs text-muted-foreground">
-                          {company.address || 'No address'}
-                        </div>
-                      </TableCell>
+                    <td>
+                      <div className="flex flex-col text-xs">
+                        <span>{company.contactPerson || '—'}</span>
 
-                      <TableCell>
-                        {company.code || '—'}
-                      </TableCell>
-
-                      <TableCell>
-                        {company.gstNumber || '—'}
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="text-sm">
-                          {company.contactPerson || '—'}
-                        </div>
-
-                        {company.contactEmail && (
-                          <div className="text-xs text-muted-foreground">
+                        {company.contactEmail ? (
+                          <span className="nova-cell-faint">
                             {company.contactEmail}
-                          </div>
-                        )}
+                          </span>
+                        ) : null}
 
-                        {company.contactPhone && (
-                          <div className="text-xs text-muted-foreground">
+                        {company.contactPhone ? (
+                          <span className="nova-cell-faint">
                             {company.contactPhone}
-                          </div>
-                        )}
-                      </TableCell>
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
 
-                      <TableCell>
-                        <Badge
-                          variant={
-                            company.isActive
-                              ? 'secondary'
-                              : 'outline'
-                          }
+                    <td>
+                      <span
+                        className={`nova-pill ${company.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
+                      >
+                        <span className="nova-dot" />
+                        {company.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+
+                    {manageable ? (
+                      <td className="nova-right space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Edit entity"
+                          onClick={() => openEdit(company)}
                         >
-                          {company.isActive
-                            ? 'Active'
-                            : 'Inactive'}
-                        </Badge>
-                      </TableCell>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
 
-                      {manageable && (
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">
-                                  Open actions
-                                </span>
-                              </Button>
-                            </DropdownMenuTrigger>
-
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => openEdit(company)}
-                              >
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-
-                              {company.isActive && (
-                                <>
-                                  <DropdownMenuSeparator />
-
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() =>
-                                      setDeleteTarget(company)
-                                    }
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Deactivate
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Deactivate entity"
+                          disabled={!company.isActive}
+                          onClick={() => setDeleteTarget(company)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <EntityFormDialog
         open={formOpen}
@@ -522,9 +471,7 @@ export default function EntitiesPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Deactivate entity?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Deactivate entity?</AlertDialogTitle>
 
             <AlertDialogDescription>
               {deleteTarget
