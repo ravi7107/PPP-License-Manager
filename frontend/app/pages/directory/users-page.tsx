@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   Pencil,
-  Users as UsersIcon,
   Plus,
   KeyRound,
   RefreshCw,
@@ -17,26 +16,8 @@ import {
   User,
 } from '@/lib/api/users.api';
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import { getCompanies, type Company } from '@/lib/api/companies.api';
 import { getDepartments, type Department } from '@/lib/api/departments.api';
@@ -423,271 +404,229 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <UsersIcon className="h-5 w-5" />
-                User Management
-              </CardTitle>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">User Management</h1>
+          <p className="nova-cmdbar-desc">
+            Create and manage PPS License Manager users, roles and
+            account status.
+          </p>
+        </div>
 
-              <CardDescription>
-                Create and manage PPS License Manager users,
-                roles and account status.
-              </CardDescription>
-            </div>
+        <div className="nova-cmdbar-actions">
+          <Button size="sm" onClick={openCreateUser}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add User
+          </Button>
+        </div>
+      </div>
 
-            <Button onClick={openCreateUser}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add User
-            </Button>
-          </div>
-        </CardHeader>
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-        <CardContent className="flex flex-col gap-4">
-          {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+      {success ? (
+        <div
+          className="rounded-md border px-4 py-3 text-sm"
+          style={{
+            borderColor: 'var(--nova-teal-500)',
+            background: 'var(--nova-teal-50)',
+            color: 'var(--nova-teal-600)',
+          }}
+        >
+          {success}
+        </div>
+      ) : null}
 
-          {success && (
-            <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-              {success}
-            </div>
-          )}
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 
-          <div className="flex flex-wrap gap-2">
-            <div className="relative min-w-[260px] flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-
-              <Input
-                placeholder="Search name, employee code or email..."
-                className="pl-8"
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-              />
-            </div>
-
-            <select
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              value={roleFilter}
-              onChange={(e) =>
-                setRoleFilter(e.target.value)
-              }
-            >
-              <option value="all">
-                All Roles
-              </option>
-
-              {ROLES.map((role) => (
-                <option
-                  key={role.id}
-                  value={role.name}
-                >
-                  {role.name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              value={companyFilter}
-              onChange={(e) => {
-                setCompanyFilter(e.target.value);
-                setDepartmentFilter('all');
-              }}
-            >
-              <option value="all">
-                All Entities
-              </option>
-
-              {activeCompanies.map((company) => (
-                <option
-                  key={company.id}
-                  value={company.id}
-                >
-                  {company.name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              value={departmentFilter}
-              onChange={(e) =>
-                setDepartmentFilter(e.target.value)
-              }
-            >
-              <option value="all">
-                All Departments
-              </option>
-
-              {filterDepartments.map((department) => (
-                <option
-                  key={department.id}
-                  value={department.id}
-                >
-                  {department.departmentName}
-                </option>
-              ))}
-            </select>
-
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loading}
-              onClick={loadUsers}
-            >
-              <RefreshCw
-                className={`mr-2 h-4 w-4 ${
-                  loading ? 'animate-spin' : ''
-                }`}
-              />
-              Refresh
-            </Button>
+            <Input
+              placeholder="Search name, employee code or email…"
+              className="h-8 pl-8 text-xs"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Reports To</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
+          <select
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
+            <option value="all">All Roles</option>
 
-                  <TableHead className="text-right">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+            {ROLES.map((role) => (
+              <option key={role.id} value={role.name}>
+                {role.name}
+              </option>
+            ))}
+          </select>
 
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Loading users...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="py-10 text-center text-sm text-muted-foreground"
-                    >
-                      No users found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">
-                        {user.employeeCode}
-                      </TableCell>
+          <select
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs"
+            value={companyFilter}
+            onChange={(e) => {
+              setCompanyFilter(e.target.value);
+              setDepartmentFilter('all');
+            }}
+          >
+            <option value="all">All Entities</option>
 
-                      <TableCell>
-                        {user.fullName}
-                      </TableCell>
+            {activeCompanies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
 
-                      <TableCell className="text-muted-foreground">
-                        {user.email}
-                      </TableCell>
+          <select
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs"
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+          >
+            <option value="all">All Departments</option>
 
-                      <TableCell>
-                        <Badge variant="outline">
-                          {user.role}
-                        </Badge>
-                      </TableCell>
+            {filterDepartments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.departmentName}
+              </option>
+            ))}
+          </select>
 
-                      <TableCell>
-                        {user.companyName ?? '—'}
-                      </TableCell>
+          <div className="nova-spacer" />
 
-                      <TableCell>
-                        {user.departmentName ?? '—'}
-                      </TableCell>
+          <span className="nova-muted-count">
+            {filteredUsers.length} of {users.length} user
+            {users.length === 1 ? '' : 's'}
+          </span>
 
-                      <TableCell>
-                        {user.reportsToUserName ?? '—'}
-                      </TableCell>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={loadUsers}
+            title="Refresh"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+            />
+          </Button>
+        </div>
 
-                      <TableCell>
-                        <Badge
-                          variant={
-                            user.isActive
-                              ? 'default'
-                              : 'secondary'
-                          }
-                        >
-                          {user.isActive
-                            ? 'Active'
-                            : 'Inactive'}
-                        </Badge>
-                      </TableCell>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee Code</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Entity</th>
+                <th>Department</th>
+                <th>Reports To</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
 
-                      <TableCell>
-                        {user.createdAt
-                          ? new Date(
-                              user.createdAt
-                            ).toLocaleDateString()
-                          : '—'}
-                      </TableCell>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Loading users…
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td className="nova-mono">{user.employeeCode}</td>
 
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="Edit User"
-                            onClick={() =>
-                              openEditUser(user)
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                    <td className="font-medium">{user.fullName}</td>
 
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="Reset Password"
-                            onClick={() =>
-                              openResetPassword(user)
-                            }
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                    <td className="nova-cell-sub">{user.email}</td>
 
-          {!loading && (
-            <div className="text-sm text-muted-foreground">
-              Showing {filteredUsers.length} of{' '}
-              {users.length} users
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    <td>
+                      <span className="nova-pill nova-pill-neutral">
+                        <span className="nova-dot" />
+                        {user.role}
+                      </span>
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {user.companyName ?? '—'}
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {user.departmentName ?? '—'}
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {user.reportsToUserName ?? '—'}
+                    </td>
+
+                    <td>
+                      <span
+                        className={`nova-pill ${user.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
+                      >
+                        <span className="nova-dot" />
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+
+                    <td className="nova-cell-faint">
+                      {user.createdAt
+                        ? new Date(user.createdAt).toLocaleDateString()
+                        : '—'}
+                    </td>
+
+                    <td className="nova-right space-x-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="Edit User"
+                        onClick={() => openEditUser(user)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="Reset Password"
+                        onClick={() => openResetPassword(user)}
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
