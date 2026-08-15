@@ -2,26 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertTriangle, Check, X } from 'lucide-react';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   decidePublicPurchaseRequisitionApproval,
@@ -118,32 +101,35 @@ export default function PrPublicApprovalPage() {
         </h1>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          <div className="nova-panel">
+            <div className="py-10 text-center text-sm text-muted-foreground">
               Loading purchase requisition…
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : loadError || !pr ? (
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-red-700">
+          <div className="nova-panel">
+            <div className="py-10 text-center text-sm text-destructive">
               {loadError ?? 'This approval link is invalid.'}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                {pr.prNumber ?? 'Purchase Requisition'} — {pr.title}
-                <Badge variant="secondary">
-                  Stage {pr.stepOrder} of {pr.requiredApprovalStageCount}
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                Requested by {pr.requestedByUserName} for {pr.companyName}
-              </CardDescription>
-            </CardHeader>
+          <div className="nova-panel">
+            <div className="nova-panel-toolbar">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  {pr.prNumber ?? 'Purchase Requisition'} — {pr.title}
+                  <span className="nova-pill nova-pill-pending">
+                    <span className="nova-dot" />
+                    Stage {pr.stepOrder} of {pr.requiredApprovalStageCount}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Requested by {pr.requestedByUserName} for {pr.companyName}
+                </p>
+              </div>
+            </div>
 
-            <CardContent className="space-y-4">
+            <div className="space-y-4 p-4">
               <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
                 <div>
                   <p className="text-muted-foreground">Subtotal</p>
@@ -176,46 +162,62 @@ export default function PrPublicApprovalPage() {
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold">Line Items</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead>Unit</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Line Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pr.lineItems.map((li) => (
-                      <TableRow key={li.id}>
-                        <TableCell>{li.itemDescription}</TableCell>
-                        <TableCell>{li.category ?? '—'}</TableCell>
-                        <TableCell className="text-right">{li.quantity}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {li.unitOfMeasure ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {li.unitPrice.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {li.lineTotal.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="nova-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th className="nova-right">Qty</th>
+                        <th>Unit</th>
+                        <th className="nova-right">Unit Price</th>
+                        <th className="nova-right">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pr.lineItems.map((li) => (
+                        <tr key={li.id}>
+                          <td>{li.itemDescription}</td>
+                          <td className="nova-cell-sub">{li.category ?? '—'}</td>
+                          <td className="nova-right">{li.quantity}</td>
+                          <td className="nova-cell-sub">
+                            {li.unitOfMeasure ?? '—'}
+                          </td>
+                          <td className="nova-right">
+                            {li.unitPrice.toFixed(2)}
+                          </td>
+                          <td className="nova-right">
+                            {li.lineTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {outcome ? (
-                <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                <div
+                  className="rounded-md border px-4 py-3 text-sm"
+                  style={{
+                    borderColor: 'var(--nova-teal-500)',
+                    background: 'var(--nova-teal-50)',
+                    color: 'var(--nova-teal-600)',
+                  }}
+                >
                   Recorded: this purchase requisition was{' '}
                   <strong>{outcome.toLowerCase()}</strong> at stage{' '}
                   {pr.stepOrder}. You can close this page now.
                 </div>
               ) : !canDecide ? (
-                <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                <div
+                  className="flex items-center gap-2 rounded-md border p-3 text-sm"
+                  style={{
+                    borderColor: 'var(--nova-amber-500)',
+                    background: 'var(--nova-amber-50)',
+                    color: 'var(--nova-amber-600)',
+                  }}
+                >
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <p>
                     {pr.isExpired
@@ -230,7 +232,7 @@ export default function PrPublicApprovalPage() {
                   <h3 className="mb-2 text-sm font-semibold">Your Decision</h3>
 
                   {decisionError ? (
-                    <div className="mb-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+                    <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                       {decisionError}
                     </div>
                   ) : null}
@@ -265,8 +267,8 @@ export default function PrPublicApprovalPage() {
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>

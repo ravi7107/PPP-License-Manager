@@ -1,19 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, FileClock, Pencil, Plus, Trash2 } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   Select,
@@ -50,18 +39,16 @@ import { PrFormDialog } from '@/app/pages/purchase-requisitions/components/pr-fo
 import { PrDetailDialog } from '@/app/pages/purchase-requisitions/components/pr-detail-dialog';
 import { SubmitPrDialog } from '@/app/pages/purchase-requisitions/components/submit-pr-dialog';
 
-function statusVariant(
-  status: string
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusPillClass(status: string): string {
   switch (status) {
     case 'Approved':
-      return 'default';
+      return 'nova-pill-success';
     case 'Rejected':
-      return 'destructive';
+      return 'nova-pill-danger';
     case 'Draft':
-      return 'outline';
+      return 'nova-pill-neutral';
     default:
-      return 'secondary';
+      return 'nova-pill-pending';
   }
 }
 
@@ -259,23 +246,24 @@ export default function PurchaseRequisitionsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-            Purchase Requisitions
-          </h2>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="nova-cmdbar-title">Purchase Requisitions</h1>
+          <p className="nova-cmdbar-desc">
             Raise, track, and submit purchase requisitions for approval.
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" /> New Requisition
-        </Button>
+
+        <div className="nova-cmdbar-actions">
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-1.5 h-4 w-4" /> New Requisition
+          </Button>
+        </div>
       </div>
 
       {pageError ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {pageError}
         </div>
       ) : null}
@@ -291,82 +279,88 @@ export default function PurchaseRequisitionsPage() {
         <KpiCard title="Approved" value={approvedCount} icon={FileClock} tone="success" />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">My Purchase Requisitions</CardTitle>
-          <CardDescription>Requisitions you have raised.</CardDescription>
-
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center">
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-xs">
             <Input
-              placeholder="Search by title or PR number..."
+              placeholder="Search by title or PR number…"
+              className="h-8 text-xs"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="sm:max-w-xs"
             />
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="sm:w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
-                <SelectItem value="InApproval">In Approval</SelectItem>
-                <SelectItem value="Approved">Approved</SelectItem>
-                <SelectItem value="Rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
-        </CardHeader>
 
-        <CardContent>
-          {listError ? (
-            <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {listError}
-            </div>
-          ) : null}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-8 w-[160px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="Draft">Draft</SelectItem>
+              <SelectItem value="InApproval">In Approval</SelectItem>
+              <SelectItem value="Approved">Approved</SelectItem>
+              <SelectItem value="Rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>PR Number</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {filteredRequisitions.length} requisition{filteredRequisitions.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        {listError ? (
+          <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {listError}
+          </div>
+        ) : null}
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PR Number</th>
+                <th>Title</th>
+                <th>Entity</th>
+                <th>Status</th>
+                <th className="nova-right">Total</th>
+                <th>Created</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     Loading purchase requisitions…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filteredRequisitions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     No purchase requisitions found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filteredRequisitions.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">
+                  <tr key={r.id}>
+                    <td className="nova-mono">
                       {r.prNumber ?? '—'}
-                    </TableCell>
-                    <TableCell>{r.title}</TableCell>
-                    <TableCell>{r.companyName}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </td>
+                    <td>{r.title}</td>
+                    <td className="nova-cell-sub">{r.companyName}</td>
+                    <td>
+                      <span className={`nova-pill ${statusPillClass(r.status)}`}>
+                        <span className="nova-dot" />
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="nova-right">
                       {r.currency} {r.totalAmount.toFixed(2)}
-                    </TableCell>
-                    <TableCell>{r.createdAt.slice(0, 10)}</TableCell>
-                    <TableCell className="space-x-1 text-right">
+                    </td>
+                    <td className="nova-cell-faint">{r.createdAt.slice(0, 10)}</td>
+                    <td className="nova-right space-x-1">
                       <Button variant="ghost" size="sm" onClick={() => openDetail(r)}>
                         <Eye className="mr-1 h-3.5 w-3.5" /> View
                       </Button>
@@ -376,18 +370,18 @@ export default function PurchaseRequisitionsPage() {
                             <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDelete(r)}>
-                            <Trash2 className="mr-1 h-3.5 w-3.5 text-red-600" /> Delete
+                            <Trash2 className="mr-1 h-3.5 w-3.5 text-destructive" /> Delete
                           </Button>
                         </>
                       ) : null}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <PrFormDialog
         open={formOpen}

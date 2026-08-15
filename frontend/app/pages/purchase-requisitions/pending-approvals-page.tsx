@@ -1,18 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ClipboardCheck, Eye } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import { KpiCard } from '@/components/layout/kpi-card';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -97,18 +86,18 @@ export default function PendingApprovalsPage() {
   ).length;
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-          Pending Approvals
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Purchase requisitions waiting on your decision.
-        </p>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Pending Approvals</h1>
+          <p className="nova-cmdbar-desc">
+            Purchase requisitions waiting on your decision.
+          </p>
+        </div>
       </div>
 
       {pageError ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {pageError}
         </div>
       ) : null}
@@ -123,73 +112,82 @@ export default function PendingApprovalsPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Awaiting Your Approval</CardTitle>
-          <CardDescription>
-            Requisitions currently at a stage assigned to you.
-          </CardDescription>
-        </CardHeader>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Awaiting Your Approval</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Requisitions currently at a stage assigned to you.
+            </p>
+          </div>
 
-        <CardContent>
-          {listError ? (
-            <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {listError}
-            </div>
-          ) : null}
+          <div className="nova-spacer" />
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>PR Number</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Requested By</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <span className="nova-muted-count">
+            {items.length} pending
+          </span>
+        </div>
+
+        {listError ? (
+          <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {listError}
+          </div>
+        ) : null}
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PR Number</th>
+                <th>Title</th>
+                <th>Requested By</th>
+                <th>Entity</th>
+                <th>Stage</th>
+                <th className="nova-right">Total</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     Loading pending approvals…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     Nothing is waiting on your approval right now.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 items.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell className="font-mono text-xs">{i.prNumber ?? '—'}</TableCell>
-                    <TableCell>{i.title}</TableCell>
-                    <TableCell>{i.requestedByUserName}</TableCell>
-                    <TableCell>{i.companyName}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
+                  <tr key={i.id}>
+                    <td className="nova-mono">{i.prNumber ?? '—'}</td>
+                    <td>{i.title}</td>
+                    <td className="nova-cell-sub">{i.requestedByUserName}</td>
+                    <td className="nova-cell-sub">{i.companyName}</td>
+                    <td>
+                      <span className="nova-pill nova-pill-pending">
+                        <span className="nova-dot" />
                         {i.stepOrder} of {i.requiredApprovalStageCount}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
+                      </span>
+                    </td>
+                    <td className="nova-right">
                       {i.currency} {i.totalAmount.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </td>
+                    <td className="nova-right">
                       <Button variant="ghost" size="sm" onClick={() => openDetail(i)}>
                         <Eye className="mr-1 h-3.5 w-3.5" /> Review
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <PrDetailDialog
         open={detailOpen}
