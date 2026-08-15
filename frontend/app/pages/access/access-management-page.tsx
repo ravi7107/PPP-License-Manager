@@ -2,10 +2,8 @@ import { useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 import { ShieldCheck, RotateCcw, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { navItems } from '@/lib/nav-config';
 import {
   AppRole,
@@ -79,90 +77,129 @@ export default function AccessManagementPage() {
 
   if (!isSuperAdmin) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+      <div className="nova-panel">
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
           <ShieldCheck className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Only Super Administrators can manage role access.</p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
+  const visibleModules = navItems.filter((item) => item.key !== 'accessManagement');
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Access Management</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="nova-cmdbar-title">Access Management</h1>
+          <p className="nova-cmdbar-desc">
             Control which roles can see each module in navigation. Changes apply immediately across the app.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={resetToDefaults} disabled={pendingKey !== null || loading}>
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Reset to defaults
-        </Button>
+
+        <div className="nova-cmdbar-actions">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetToDefaults}
+            disabled={pendingKey !== null || loading}
+          >
+            <RotateCcw className="mr-1.5 h-4 w-4" />
+            Reset to defaults
+          </Button>
+        </div>
       </div>
 
-      {errorMsg && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      {errorMsg ? (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {errorMsg}
         </div>
-      )}
-      {successMsg && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+      ) : null}
+
+      {successMsg ? (
+        <div
+          className="rounded-md border px-4 py-3 text-sm"
+          style={{
+            borderColor: 'var(--nova-teal-500)',
+            background: 'var(--nova-teal-50)',
+            color: 'var(--nova-teal-600)',
+          }}
+        >
           {successMsg}
         </div>
-      )}
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Role &times; Module Matrix</CardTitle>
-          <CardDescription>Toggle a switch to grant or revoke a role&apos;s access to a module.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[180px]">Module</TableHead>
-                  {ALL_ROLES.map((role) => (
-                    <TableHead key={role} className="text-center">
-                      {role}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {navItems
-                  .filter((item) => item.key !== 'accessManagement')
-                  .map((item) => (
-                    <TableRow key={item.key}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <item.icon className="h-4 w-4 text-muted-foreground" />
-                          {item.label}
-                        </div>
-                      </TableCell>
-                      {ALL_ROLES.map((role) => {
-                        const cellKey = `${item.key}:${role}`;
-                        return (
-                          <TableCell key={role} className="text-center">
-                            <Switch
-                              checked={isAllowed(item.key, role)}
-                              disabled={saving || pendingKey === cellKey}
-                              onCheckedChange={(checked) => toggle(item.key, role, checked)}
-                            />
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold text-foreground">
+              Role &times; Module Matrix
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Toggle a switch to grant or revoke a role&apos;s access to a module.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {visibleModules.length} module{visibleModules.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th className="min-w-[180px]">Module</th>
+                {ALL_ROLES.map((role) => (
+                  <th key={role} className="text-center">
+                    {role}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={ALL_ROLES.length + 1}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Loading access matrix…
+                  </td>
+                </tr>
+              ) : (
+                visibleModules.map((item) => (
+                  <tr key={item.key}>
+                    <td className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4 text-muted-foreground" />
+                        {item.label}
+                      </div>
+                    </td>
+                    {ALL_ROLES.map((role) => {
+                      const cellKey = `${item.key}:${role}`;
+                      return (
+                        <td key={role} className="text-center">
+                          <Switch
+                            checked={isAllowed(item.key, role)}
+                            disabled={saving || pendingKey === cellKey}
+                            onCheckedChange={(checked) => toggle(item.key, role, checked)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
