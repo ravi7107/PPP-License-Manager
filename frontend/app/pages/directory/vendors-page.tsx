@@ -1,27 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Plus, Search, Pencil, Trash2, Truck } from 'lucide-react';
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   AlertDialog,
@@ -180,22 +162,18 @@ export default function VendorsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              Vendors
-            </CardTitle>
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
+        <div>
+          <h1 className="nova-cmdbar-title">Vendors</h1>
+          <p className="nova-cmdbar-desc">
+            Vendors selectable on purchase requisitions - shown on the
+            generated PR PDF.
+          </p>
+        </div>
 
-            <CardDescription>
-              Vendors selectable on purchase requisitions - shown on the
-              generated PR PDF.
-            </CardDescription>
-          </div>
-
-          {canEdit ? (
+        {canEdit ? (
+          <div className="nova-cmdbar-actions">
             <Button
               size="sm"
               onClick={() => {
@@ -203,85 +181,97 @@ export default function VendorsPage() {
                 setFormOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Add Vendor
             </Button>
-          ) : null}
-        </CardHeader>
+          </div>
+        ) : null}
+      </div>
 
-        <CardContent className="flex flex-col gap-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search vendors…"
-              className="pl-8"
+              className="h-8 pl-8 text-xs"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
+          <div className="nova-spacer" />
 
-                {canEdit ? (
-                  <TableHead className="text-right">Actions</TableHead>
-                ) : null}
-              </TableRow>
-            </TableHeader>
+          <span className="nova-muted-count">
+            {filtered.length} vendor{filtered.length === 1 ? '' : 's'}
+          </span>
+        </div>
 
-            <TableBody>
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Code</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>Status</th>
+
+                {canEdit ? <th className="nova-right">Actions</th> : null}
+              </tr>
+            </thead>
+
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 6 : 5}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading vendors…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={canEdit ? 6 : 5}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No vendors found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map((vendor) => (
-                  <TableRow key={vendor.id}>
-                    <TableCell className="font-medium">
-                      {vendor.vendorName}
-                    </TableCell>
+                  <tr key={vendor.id}>
+                    <td className="font-medium">{vendor.vendorName}</td>
 
-                    <TableCell>{vendor.vendorCode}</TableCell>
+                    <td className="nova-cell-sub">{vendor.vendorCode}</td>
 
-                    <TableCell>{vendor.contactPerson ?? '—'}</TableCell>
+                    <td className="nova-cell-sub">
+                      {vendor.contactPerson ?? '—'}
+                    </td>
 
-                    <TableCell>{vendor.email ?? '—'}</TableCell>
+                    <td className="nova-cell-sub">
+                      {vendor.email ?? '—'}
+                    </td>
 
-                    <TableCell>
-                      <Badge variant={vendor.isActive ? 'default' : 'secondary'}>
+                    <td>
+                      <span
+                        className={`nova-pill ${vendor.isActive ? 'nova-pill-success' : 'nova-pill-neutral'}`}
+                      >
+                        <span className="nova-dot" />
                         {vendor.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
+                      </span>
+                    </td>
 
                     {canEdit ? (
-                      <TableCell className="text-right">
+                      <td className="nova-right space-x-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -305,15 +295,15 @@ export default function VendorsPage() {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
-                      </TableCell>
+                      </td>
                     ) : null}
-                  </TableRow>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <VendorFormDialog
         open={formOpen}
