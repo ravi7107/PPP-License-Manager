@@ -3,38 +3,75 @@
 @tailwind utilities;
 
 :root {
-  --background: rgb(255 255 255);
-  --foreground: rgb(10 10 10);
+  /*
+   * "Nova" design system - an original synthesis blending AWS Console
+   * (dense sidebar nav), SAP Fiori (KPI tiles, object-page pattern),
+   * MS Dynamics 365 (command bar), Linear (muted slate-blue palette,
+   * single blue accent, hairline borders over heavy shadows), Stripe
+   * Dashboard (status pills with dot indicators, monospace IDs) and
+   * ServiceNow (list+filter workspace pattern). Applied at :root (not a
+   * body class) so every page gets it immediately through the existing
+   * shadcn variable names below - no per-page opt-in needed. The two
+   * pages already using body.app-premium-theme (Hardware Assets,
+   * Executive Dashboard) keep their own look unchanged: a
+   * `body.X { --primary: ... }` selector has higher specificity than
+   * :root, so their explicit overrides still win on those two pages.
+   */
+  --background: rgb(246 247 249); /* #F6F7F9 */
+  --foreground: rgb(22 27 38); /* #161B26 */
   --card: rgb(255 255 255);
-  --card-foreground: rgb(10 10 10);
+  --card-foreground: rgb(22 27 38);
   --popover: rgb(255 255 255);
-  --popover-foreground: rgb(10 10 10);
-  --primary: rgb(22 131 236);
-  --primary-foreground: rgb(250 250 250);
-  --secondary: rgb(252 252 252);
-  --secondary-foreground: rgb(23 23 23);
-  --muted: rgb(245 245 245);
-  --muted-foreground: rgb(115 115 115);
-  --accent: rgb(22 131 236 / 0.1);
-  --accent-foreground: rgb(23 23 23);
-  --destructive: rgb(239 68 68);
-  --destructive-foreground: rgb(250 250 250);
-  --border: rgb(9 9 11 / 0.1);
-  --input: rgb(9 9 11 / 0.18);
-  --ring: rgb(9 9 11 / 0.2);
-  --chart-1: rgb(30 64 175);
+  --popover-foreground: rgb(22 27 38);
+  --primary: rgb(21 94 239); /* #155EEF Nova blue */
+  --primary-foreground: rgb(255 255 255);
+  --secondary: rgb(238 240 243); /* #EEF0F3 slate-100 */
+  --secondary-foreground: rgb(22 27 38);
+  --muted: rgb(246 247 249);
+  --muted-foreground: rgb(93 107 130); /* #5D6B82 */
+  --accent: rgb(238 244 255); /* #EEF4FF blue-50 */
+  --accent-foreground: rgb(15 79 209); /* #0F4FD1 blue-600 */
+  --destructive: rgb(220 38 38); /* #DC2626 */
+  --destructive-foreground: rgb(255 255 255);
+  --border: rgb(228 231 236); /* #E4E7EC */
+  --input: rgb(228 231 236);
+  --ring: rgb(21 94 239 / 0.35);
+  --chart-1: rgb(21 94 239);
   --chart-2: rgb(13 148 136);
-  --chart-3: rgb(71 85 105);
-  --chart-4: rgb(202 138 4);
-  --chart-5: rgb(190 100 40);
-  --sidebar: rgb(250 250 250);
-  --sidebar-foreground: rgb(10 10 10);
-  --sidebar-primary: rgb(23 23 23);
-  --sidebar-primary-foreground: rgb(250 250 250);
-  --sidebar-accent: rgb(245 245 245);
-  --sidebar-accent-foreground: rgb(23 23 23);
-  --sidebar-border: rgb(9 9 11 / 0.08);
-  --sidebar-ring: oklch(0.708 0 0);;
+  --chart-3: rgb(217 119 6);
+  --chart-4: rgb(220 38 38);
+  --chart-5: rgb(105 117 134);
+  --sidebar: rgb(255 255 255);
+  --sidebar-foreground: rgb(22 27 38);
+  --sidebar-primary: rgb(21 94 239);
+  --sidebar-primary-foreground: rgb(255 255 255);
+  --sidebar-accent: rgb(246 247 249); /* neutral hover; active state is overridden below */
+  --sidebar-accent-foreground: rgb(22 27 38);
+  --sidebar-border: rgb(228 231 236);
+  --sidebar-ring: rgb(21 94 239 / 0.35);
+
+  /* Nova palette, exposed as tokens so the component classes further
+     down (kpi cards, pills, chips, pager) don't hardcode hex values. */
+  --nova-blue-50: rgb(238 244 255);
+  --nova-blue-100: rgb(220 232 255);
+  --nova-blue-500: rgb(21 94 239);
+  --nova-blue-600: rgb(15 79 209);
+  --nova-teal-50: rgb(239 252 249);
+  --nova-teal-500: rgb(13 148 136);
+  --nova-teal-600: rgb(11 122 112);
+  --nova-amber-50: rgb(255 250 235);
+  --nova-amber-500: rgb(217 119 6);
+  --nova-amber-600: rgb(180 83 9);
+  --nova-red-50: rgb(254 242 242);
+  --nova-red-500: rgb(220 38 38);
+  --nova-red-600: rgb(185 28 28);
+  --nova-slate-25: rgb(251 252 253);
+  --nova-slate-50: rgb(246 247 249);
+  --nova-slate-100: rgb(238 240 243);
+  --nova-slate-400: rgb(154 164 178);
+  --nova-slate-500: rgb(105 117 134);
+  --nova-slate-700: rgb(54 65 82);
+  --nova-hairline: rgb(237 239 243);
 
   --font-sans: Inter, sans-serif;
   --font-serif: PT Serif, serif;
@@ -42,16 +79,16 @@
 
   --radius: 0.5rem;
 
-  --shadow-2xs: 0px 3px 5px 0.5px rgb(9 9 11 / 0.04);
-  --shadow-xs: 0px 3px 5px 0.5px rgb(9 9 11 / 0.04);
-  --shadow-sm: 0px 3px 5px 0.5px rgb(9 9 11 / 0.08), 0px 1px 2px -0.5px rgb(9 9 11 / 0.08);
-  --shadow: 0px 3px 5px 0.5px rgb(9 9 11 / 0.08), 0px 1px 2px -0.5px rgb(9 9 11 / 0.08);
-  --shadow-md: 0px 3px 5px 0.5px rgb(9 9 11 / 0.08), 0px 2px 4px -0.5px rgb(9 9 11 / 0.08);
-  --shadow-lg: 0px 3px 5px 0.5px rgb(9 9 11 / 0.08), 0px 4px 6px -0.5px rgb(9 9 11 / 0.08);
-  --shadow-xl: 0px 3px 5px 0.5px rgb(9 9 11 / 0.08), 0px 8px 10px -0.5px rgb(9 9 11 / 0.08);
-  --shadow-2xl: 0px 3px 5px 0.5px rgb(9 9 11 / 0.20);
+  --shadow-2xs: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(16 24 40 / 0.06), 0 1px 2px -1px rgb(16 24 40 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(16 24 40 / 0.06), 0 1px 2px -1px rgb(16 24 40 / 0.04);
+  --shadow-md: 0 4px 16px -4px rgb(16 24 40 / 0.10), 0 2px 6px -2px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 4px 16px -4px rgb(16 24 40 / 0.10), 0 2px 6px -2px rgb(16 24 40 / 0.06);
+  --shadow-xl: 0 4px 16px -4px rgb(16 24 40 / 0.10), 0 2px 6px -2px rgb(16 24 40 / 0.06);
+  --shadow-2xl: 0 8px 24px -6px rgb(16 24 40 / 0.16);
 
-  --tracking-normal: -0.025em;
+  --tracking-normal: -0.011em;
 }
 
 .dark {
@@ -283,4 +320,260 @@ body.app-premium-theme .exec-insight-card[data-tone='success'] {
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+}
+
+/* ------------------------------------------------------------------------
+   Nova sidebar refinements. components/ui/sidebar.tsx already exposes
+   data-sidebar / data-active attributes on every element, so the active
+   nav item gets a distinct blue-tinted background + left accent bar
+   purely through CSS - no changes needed to app-sidebar.tsx. Both this
+   rule and Tailwind's own `data-[active=true]:bg-sidebar-accent` utility
+   share the same specificity (two attribute selectors), so source order
+   decides the winner; this block sits after `@tailwind utilities` in the
+   cascade, so it wins.
+   ---------------------------------------------------------------------- */
+[data-sidebar='menu-button'][data-active='true'] {
+  background: var(--nova-blue-50);
+  color: var(--nova-blue-600);
+  font-weight: 600;
+}
+
+[data-sidebar='menu-item'] {
+  position: relative;
+}
+
+[data-sidebar='menu-item']:has([data-sidebar='menu-button'][data-active='true'])::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--nova-blue-500);
+}
+
+[data-sidebar='group-label'] {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--nova-slate-400);
+}
+
+/* ------------------------------------------------------------------------
+   Nova page primitives - opt-in building blocks for converting a page's
+   markup to the Nova visual language (command bar, KPI tiles, status
+   pills, filter panel). Additive only: existing Card/Badge/Table usage
+   elsewhere in the app is unaffected and keeps working, now themed with
+   the Nova tokens above. A page adopts these incrementally by swapping
+   its own header/table wrapper markup for these classes; see
+   material-movements-page.tsx for a full worked example.
+   ---------------------------------------------------------------------- */
+.nova-cmdbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.nova-cmdbar-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.nova-cmdbar-desc {
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.nova-cmdbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.nova-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .nova-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .nova-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.nova-kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-xs);
+}
+.nova-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nova-kpi-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+.nova-kpi-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--radius) - 2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nova-kpi-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.nova-kpi-value {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 8px;
+  color: var(--foreground);
+}
+
+.nova-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.nova-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--nova-hairline);
+  flex-wrap: wrap;
+}
+.nova-panel-toolbar .nova-spacer {
+  flex: 1;
+}
+.nova-muted-count {
+  font-size: 11.5px;
+  color: var(--nova-slate-400);
+  white-space: nowrap;
+}
+.nova-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--nova-hairline);
+  flex-wrap: wrap;
+}
+
+.nova-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.nova-pill .nova-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.nova-pill-neutral {
+  background: var(--nova-slate-100);
+  color: var(--nova-slate-700);
+}
+.nova-pill-neutral .nova-dot {
+  background: var(--nova-slate-400);
+}
+.nova-pill-pending {
+  background: var(--nova-amber-50);
+  color: var(--nova-amber-600);
+}
+.nova-pill-pending .nova-dot {
+  background: var(--nova-amber-500);
+}
+.nova-pill-info {
+  background: var(--nova-blue-50);
+  color: var(--nova-blue-600);
+}
+.nova-pill-info .nova-dot {
+  background: var(--nova-blue-500);
+}
+.nova-pill-success {
+  background: var(--nova-teal-50);
+  color: var(--nova-teal-600);
+}
+.nova-pill-success .nova-dot {
+  background: var(--nova-teal-500);
+}
+.nova-pill-danger {
+  background: var(--nova-red-50);
+  color: var(--nova-red-600);
+}
+.nova-pill-danger .nova-dot {
+  background: var(--nova-red-500);
+}
+
+.nova-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.nova-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.nova-table-wrap th {
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--nova-slate-400);
+  text-align: left;
+  background: var(--nova-slate-25);
+  border-bottom: 1px solid var(--nova-hairline);
+}
+.nova-table-wrap th.nova-right,
+.nova-table-wrap td.nova-right {
+  text-align: right;
+}
+.nova-table-wrap td {
+  padding: 12px 16px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--nova-hairline);
+  color: var(--foreground);
+}
+.nova-table-wrap tbody tr:last-child td {
+  border-bottom: none;
+}
+.nova-table-wrap tbody tr:hover {
+  background: var(--nova-slate-25);
+}
+.nova-cell-sub {
+  color: var(--muted-foreground);
+}
+.nova-cell-faint {
+  color: var(--nova-slate-400);
+  font-size: 12px;
 }

@@ -1,26 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, Truck } from 'lucide-react';
-
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+  Pencil,
+  Plus,
+  Trash2,
+  Search,
+  FileEdit,
+  Clock,
+  CheckCircle2,
+  Layers,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 import {
   AlertDialog,
@@ -78,19 +69,35 @@ const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   DirectOutward: 'Direct Outward',
 };
 
-function statusVariant(
-  status: string
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+// Status: Draft, Submitted, PendingApproval, Approved, Dispatched,
+// InTransit, Received, Completed, Rejected, Cancelled,
+// TemporaryReturnPending, TemporaryReturned - must match
+// MaterialMovement.Status (backend Models/MaterialMovement.cs).
+function humanizeStatus(status: string): string {
+  return status.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function statusPillClass(status: string): string {
   switch (status) {
     case 'Draft':
-      return 'outline';
-    case 'Rejected':
-      return 'destructive';
+      return 'nova-pill-neutral';
+    case 'Submitted':
+    case 'PendingApproval':
+      return 'nova-pill-pending';
     case 'Approved':
+    case 'Dispatched':
+    case 'InTransit':
+    case 'Received':
+    case 'TemporaryReturnPending':
+      return 'nova-pill-info';
     case 'Completed':
-      return 'default';
+    case 'TemporaryReturned':
+      return 'nova-pill-success';
+    case 'Rejected':
+    case 'Cancelled':
+      return 'nova-pill-danger';
     default:
-      return 'secondary';
+      return 'nova-pill-neutral';
   }
 }
 
@@ -207,6 +214,32 @@ export default function MaterialMovementsPage() {
     );
   }, [movements, search]);
 
+  // Derived from the already-loaded list - no extra API calls. Kept to
+  // counts the list endpoint can actually support today; a true "Overdue
+  // Returns" tile would need expectedReturnDate, which /mine doesn't
+  // return per row, so it's left out rather than guessed at.
+  const kpis = useMemo(() => {
+    let draft = 0;
+    let pending = 0;
+    let completed = 0;
+
+    for (const movement of movements) {
+      if (movement.status === 'Draft') draft += 1;
+      else if (
+        movement.status === 'Submitted' ||
+        movement.status === 'PendingApproval'
+      )
+        pending += 1;
+      else if (
+        movement.status === 'Completed' ||
+        movement.status === 'TemporaryReturned'
+      )
+        completed += 1;
+    }
+
+    return { draft, pending, completed, total: movements.length };
+  }, [movements]);
+
   const openCreate = () => {
     setEditingMovement(null);
     setFormError(null);
@@ -318,21 +351,22 @@ export default function MaterialMovementsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-5">
+      <div className="nova-cmdbar">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-            Material Movements
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Create and manage material movement drafts. Submitting
-            a draft for approval comes in a later update.
+          <h1 className="nova-cmdbar-title">Material Movements</h1>
+          <p className="nova-cmdbar-desc">
+            Create and manage material movement drafts. Submitting a
+            draft for approval comes in a later update.
           </p>
         </div>
 
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" /> New Movement
-        </Button>
+        <div className="nova-cmdbar-actions">
+          <Button onClick={openCreate}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            New Movement
+          </Button>
+        </div>
       </div>
 
       {pageError ? (
@@ -341,93 +375,164 @@ export default function MaterialMovementsPage() {
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              My Movements
-            </CardTitle>
+      {listError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {listError}
+        </div>
+      ) : null}
 
-            <CardDescription>
-              Movements you have raised.
-            </CardDescription>
-          </div>
-        </CardHeader>
-
-        <CardContent className="flex flex-col gap-4">
-          {listError ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {listError}
+      <div className="nova-kpi-grid">
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Draft</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-slate-100)' }}
+            >
+              <FileEdit
+                className="text-[var(--nova-slate-500)]"
+                strokeWidth={2}
+              />
             </div>
-          ) : null}
+          </div>
+          <div className="nova-kpi-value">{kpis.draft}</div>
+        </div>
 
-          <Input
-            placeholder="Search by movement number, type, from, or to…"
-            className="sm:max-w-sm"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Pending Approval</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-amber-50)' }}
+            >
+              <Clock
+                className="text-[var(--nova-amber-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">{kpis.pending}</div>
+        </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Movement #</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Completed</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-teal-50)' }}
+            >
+              <CheckCircle2
+                className="text-[var(--nova-teal-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">{kpis.completed}</div>
+        </div>
 
-            <TableBody>
+        <div className="nova-kpi-card">
+          <div className="nova-kpi-top">
+            <span className="nova-kpi-label">Total Movements</span>
+            <div
+              className="nova-kpi-icon"
+              style={{ background: 'var(--nova-blue-50)' }}
+            >
+              <Layers
+                className="text-[var(--nova-blue-500)]"
+                strokeWidth={2}
+              />
+            </div>
+          </div>
+          <div className="nova-kpi-value">{kpis.total}</div>
+        </div>
+      </div>
+
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by movement number, type, from, or to…"
+              className="h-8 pl-8 text-xs"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {filtered.length} movement{filtered.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Movement #</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Items</th>
+                <th>Created</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={8}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading movements…
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
+                <tr>
+                  <td
                     colSpan={8}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No movements found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map((movement) => (
-                  <TableRow key={movement.id}>
-                    <TableCell className="font-mono text-xs">
+                  <tr key={movement.id}>
+                    <td className="nova-mono">
                       {movement.movementNumber ?? '—'}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
+                    <td>
                       {MOVEMENT_TYPE_LABELS[movement.movementType] ??
                         movement.movementType}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
-                      <Badge variant={statusVariant(movement.status)}>
-                        {movement.status}
-                      </Badge>
-                    </TableCell>
+                    <td>
+                      <span
+                        className={`nova-pill ${statusPillClass(movement.status)}`}
+                      >
+                        <span className="nova-dot" />
+                        {humanizeStatus(movement.status)}
+                      </span>
+                    </td>
 
-                    <TableCell>{movement.fromSummary ?? '—'}</TableCell>
-                    <TableCell>{movement.toSummary ?? '—'}</TableCell>
-                    <TableCell>{movement.itemCount}</TableCell>
-                    <TableCell>
+                    <td className="nova-cell-sub">
+                      {movement.fromSummary ?? '—'}
+                    </td>
+                    <td className="nova-cell-sub">
+                      {movement.toSummary ?? '—'}
+                    </td>
+                    <td>{movement.itemCount}</td>
+                    <td className="nova-cell-faint">
                       {movement.createdAt.slice(0, 10)}
-                    </TableCell>
+                    </td>
 
-                    <TableCell className="space-x-1 text-right">
+                    <td className="nova-right space-x-1">
                       {movement.status === 'Draft' ? (
                         <>
                           <Button
@@ -451,14 +556,14 @@ export default function MaterialMovementsPage() {
                           </Button>
                         </>
                       ) : null}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <MaterialMovementFormDialog
         open={formOpen}
