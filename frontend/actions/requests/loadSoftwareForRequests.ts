@@ -1,28 +1,25 @@
-import { action } from '@/lib/uibakery';
+import { getSoftware } from '@/lib/api/software.api';
+import { SoftwareAvailabilityOption } from '@/app/pages/requests/types';
 
-// Software license pools with computed available seats, for the request form's software selector.
-function loadSoftwareForRequests() {
-  return action('loadSoftwareForRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT
-        li.id AS license_inventory_id,
-        s.name AS software_name,
-        s.vendor,
-        li.total_seats,
-        GREATEST(li.total_seats - COALESCE(used.used_licenses, 0), 0) AS available_licenses
-      FROM license_inventory li
-      JOIN software s ON s.id = li.software_id
-      LEFT JOIN (
-        SELECT license_inventory_id, COUNT(*) AS used_licenses
-        FROM license_allocations
-        WHERE deleted_at IS NULL AND status = 'Active'
-        GROUP BY license_inventory_id
-      ) used ON used.license_inventory_id = li.id
-      WHERE li.deleted_at IS NULL AND li.status = 'Active'
-      ORDER BY s.name;
-    `,
-  });
+// Software catalog for the request form's software selector. The legacy
+// version of this action selected from a "license pool with total seats"
+// concept (license_inventory) that doesn't exist in this app's License
+// model (individual per-seat License rows, not pools) - so seat capacity
+// isn't tracked here. total_seats/available_licenses are always 0; the
+// request form no longer displays them (see request-form-dialog.tsx).
+async function loadSoftwareForRequests(): Promise<SoftwareAvailabilityOption[]> {
+  const rows = await getSoftware();
+
+  return rows
+    .filter((s) => s.isActive)
+    .map((s) => ({
+      license_inventory_id: s.id,
+      software_name: s.name,
+      vendor: s.vendor,
+      total_seats: 0,
+      available_licenses: 0,
+    }))
+    .sort((a, b) => a.software_name.localeCompare(b.software_name));
 }
 
 export default loadSoftwareForRequests;

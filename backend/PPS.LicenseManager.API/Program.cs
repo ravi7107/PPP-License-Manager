@@ -202,6 +202,10 @@ builder.Services.AddScoped<
     IMaterialMovementService,
     MaterialMovementService>();
 
+builder.Services.AddScoped<
+    IRequestService,
+    RequestService>();
+
 // Log-only stub until real SMTP/API credentials are provided - see
 // LogOnlyEmailService's comment. Swap this one registration for a real
 // implementation when they're available; every caller already depends on

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
+import { useLoadAction, useMutateAction } from '@/lib/uibakery';
+import { useAuth } from '@/lib/auth/auth-context';
 import { Check, X, History, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/layout/kpi-card';
@@ -38,14 +39,15 @@ function targetLabel(record: RequestRecord): string {
 }
 
 export default function ApprovalsPage() {
-  const user = useUser();
-  const actorName = user?.name ?? 'System';
+  const { user: authenticatedUser } = useAuth();
+  const actorName = authenticatedUser?.fullName ?? 'System';
+  const actorUserId = authenticatedUser?.userId;
   const [historyRecord, setHistoryRecord] = useState<RequestRecord | null>(null);
   const [decisionRecord, setDecisionRecord] = useState<RequestRecord | null>(null);
   const [decision, setDecision] = useState<'Approved' | 'Rejected' | null>(null);
   const [capacityWarning, setCapacityWarning] = useState<string | null>(null);
 
-  const allParams = useMemo(() => ({ requesterName: null, statusFilter: null }), []);
+  const allParams = useMemo(() => ({ requesterId: null, statusFilter: null }), []);
   const [requests, loading, , refetchRequests]: [RequestRecord[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(loadRequests, [], allParams);
 
@@ -63,14 +65,9 @@ export default function ApprovalsPage() {
   };
 
   const handleConfirm = async (comment: string) => {
-    if (!decisionRecord || !decision) return;
+    if (!decisionRecord || !decision || !actorUserId) return;
     if (decision === 'Approved') {
-      const [result] = await approve({ requestId: decisionRecord.id, comment: comment || null, actorName });
-      if (result?.capacity_exceeded) {
-        setCapacityWarning(
-          `${decisionRecord.software_name ?? 'This license'} has no seats available. Request marked Approved but no allocation was created — release a seat first.`,
-        );
-      }
+      await approve({ requestId: decisionRecord.id, comment: comment || null, actorName, actorUserId });
       await notify({
         notificationType: 'Request Approved',
         title: 'Your request was approved',
@@ -79,7 +76,7 @@ export default function ApprovalsPage() {
         actorName,
       });
     } else {
-      await reject({ requestId: decisionRecord.id, comment: comment || null, actorName });
+      await reject({ requestId: decisionRecord.id, comment: comment || null, actorName, actorUserId });
       await notify({
         notificationType: 'Request Rejected',
         title: 'Your request was rejected',

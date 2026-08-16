@@ -1,48 +1,47 @@
-import { action } from '@/lib/uibakery';
+import { getApiRequests, ApiRequestRecord } from '@/lib/api/requests.api';
+import { RequestRecord } from '@/app/pages/requests/types';
 
-// Loads requests, optionally scoped to the current requester (My Requests) or to Pending only (Approvals queue).
-function loadRequests() {
-  return action('loadRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT
-        r.id,
-        r.request_type,
-        r.requester_name,
-        d.name AS department_name,
-        s.name AS software_name,
-        r.license_inventory_id,
-        r.allocation_type,
-        r.asset_id,
-        COALESCE(a.computer_name, a.asset_tag) AS asset_name,
-        r.entity_id,
-        e.name AS entity_name,
-        r.client_id,
-        c.name AS client_name,
-        r.target_user_id,
-        tu.full_name AS target_user_name,
-        r.justification,
-        r.requested_date,
-        r.duration_days,
-        r.status,
-        r.priority,
-        r.required_from_date,
-        r.required_until_date,
-        r.created_at,
-        r.updated_at
-      FROM requests r
-      LEFT JOIN departments d ON d.id = r.department_id
-      LEFT JOIN software s ON s.id = r.software_id
-      LEFT JOIN assets a ON a.id = r.asset_id
-      LEFT JOIN entities e ON e.id = r.entity_id
-      LEFT JOIN clients c ON c.id = r.client_id
-      LEFT JOIN users tu ON tu.id = r.target_user_id
-      WHERE r.deleted_at IS NULL
-        AND ({{params.requesterName}}::text IS NULL OR LOWER(r.requester_name) = LOWER({{params.requesterName}}))
-        AND ({{params.statusFilter}}::text IS NULL OR r.status = {{params.statusFilter}})
-      ORDER BY r.created_at DESC;
-    `,
+function toRequestRecord(r: ApiRequestRecord): RequestRecord {
+  return {
+    id: r.id,
+    request_type: r.requestType as RequestRecord['request_type'],
+    requester_name: r.requesterName,
+    department_name: r.departmentName,
+    software_name: r.softwareName,
+    license_inventory_id: r.softwareId,
+    allocation_type: r.allocationType as RequestRecord['allocation_type'],
+    asset_id: r.assetId,
+    asset_name: r.assetName,
+    entity_id: r.companyId,
+    entity_name: r.companyName,
+    client_id: r.clientId,
+    client_name: r.clientName,
+    target_user_id: r.targetUserId,
+    target_user_name: r.targetUserName,
+    justification: r.justification,
+    requested_date: r.requestedDate,
+    duration_days: r.durationDays,
+    status: r.status as RequestRecord['status'],
+    priority: r.priority as RequestRecord['priority'],
+    required_from_date: r.requiredFromDate,
+    required_until_date: r.requiredUntilDate,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt ?? r.createdAt,
+  };
+}
+
+// Loads requests, optionally scoped to the current requester (My Requests)
+// or to a specific status. Real REST call against RequestController -
+// replaces the dead lib/uibakery SQL-descriptor stub, which never
+// executed and left `requests` as a non-array object (the cause of the
+// "l.filter is not a function" crash on the Approvals page).
+async function loadRequests(params?: { requesterId?: number | null; statusFilter?: string | null }): Promise<RequestRecord[]> {
+  const rows = await getApiRequests({
+    requesterId: params?.requesterId ?? null,
+    status: params?.statusFilter ?? null,
   });
+
+  return rows.map(toRequestRecord);
 }
 
 export default loadRequests;

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
+import { useLoadAction, useMutateAction } from '@/lib/uibakery';
+import { useAuth } from '@/lib/auth/auth-context';
 import { Plus, FileText, History, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/layout/kpi-card';
@@ -47,12 +48,13 @@ function targetLabel(record: RequestRecord): string {
 }
 
 export default function MyRequestsPage() {
-  const user = useUser();
-  const actorName = user?.name ?? 'System';
+  const { user: authenticatedUser } = useAuth();
+  const actorName = authenticatedUser?.fullName ?? 'System';
+  const actorUserId = authenticatedUser?.userId;
   const [formOpen, setFormOpen] = useState(false);
   const [historyRecord, setHistoryRecord] = useState<RequestRecord | null>(null);
 
-  const params = useMemo(() => ({ requesterName: actorName, statusFilter: null }), [actorName]);
+  const params = useMemo(() => ({ requesterId: actorUserId ?? null, statusFilter: null }), [actorUserId]);
   const [requests, loading, , refetchRequests]: [RequestRecord[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(loadRequests, [], params);
 
@@ -96,6 +98,7 @@ export default function MyRequestsPage() {
   const rejectedCount = requests.filter((r) => r.status === 'Rejected').length;
 
   const handleSubmit = async (values: RequestFormValues) => {
+    if (!actorUserId) return;
     const software = softwareOptions.find((s) => String(s.license_inventory_id) === values.licenseInventoryId);
     const isHardwareRequest = ['Hardware Allocation', 'Hardware Transfer', 'Return Hardware'].includes(values.requestType);
     await saveRequest({
@@ -115,6 +118,7 @@ export default function MyRequestsPage() {
       requiredFromDate: values.requiredFromDate || null,
       requiredUntilDate: values.requiredUntilDate || null,
       actorName,
+      actorUserId,
     });
     await notifyApproversAction({
       notificationType: 'Request Submitted',
@@ -127,7 +131,8 @@ export default function MyRequestsPage() {
   };
 
   const handleCancel = async (record: RequestRecord) => {
-    await cancelRequestAction({ requestId: record.id, actorName });
+    if (!actorUserId) return;
+    await cancelRequestAction({ requestId: record.id, actorName, actorUserId });
     await refetchRequests();
   };
 

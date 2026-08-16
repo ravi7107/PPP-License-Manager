@@ -42,6 +42,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
     public DbSet<AllocationRequest> AllocationRequests => Set<AllocationRequest>();
 
+    public DbSet<Request> Requests => Set<Request>();
+    public DbSet<RequestApproval> RequestApprovals => Set<RequestApproval>();
+
     public DbSet<UserUnavailability> UserUnavailabilities => Set<UserUnavailability>();
     public DbSet<ResourceReallocationRequest> ResourceReallocationRequests => Set<ResourceReallocationRequest>();
 
@@ -424,6 +427,107 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.ResultingAssignment)
                   .WithMany()
                   .HasForeignKey(x => x.ResultingAssignmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ------------------------------------------------------------------
+        // Request / Approval workflow (Approvals + My Requests pages)
+        // ------------------------------------------------------------------
+
+        modelBuilder.Entity<Request>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.RequestType)
+                  .HasMaxLength(40)
+                  .HasDefaultValue("New License")
+                  .IsRequired();
+
+            entity.Property(x => x.AllocationType)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("User")
+                  .IsRequired();
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Pending")
+                  .IsRequired();
+
+            entity.Property(x => x.Priority)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Medium")
+                  .IsRequired();
+
+            entity.Property(x => x.Justification).HasMaxLength(1000);
+
+            entity.HasIndex(x => x.RequesterId);
+            entity.HasIndex(x => x.DepartmentId);
+            entity.HasIndex(x => x.SoftwareId);
+            entity.HasIndex(x => x.AssetId);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.ClientId);
+            entity.HasIndex(x => x.TargetUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasOne(x => x.Requester)
+                  .WithMany()
+                  .HasForeignKey(x => x.RequesterId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Department)
+                  .WithMany()
+                  .HasForeignKey(x => x.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Software)
+                  .WithMany()
+                  .HasForeignKey(x => x.SoftwareId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Asset)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Client)
+                  .WithMany()
+                  .HasForeignKey(x => x.ClientId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TargetUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.TargetUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RequestApproval>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ApproverName).HasMaxLength(200).IsRequired();
+
+            entity.Property(x => x.Decision)
+                  .HasMaxLength(20)
+                  .IsRequired();
+
+            entity.Property(x => x.Comment).HasMaxLength(1000);
+
+            entity.HasIndex(x => x.RequestId);
+            entity.HasIndex(x => x.ApproverUserId);
+
+            entity.HasOne(x => x.Request)
+                  .WithMany(x => x.Approvals)
+                  .HasForeignKey(x => x.RequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ApproverUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ApproverUserId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 

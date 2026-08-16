@@ -1,10 +1,13 @@
-import { action } from '@/lib/uibakery';
+import { getDepartments } from '@/lib/api/departments.api';
+import { LookupOption } from '@/app/pages/requests/types';
 
-function loadDepartmentsForRequests() {
-  return action('loadDepartmentsForRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `SELECT id, name FROM departments WHERE deleted_at IS NULL ORDER BY name;`,
-  });
+async function loadDepartmentsForRequests(): Promise<LookupOption[]> {
+  const rows = await getDepartments();
+
+  return rows
+    .filter((d) => d.isActive)
+    .map((d) => ({ id: d.id, name: d.departmentName }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default loadDepartmentsForRequests;

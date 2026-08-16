@@ -1,16 +1,8 @@
-import { action } from '@/lib/uibakery';
+import { cancelApiRequest } from '@/lib/api/requests.api';
 
 // Requester cancels their own still-pending request. No allocation changes occur.
-function cancelRequest() {
-  return action('cancelRequest', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      UPDATE requests
-      SET status = 'Cancelled', updated_by = {{params.actorName}}, updated_at = NOW()
-      WHERE id = {{params.requestId}}::bigint AND status = 'Pending' AND deleted_at IS NULL
-      RETURNING id;
-    `,
-  });
+async function cancelRequest(params: { requestId: number; actorName: string; actorUserId: number }) {
+  return cancelApiRequest(params.requestId, params.actorUserId);
 }
 
 export default cancelRequest;

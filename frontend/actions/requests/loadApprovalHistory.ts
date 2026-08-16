@@ -1,16 +1,23 @@
-import { action } from '@/lib/uibakery';
+import { getApiRequestApprovals } from '@/lib/api/requests.api';
+import { ApprovalRecord } from '@/app/pages/requests/types';
 
-// Full approval decision history for a given request (maintains an audit trail of all decisions).
-function loadApprovalHistory() {
-  return action('loadApprovalHistory', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT id, request_id, approver_name, decision, comment, decided_at, created_at
-      FROM approvals
-      WHERE request_id = {{params.requestId}}::bigint AND deleted_at IS NULL
-      ORDER BY created_at DESC;
-    `,
-  });
+// Full approval decision history for a given request (maintains an audit
+// trail of all decisions). Real REST call - requestId is undefined until
+// a record is selected, in which case there's nothing to load yet.
+async function loadApprovalHistory(params?: { requestId?: number }): Promise<ApprovalRecord[]> {
+  if (!params?.requestId) return [];
+
+  const rows = await getApiRequestApprovals(params.requestId);
+
+  return rows.map((r) => ({
+    id: r.id,
+    request_id: r.requestId,
+    approver_name: r.approverName,
+    decision: r.decision as ApprovalRecord['decision'],
+    comment: r.comment,
+    decided_at: r.decidedAt,
+    created_at: r.createdAt,
+  }));
 }
 
 export default loadApprovalHistory;

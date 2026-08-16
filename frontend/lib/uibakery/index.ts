@@ -9,12 +9,27 @@ export function useUser() {
   };
 }
 
-export function useLoadAction(action: any, defaultValue: any = [], params?: any) {
+export interface UseLoadActionOptions {
+  // When false, reload() is not called automatically (callers can still
+  // trigger it manually via the returned reload function). Defaults to
+  // true. Lets a dialog skip fetching until it's actually open.
+  enabled?: boolean;
+}
+
+export function useLoadAction(
+  action: any,
+  defaultValue: any = [],
+  params?: any,
+  options?: UseLoadActionOptions,
+) {
   const [data, setData] = useState(defaultValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const enabled = options?.enabled ?? true;
 
   const reload = async () => {
+    if (!enabled) return;
+
     setLoading(true);
     setError(null);
 
@@ -36,9 +51,14 @@ export function useLoadAction(action: any, defaultValue: any = [], params?: any)
     setLoading(false);
   };
 
+  // Re-runs whenever `params` or `enabled` change (not just once on
+  // mount) - e.g. a history dialog that's given a different record's id
+  // each time it's opened needs a fresh fetch each time, not the result
+  // of whatever was passed in on the very first render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     reload();
-  }, []);
+  }, [JSON.stringify(params), enabled]);
 
   return [data, loading, error, reload] as const;
 }

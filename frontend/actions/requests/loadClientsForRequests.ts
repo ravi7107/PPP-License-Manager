@@ -1,10 +1,13 @@
-import { action } from '@/lib/uibakery';
+import { getClients } from '@/lib/api/clients.api';
+import { LookupOption } from '@/app/pages/requests/types';
 
-function loadClientsForRequests() {
-  return action('loadClientsForRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name;`,
-  });
+async function loadClientsForRequests(): Promise<LookupOption[]> {
+  const rows = await getClients();
+
+  return rows
+    .filter((c) => c.isActive)
+    .map((c) => ({ id: c.id, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default loadClientsForRequests;

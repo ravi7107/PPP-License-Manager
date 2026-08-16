@@ -1,40 +1,56 @@
-import { action } from '@/lib/uibakery';
+import { createApiRequest } from '@/lib/api/requests.api';
 
-// Team Leader submits a request (license or hardware allocation/transfer/return) for review by IT Administrators.
-function createRequest() {
-  return action('createRequest', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      INSERT INTO requests (
-        request_type, requester_id, requester_name, department_id, software_id, license_inventory_id,
-        allocation_type, asset_id, entity_id, client_id, target_user_id, justification,
-        requested_date, duration_days, priority, required_from_date, required_until_date, status, created_by, updated_by
-      )
-      SELECT
-        {{params.requestType}},
-        u.id,
-        {{params.actorName}},
-        {{params.departmentId}}::bigint,
-        {{params.softwareId}}::bigint,
-        {{params.licenseInventoryId}}::bigint,
-        {{params.allocationType}},
-        {{params.assetId}}::bigint,
-        {{params.entityId}}::bigint,
-        {{params.clientId}}::bigint,
-        {{params.targetUserId}}::bigint,
-        {{params.justification}},
-        COALESCE({{params.requestedDate}}::date, CURRENT_DATE),
-        {{params.durationDays}}::integer,
-        COALESCE({{params.priority}}, 'Medium'),
-        {{params.requiredFromDate}}::date,
-        {{params.requiredUntilDate}}::date,
-        'Pending',
-        {{params.actorName}},
-        {{params.actorName}}
-      FROM (SELECT 1) x
-      LEFT JOIN users u ON LOWER(u.full_name) = LOWER({{params.actorName}}) AND u.deleted_at IS NULL
-      RETURNING id;
-    `,
+interface CreateRequestParams {
+  requestType: string;
+  departmentId: string | null;
+  softwareId: string | null;
+  licenseInventoryId: string | null;
+  allocationType: string;
+  assetId: string | null;
+  entityId: string | null;
+  clientId: string | null;
+  targetUserId: string | null;
+  justification: string;
+  requestedDate: string;
+  durationDays: number | null;
+  priority: string;
+  requiredFromDate: string | null;
+  requiredUntilDate: string | null;
+  actorName: string;
+  actorUserId: number;
+}
+
+function toIntOrNull(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Team Leader/employee submits a request (license or hardware
+// allocation/transfer/return) for review by IT Administrators. Real REST
+// call - see actions/requests/loadRequests.ts for context on why this
+// used to be a no-op.
+async function createRequest(params: CreateRequestParams) {
+  return createApiRequest({
+    requestType: params.requestType,
+    requesterId: params.actorUserId,
+    departmentId: toIntOrNull(params.departmentId),
+    // licenseInventoryId carries the selected Software's id (the request
+    // form's "software license pool" concept doesn't exist in this app's
+    // License model, which tracks individual seats, not pools - see the
+    // comment on Models/Request.cs).
+    softwareId: toIntOrNull(params.licenseInventoryId) ?? toIntOrNull(params.softwareId),
+    allocationType: params.allocationType,
+    assetId: toIntOrNull(params.assetId),
+    companyId: toIntOrNull(params.entityId),
+    clientId: toIntOrNull(params.clientId),
+    targetUserId: toIntOrNull(params.targetUserId),
+    justification: params.justification,
+    requestedDate: params.requestedDate || null,
+    durationDays: params.durationDays,
+    priority: params.priority,
+    requiredFromDate: params.requiredFromDate,
+    requiredUntilDate: params.requiredUntilDate,
   });
 }
 

@@ -1,10 +1,14 @@
-import { action } from '@/lib/uibakery';
+import { getUsers } from '@/lib/api/users.api';
+import { LookupOption } from '@/app/pages/requests/types';
 
-function loadUsersForRequests() {
-  return action('loadUsersForRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `SELECT id, full_name AS name FROM users WHERE deleted_at IS NULL ORDER BY full_name;`,
-  });
+async function loadUsersForRequests(): Promise<LookupOption[]> {
+  const page = await getUsers('', 1, 500);
+  const items = Array.isArray(page?.items) ? page.items : [];
+
+  return items
+    .filter((u) => u.isActive)
+    .map((u) => ({ id: u.id, name: u.fullName }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default loadUsersForRequests;

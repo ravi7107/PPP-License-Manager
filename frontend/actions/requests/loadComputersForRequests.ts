@@ -1,15 +1,17 @@
-import { action } from '@/lib/uibakery';
+import { getAssets } from '@/lib/api/assets.api';
+import { LookupOption } from '@/app/pages/requests/types';
 
-function loadComputersForRequests() {
-  return action('loadComputersForRequests', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      SELECT id, COALESCE(computer_name, asset_tag) AS name, asset_tag
-      FROM assets
-      WHERE deleted_at IS NULL
-      ORDER BY computer_name NULLS LAST, asset_tag;
-    `,
-  });
+async function loadComputersForRequests(): Promise<LookupOption[]> {
+  const rows = await getAssets();
+
+  return rows
+    .filter((a) => a.isActive)
+    .map((a) => ({
+      id: a.id,
+      name: a.hostName || a.assetName || a.assetTag,
+      asset_tag: a.assetTag,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default loadComputersForRequests;

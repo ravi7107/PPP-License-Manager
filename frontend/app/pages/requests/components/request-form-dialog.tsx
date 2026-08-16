@@ -54,7 +54,7 @@ const requestFormSchema = z
   .superRefine((values, ctx) => {
     const isSoftwareRequest = ['New License', 'Reallocation', 'Release', 'Temporary License Allocation'].includes(values.requestType);
     if (isSoftwareRequest && values.requestType !== 'Release' && !values.licenseInventoryId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a software license pool', path: ['licenseInventoryId'] });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a software title', path: ['licenseInventoryId'] });
     }
     if (values.allocationType === 'User' && !values.targetUserId) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a user', path: ['targetUserId'] });
@@ -179,13 +179,13 @@ export function RequestFormDialog({
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select software license pool" />
+                          <SelectValue placeholder="Select software" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {softwareOptions.map((s) => (
                           <SelectItem key={s.license_inventory_id} value={String(s.license_inventory_id)}>
-                            {s.software_name} ({s.vendor}) — {s.available_licenses}/{s.total_seats} available
+                            {s.software_name} ({s.vendor})
                           </SelectItem>
                         ))}
                       </SelectContent>
