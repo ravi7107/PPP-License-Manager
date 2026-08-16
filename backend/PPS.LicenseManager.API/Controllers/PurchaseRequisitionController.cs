@@ -103,6 +103,18 @@ public class PurchaseRequisitionController : BaseController
         }
     }
 
+    // Not scoped to a specific PR id (unlike approver-candidates above) -
+    // the create/edit form doesn't have a saved PR id yet when a Draft is
+    // first being composed. companyId is optional; when provided,
+    // narrows to that company's own contacts plus org-wide ones.
+    [HttpGet("initiator-candidates")]
+    public async Task<IActionResult> GetInitiatorCandidates([FromQuery] int? companyId)
+    {
+        var result = await _service.GetInitiatorCandidatesAsync(companyId);
+
+        return Success(result, "Initiator candidates retrieved successfully.");
+    }
+
 
     // =========================================================
     // GET BY ID

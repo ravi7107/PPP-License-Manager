@@ -23,6 +23,12 @@ public class PurchaseRequisitionResponse
     public int RequestedByUserId { get; set; }
     public string RequestedByUserName { get; set; } = string.Empty;
 
+    // Optional - who this PR is being raised on behalf of, when that's a
+    // different person from the logged-in requester. Purely informational
+    // (see PurchaseRequisition.InitiatedByContactId's model comment).
+    public int? InitiatedByContactId { get; set; }
+    public string? InitiatedByContactName { get; set; }
+
     public string Title { get; set; } = string.Empty;
     public string? Justification { get; set; }
 

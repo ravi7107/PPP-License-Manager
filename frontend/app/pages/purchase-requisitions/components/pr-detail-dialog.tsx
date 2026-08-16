@@ -181,6 +181,9 @@ export function PrDetailDialog({
           </DialogTitle>
           <DialogDescription>
             Requested by {pr.requestedByUserName} for {pr.companyName}
+            {pr.initiatedByContactName
+              ? ` · Initiated by: ${pr.initiatedByContactName}`
+              : ''}
             {pr.vendorName ? ` · Vendor: ${pr.vendorName}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -345,6 +348,11 @@ export function PrDetailDialog({
                 >
                   <span>
                     Stage {s.stepOrder}: {s.assignedApproverUserName}
+                    {s.approverType === 'Contact' ? (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (external)
+                      </span>
+                    ) : null}
                     {s.stepOrder === pr.currentApprovalStepOrder ? (
                       <span className="ml-2 text-xs text-muted-foreground">
                         (current)

@@ -15,6 +15,8 @@ import AllocationsPage from '@/app/pages/allocations/allocations-page';
 import PurchaseRequisitionsPage from '@/app/pages/purchase-requisitions/purchase-requisitions-page';
 import PendingApprovalsPage from '@/app/pages/purchase-requisitions/pending-approvals-page';
 import PrPublicApprovalPage from '@/app/pages/purchase-requisitions/pr-public-approval-page';
+import PurchaseRequisitionContactsPage from '@/app/pages/directory/purchase-requisition-contacts-page';
+import PurchaseRequisitionSettingsPage from '@/app/pages/settings/purchase-requisition-settings-page';
 import AvailabilityPage from '@/app/pages/availability/availability-page';
 import ApprovalsPage from '@/app/pages/requests/approvals-page';
 import MyRequestsPage from '@/app/pages/requests/my-requests-page';
@@ -62,6 +64,8 @@ function App() {
           <Route path="allocations" element={<AllocationsPage />} />
           <Route path="purchase-requisitions" element={<PurchaseRequisitionsPage />} />
           <Route path="purchase-requisition-approvals" element={<PendingApprovalsPage />} />
+          <Route path="purchase-requisition-contacts" element={<PurchaseRequisitionContactsPage />} />
+          <Route path="purchase-requisition-settings" element={<PurchaseRequisitionSettingsPage />} />
           <Route path="availability" element={<AvailabilityPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="my-requests" element={<MyRequestsPage />} />

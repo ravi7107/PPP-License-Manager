@@ -77,12 +77,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.Company)
             .Include(x => x.Department)
             .Include(x => x.RequestedByUser)
+            .Include(x => x.InitiatedByContact)
             .Include(x => x.Vendor)
             .Include(x => x.LineItems)
             .Include(x => x.Attachments)
                 .ThenInclude(x => x.UploadedByUser)
             .Include(x => x.ApprovalSteps)
-                .ThenInclude(x => x.AssignedApproverUser);
+                .ThenInclude(x => x.AssignedApproverUser)
+            .Include(x => x.ApprovalSteps)
+                .ThenInclude(x => x.AssignedApproverContact);
     }
 
     private static PurchaseRequisitionResponse Map(
@@ -105,6 +108,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             RequestedByUserId = r.RequestedByUserId,
             RequestedByUserName = r.RequestedByUser?.FullName ?? string.Empty,
+
+            InitiatedByContactId = r.InitiatedByContactId,
+            InitiatedByContactName = r.InitiatedByContact?.FullName,
 
             Title = r.Title,
             Justification = r.Justification,
@@ -171,8 +177,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                     Id = s.Id,
                     StepOrder = s.StepOrder,
                     AssignedApproverUserId = s.AssignedApproverUserId,
-                    AssignedApproverUserName =
-                        s.AssignedApproverUser?.FullName ?? string.Empty,
+                    AssignedApproverContactId = s.AssignedApproverContactId,
+                    ApproverType = s.AssignedApproverContactId.HasValue ? "Contact" : "User",
+                    AssignedApproverUserName = s.AssignedApproverContactId.HasValue
+                        ? (s.AssignedApproverContact?.FullName ?? string.Empty)
+                        : (s.AssignedApproverUser?.FullName ?? string.Empty),
+                    AssignedApproverEmail = s.AssignedApproverContactId.HasValue
+                        ? s.AssignedApproverContact?.Email
+                        : s.AssignedApproverUser?.Email,
                     Status = s.Status,
                     DecidedAt = s.DecidedAt,
                     Remarks = s.Remarks
@@ -301,6 +313,29 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         return (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total);
     }
 
+    /*
+     * "Initiated by" is optional, purely informational metadata (see
+     * PurchaseRequisition.InitiatedByContactId's model comment) - when
+     * set, it must reference an active Contact whose ContactType allows
+     * initiating ("Initiator" or "Both"), same active/type-scoping
+     * convention as approver validation below.
+     */
+    private async Task<int?> ValidateInitiatorContactAsync(int? initiatedByContactId)
+    {
+        if (!initiatedByContactId.HasValue)
+            return null;
+
+        var contact = await _context.PurchaseRequisitionContacts
+            .FirstOrDefaultAsync(c => c.Id == initiatedByContactId.Value);
+
+        if (contact == null || !contact.IsActive ||
+            (contact.ContactType != "Initiator" && contact.ContactType != "Both"))
+            throw new InvalidOperationException(
+                "The selected initiator contact does not exist or is inactive.");
+
+        return contact.Id;
+    }
+
     public async Task<PurchaseRequisitionResponse> CreateDraftAsync(
         SavePurchaseRequisitionRequest request,
         int requestedByUserId)
@@ -317,11 +352,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
 
+        var initiatedByContactId = await ValidateInitiatorContactAsync(request.InitiatedByContactId);
+
         var record = new Models.PurchaseRequisition
         {
             CompanyId = company.Id,
             VendorId = vendor?.Id,
             RequestedByUserId = requestedByUserId,
+            InitiatedByContactId = initiatedByContactId,
             Title = request.Title,
             Justification = request.Justification,
             Status = "Draft",
@@ -378,6 +416,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total) =
             await ValidateAndComputeAsync(request, lineItems);
+
+        record.InitiatedByContactId = await ValidateInitiatorContactAsync(request.InitiatedByContactId);
 
         record.CompanyId = company.Id;
         record.VendorId = vendor?.Id;
@@ -696,23 +736,62 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new InvalidOperationException(
                 "Approval stages must be numbered 1..N with no gaps or repeats.");
 
-        var approverIds = stages.Select(s => s.ApproverUserId).ToList();
+        // Each stage's approver is either an existing system User or a
+        // standalone Contact (external, no login) - exactly one of
+        // ApproverUserId/ApproverContactId must be set, mirroring the DB
+        // CHECK constraint on PurchaseRequisitionApprovalSteps (data
+        // annotations can't express an XOR across two nullable properties).
+        foreach (var stage in stages)
+        {
+            var hasUser = stage.ApproverUserId.HasValue;
+            var hasContact = stage.ApproverContactId.HasValue;
 
-        if (approverIds.Contains(requestedByUserId))
+            if (hasUser == hasContact)
+                throw new InvalidOperationException(
+                    $"Stage {stage.StepOrder} must have exactly one approver selected.");
+        }
+
+        var approverUserIds = stages
+            .Where(s => s.ApproverUserId.HasValue)
+            .Select(s => s.ApproverUserId!.Value)
+            .ToList();
+
+        var approverContactIds = stages
+            .Where(s => s.ApproverContactId.HasValue)
+            .Select(s => s.ApproverContactId!.Value)
+            .ToList();
+
+        if (approverUserIds.Contains(requestedByUserId))
             throw new InvalidOperationException(
                 "You cannot assign yourself as an approver on your own requisition.");
 
         var approvers = await _context.Users
-            .Where(u => approverIds.Contains(u.Id))
+            .Where(u => approverUserIds.Contains(u.Id))
+            .ToListAsync();
+
+        var approverContacts = await _context.PurchaseRequisitionContacts
+            .Where(c => approverContactIds.Contains(c.Id))
             .ToListAsync();
 
         foreach (var stage in stages)
         {
-            var approver = approvers.FirstOrDefault(u => u.Id == stage.ApproverUserId);
+            if (stage.ApproverUserId.HasValue)
+            {
+                var approver = approvers.FirstOrDefault(u => u.Id == stage.ApproverUserId.Value);
 
-            if (approver == null || !approver.IsActive)
-                throw new InvalidOperationException(
-                    $"The approver selected for stage {stage.StepOrder} is invalid or inactive.");
+                if (approver == null || !approver.IsActive)
+                    throw new InvalidOperationException(
+                        $"The approver selected for stage {stage.StepOrder} is invalid or inactive.");
+            }
+            else
+            {
+                var contact = approverContacts.FirstOrDefault(c => c.Id == stage.ApproverContactId!.Value);
+
+                if (contact == null || !contact.IsActive ||
+                    (contact.ContactType != "Approver" && contact.ContactType != "Both"))
+                    throw new InvalidOperationException(
+                        $"The approver selected for stage {stage.StepOrder} is invalid or inactive.");
+            }
         }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -732,17 +811,36 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             foreach (var stage in stages)
             {
-                var approver = approvers.First(u => u.Id == stage.ApproverUserId);
+                PurchaseRequisitionApprovalStep step;
 
-                var step = new PurchaseRequisitionApprovalStep
+                if (stage.ApproverUserId.HasValue)
                 {
-                    PurchaseRequisitionId = record.Id,
-                    StepOrder = stage.StepOrder,
-                    AssignedApproverUserId = stage.ApproverUserId,
-                    AssignedApproverUser = approver,
-                    Status = "Pending",
-                    CreatedAt = DateTime.UtcNow
-                };
+                    var approver = approvers.First(u => u.Id == stage.ApproverUserId.Value);
+
+                    step = new PurchaseRequisitionApprovalStep
+                    {
+                        PurchaseRequisitionId = record.Id,
+                        StepOrder = stage.StepOrder,
+                        AssignedApproverUserId = approver.Id,
+                        AssignedApproverUser = approver,
+                        Status = "Pending",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
+                else
+                {
+                    var contact = approverContacts.First(c => c.Id == stage.ApproverContactId!.Value);
+
+                    step = new PurchaseRequisitionApprovalStep
+                    {
+                        PurchaseRequisitionId = record.Id,
+                        StepOrder = stage.StepOrder,
+                        AssignedApproverContactId = contact.Id,
+                        AssignedApproverContact = contact,
+                        Status = "Pending",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
 
                 _context.PurchaseRequisitionApprovalSteps.Add(step);
                 createdSteps.Add(step);
@@ -855,12 +953,64 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .OrderBy(u => u.FullName)
             .ToListAsync();
 
-        return candidates.Select(u => new PurchaseRequisitionApproverCandidateResponse
+        var userCandidates = candidates.Select(u => new PurchaseRequisitionApproverCandidateResponse
         {
             Id = u.Id,
             FullName = u.FullName,
             Email = u.Email,
-            DepartmentName = u.Department?.DepartmentName
+            DepartmentName = u.Department?.DepartmentName,
+            CandidateType = "User"
+        });
+
+        // External approvers (Gmail/Office 365, no login) - scoped the
+        // same way as the requesting-user's own company above, plus
+        // org-wide contacts (CompanyId == null).
+        var contacts = await _context.PurchaseRequisitionContacts
+            .Where(c =>
+                c.IsActive &&
+                (c.ContactType == "Approver" || c.ContactType == "Both") &&
+                (c.CompanyId == companyId || c.CompanyId == null))
+            .OrderBy(c => c.FullName)
+            .ToListAsync();
+
+        var contactCandidates = contacts.Select(c => new PurchaseRequisitionApproverCandidateResponse
+        {
+            Id = c.Id,
+            FullName = c.FullName,
+            Email = c.Email,
+            DepartmentName = null,
+            CandidateType = "Contact"
+        });
+
+        return userCandidates.Concat(contactCandidates);
+    }
+
+    /*
+     * Contacts only (ContactType "Initiator" or "Both") - "Initiated by"
+     * is purely informational metadata attributable to someone with no
+     * login of their own (see PurchaseRequisition.InitiatedByContactId's
+     * model comment); there is no equivalent "initiate on behalf of
+     * another User" concept, so unlike GetApproverCandidatesAsync this
+     * never includes system Users.
+     */
+    public async Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
+        GetInitiatorCandidatesAsync(int? companyId)
+    {
+        var contacts = await _context.PurchaseRequisitionContacts
+            .Where(c =>
+                c.IsActive &&
+                (c.ContactType == "Initiator" || c.ContactType == "Both") &&
+                (c.CompanyId == companyId || c.CompanyId == null))
+            .OrderBy(c => c.FullName)
+            .ToListAsync();
+
+        return contacts.Select(c => new PurchaseRequisitionApproverCandidateResponse
+        {
+            Id = c.Id,
+            FullName = c.FullName,
+            Email = c.Email,
+            DepartmentName = null,
+            CandidateType = "Contact"
         });
     }
 
@@ -917,6 +1067,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var record = await _context.PurchaseRequisitions
             .Include(x => x.ApprovalSteps)
                 .ThenInclude(s => s.AssignedApproverUser)
+            .Include(x => x.ApprovalSteps)
+                .ThenInclude(s => s.AssignedApproverContact)
             .Include(x => x.RequestedByUser)
             .FirstOrDefaultAsync(x => x.Id == id);
 
@@ -936,7 +1088,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         if (currentStep.AssignedApproverUserId != decidingUserId)
             throw new UnauthorizedAccessException(
-                "You are not the assigned approver for the current stage of this purchase requisition.");
+                currentStep.AssignedApproverContactId.HasValue
+                    ? "This stage is assigned to an external contact and can only be decided " +
+                      "via the secure link sent to their email."
+                    : "You are not the assigned approver for the current stage of this purchase requisition.");
 
         if (currentStep.Status != "Pending")
             throw new InvalidOperationException(
@@ -977,7 +1132,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         PurchaseRequisitionApprovalStep currentStep,
         bool approve,
         string? remarks,
-        int decidingUserId,
+        int? decidingUserId,
         string performedVia,
         string pdfStorageRootPath)
     {
@@ -985,12 +1140,26 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         currentStep.DecidedAt = now;
         currentStep.Remarks = remarks;
 
-        int notifyUserId;
+        // Null when the next/requesting party has no in-app account to
+        // notify (e.g. the requester slot is always a User so this stays
+        // non-null there, but a Contact-assigned next approval stage has
+        // no User row - see the "advance to next stage" branch below).
+        int? notifyUserId;
         string notifyType;
         string notifyTitle;
         string notifyMessage;
 
         var prLabel = record.PrNumber ?? $"#{record.Id}";
+
+        // A Contact-decided step has no PerformedByUserId to trace the
+        // decision back to (Contacts aren't Users) - fold their identity
+        // into the audit log's Details text instead, so the trail stays
+        // complete. A User-decided step is already fully traceable via
+        // PerformedByUserId, so this is left out there to avoid noise.
+        var deciderSuffix = currentStep.AssignedApproverContactId.HasValue
+            ? $" (decided by {currentStep.AssignedApproverContact?.FullName ?? "external contact"} " +
+              $"<{currentStep.AssignedApproverContact?.Email}>)"
+            : string.Empty;
 
         PurchaseRequisitionApprovalStep? stepToEmailForApproval = null;
         var sendRequesterOutcomeEmail = false;
@@ -1017,7 +1186,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 record.UpdatedAt = now;
 
                 AddAuditLog(record.Id, "FullyApproved", decidingUserId,
-                    $"Stage {currentStep.StepOrder} approved - all stages complete.",
+                    $"Stage {currentStep.StepOrder} approved - all stages complete.{deciderSuffix}",
                     performedVia);
 
                 notifyUserId = record.RequestedByUserId;
@@ -1034,7 +1203,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 record.UpdatedAt = now;
 
                 AddAuditLog(record.Id, "StepApproved", decidingUserId,
-                    $"Stage {currentStep.StepOrder} approved - advanced to stage {nextStep.StepOrder}.",
+                    $"Stage {currentStep.StepOrder} approved - advanced to stage {nextStep.StepOrder}.{deciderSuffix}",
                     performedVia);
 
                 notifyUserId = nextStep.AssignedApproverUserId;
@@ -1060,7 +1229,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             }
 
             AddAuditLog(record.Id, "StepRejected", decidingUserId,
-                $"Stage {currentStep.StepOrder} rejected: {remarks}",
+                $"Stage {currentStep.StepOrder} rejected: {remarks}{deciderSuffix}",
                 performedVia);
 
             notifyUserId = record.RequestedByUserId;
@@ -1073,8 +1242,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         await _context.SaveChangesAsync();
 
-        AddNotification(notifyUserId, notifyType, notifyTitle, notifyMessage, record.Id);
-        await _context.SaveChangesAsync();
+        // Contact-assigned steps/requesters have no User row to notify
+        // in-app (Notification.UserId is a non-nullable FK) - the emailed
+        // approval-request/outcome link below is their only notification.
+        if (notifyUserId.HasValue)
+        {
+            AddNotification(notifyUserId.Value, notifyType, notifyTitle, notifyMessage, record.Id);
+            await _context.SaveChangesAsync();
+        }
 
         // Best-effort, same as the email helpers below - a PDF generation
         // failure must never undo a decision that's already been
@@ -1185,6 +1360,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.AssignedApproverUser)
             .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.AssignedApproverContact)
+            .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.PurchaseRequisition)
                     .ThenInclude(r => r.Company)
             .Include(t => t.ApprovalStep)
@@ -1197,6 +1374,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 .ThenInclude(s => s.PurchaseRequisition)
                     .ThenInclude(r => r.ApprovalSteps)
                         .ThenInclude(s => s.AssignedApproverUser)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.ApprovalSteps)
+                        .ThenInclude(s => s.AssignedApproverContact)
             .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
     }
 
@@ -1223,7 +1404,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             StepOrder = step.StepOrder,
             RequiredApprovalStageCount = record.RequiredApprovalStageCount,
-            ApproverName = step.AssignedApproverUser?.FullName ?? string.Empty,
+            ApproverName = step.AssignedApproverContactId.HasValue
+                ? (step.AssignedApproverContact?.FullName ?? string.Empty)
+                : (step.AssignedApproverUser?.FullName ?? string.Empty),
 
             PurchaseRequisitionStatus = record.Status,
             StepStatus = step.Status,
@@ -1261,7 +1444,22 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         Models.PurchaseRequisition record,
         PurchaseRequisitionApprovalStep step)
     {
-        if (step.AssignedApproverUser == null)
+        // The approver is either a system User or a standalone Contact
+        // (external, no login) - resolve whichever one is actually
+        // assigned to this step. Both navigations are loaded by SubmitAsync
+        // (freshly-constructed step) and FindTokenAsync (re-issued for a
+        // later stage), so a null here really does mean "not loaded" or
+        // "neither was ever assigned" (shouldn't happen given the DB CHECK
+        // constraint), not just "this step happens to be Contact-assigned".
+        string? approverName = step.AssignedApproverContactId.HasValue
+            ? step.AssignedApproverContact?.FullName
+            : step.AssignedApproverUser?.FullName;
+
+        string? approverEmail = step.AssignedApproverContactId.HasValue
+            ? step.AssignedApproverContact?.Email
+            : step.AssignedApproverUser?.Email;
+
+        if (string.IsNullOrWhiteSpace(approverEmail))
         {
             _logger.LogWarning(
                 "Skipped issuing an approval email for purchase requisition {PurchaseRequisitionId} " +
@@ -1286,11 +1484,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             var link = $"{_publicBaseUrl}/pr-approval/{rawToken}";
             var prLabel = record.PrNumber ?? $"#{record.Id}";
-            var approver = step.AssignedApproverUser;
+            var approverDisplayName = string.IsNullOrWhiteSpace(approverName)
+                ? "there"
+                : approverName;
 
             var subject = $"Approval needed: Purchase Requisition {prLabel}";
             var body =
-                $"<p>Hi {System.Net.WebUtility.HtmlEncode(approver.FullName)},</p>" +
+                $"<p>Hi {System.Net.WebUtility.HtmlEncode(approverDisplayName)},</p>" +
                 $"<p>{System.Net.WebUtility.HtmlEncode(record.RequestedByUser?.FullName ?? "A colleague")} " +
                 $"has submitted purchase requisition <strong>{System.Net.WebUtility.HtmlEncode(prLabel)}</strong> " +
                 $"(\"{System.Net.WebUtility.HtmlEncode(record.Title)}\") for " +
@@ -1300,7 +1500,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 $"<p>This link is valid for {ApprovalTokenValidityDays} days and can only be used once. " +
                 "If it has expired, sign in to the app and check your Pending Approvals page instead.</p>";
 
-            await _emailService.SendAsync(approver.Email, approver.FullName, subject, body);
+            await _emailService.SendAsync(approverEmail, approverDisplayName, subject, body);
         }
         catch (Exception ex)
         {

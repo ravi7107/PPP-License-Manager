@@ -48,6 +48,14 @@ public interface IPurchaseRequisitionService
     Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
         GetApproverCandidatesAsync(int purchaseRequisitionId, int requestingUserId);
 
+    // Contacts (ContactType "Initiator" or "Both") for the optional
+    // "Initiated by" picker on the PR create/edit form. Not scoped to a
+    // specific PR (no company is known until a Company is picked on the
+    // form) - org-wide (CompanyId == null) plus company-scoped contacts
+    // for the given company, when provided.
+    Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
+        GetInitiatorCandidatesAsync(int? companyId);
+
     Task<IEnumerable<PurchaseRequisitionPendingApprovalResponse>>
         GetPendingApprovalsAsync(int approverUserId);
 

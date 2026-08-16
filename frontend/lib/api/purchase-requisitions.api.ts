@@ -39,11 +39,19 @@ export interface PurchaseRequisitionAttachment {
   uploadedAt: string;
 }
 
+// "User" (an existing system User) or "Contact" (a standalone, no-login
+// PurchaseRequisitionContact - identified by email only, can only decide
+// their step via the emailed approval link).
+export type ApproverType = 'User' | 'Contact';
+
 export interface PurchaseRequisitionApprovalStep {
   id: number;
   stepOrder: number;
-  assignedApproverUserId: number;
+  assignedApproverUserId: number | null;
+  assignedApproverContactId: number | null;
+  approverType: ApproverType;
   assignedApproverUserName: string;
+  assignedApproverEmail: string | null;
   status: ApprovalStepStatus;
   decidedAt: string | null;
   remarks: string | null;
@@ -64,6 +72,10 @@ export interface PurchaseRequisition {
   vendorName: string | null;
   requestedByUserId: number;
   requestedByUserName: string;
+  // Optional - who this PR is being raised on behalf of, when that's a
+  // different person from the logged-in requester. Purely informational.
+  initiatedByContactId: number | null;
+  initiatedByContactName: string | null;
   title: string;
   justification: string | null;
   status: PurchaseRequisitionStatus;
@@ -118,6 +130,9 @@ export interface SavePurchaseRequisitionRequest {
   vendorId?: number | null;
   title: string;
   justification?: string | null;
+  // Optional - who this PR is being raised on behalf of, when that's a
+  // different person from the logged-in requester. Purely informational.
+  initiatedByContactId?: number | null;
   currency?: string | null;
   // Optional - null/omitted defaults to 9% each (18% combined GST) on the
   // backend, but changeable per PR.
@@ -128,7 +143,10 @@ export interface SavePurchaseRequisitionRequest {
 
 export interface ApprovalStageAssignment {
   stepOrder: number;
-  approverUserId: number;
+  // Exactly one of these must be set - an existing system User or a
+  // standalone Contact (external, no login).
+  approverUserId?: number | null;
+  approverContactId?: number | null;
 }
 
 export interface SubmitPurchaseRequisitionRequest {
@@ -140,6 +158,7 @@ export interface PurchaseRequisitionApproverCandidate {
   fullName: string;
   email: string;
   departmentName: string | null;
+  candidateType: ApproverType;
 }
 
 export interface PurchaseRequisitionPendingApproval {
@@ -262,6 +281,24 @@ export async function getApproverCandidates(
   const response = await api.get<
     ApiResponse<PurchaseRequisitionApproverCandidate[]>
   >(`/PurchaseRequisition/${id}/approver-candidates`);
+
+  return response.data.data;
+}
+
+// Not scoped to a specific PR id (unlike getApproverCandidates) - the
+// create/edit form doesn't have a saved PR id yet when a Draft is first
+// being composed. companyId is optional; when provided, narrows to that
+// company's own contacts plus org-wide ones. Contacts only (ContactType
+// "Initiator" or "Both") - there's no equivalent "on behalf of another
+// User" concept, so this never includes system Users.
+export async function getInitiatorCandidates(
+  companyId?: number | null
+): Promise<PurchaseRequisitionApproverCandidate[]> {
+  const response = await api.get<
+    ApiResponse<PurchaseRequisitionApproverCandidate[]>
+  >('/PurchaseRequisition/initiator-candidates', {
+    params: companyId ? { companyId } : undefined,
+  });
 
   return response.data.data;
 }

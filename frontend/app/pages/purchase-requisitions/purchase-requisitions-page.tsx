@@ -23,6 +23,7 @@ import {
   deletePurchaseRequisitionAttachment,
   deletePurchaseRequisitionDraft,
   getApproverCandidates,
+  getInitiatorCandidates,
   getMyPurchaseRequisitions,
   getPurchaseRequisition,
   PurchaseRequisition,
@@ -57,6 +58,9 @@ export default function PurchaseRequisitionsPage() {
   const [entities, setEntities] = useState<Company[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [approverCandidates, setApproverCandidates] = useState<
+    PurchaseRequisitionApproverCandidate[]
+  >([]);
+  const [initiatorCandidates, setInitiatorCandidates] = useState<
     PurchaseRequisitionApproverCandidate[]
   >([]);
 
@@ -105,6 +109,9 @@ export default function PurchaseRequisitionsPage() {
     void getVendors()
       .then(setVendors)
       .catch(() => setVendors([]));
+    void getInitiatorCandidates()
+      .then(setInitiatorCandidates)
+      .catch(() => setInitiatorCandidates([]));
   }, [loadList]);
 
   const filteredRequisitions = useMemo(() => {
@@ -389,6 +396,7 @@ export default function PurchaseRequisitionsPage() {
         purchaseRequisition={editingPr}
         entities={entities}
         vendors={vendors}
+        initiatorCandidates={initiatorCandidates}
         saving={saving}
         error={formError}
         onSubmit={handleFormSubmit}

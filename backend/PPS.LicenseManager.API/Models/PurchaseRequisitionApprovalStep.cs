@@ -10,6 +10,15 @@ namespace PPS.LicenseManager.API.Models;
  * (Pending) at a time; PurchaseRequisition.CurrentApprovalStepOrder tracks
  * which one. A rejection at any step immediately rejects the whole PR and
  * flips every still-Pending step to Skipped.
+ *
+ * The approver is EITHER an existing system User (AssignedApproverUserId)
+ * OR a standalone PurchaseRequisitionContact with no login
+ * (AssignedApproverContactId) - exactly one of the two is set, enforced by
+ * a DB CHECK constraint (see the AddPurchaseRequisitionContactsAndEmail
+ * migration). A Contact-assigned step can only ever be decided via the
+ * emailed token link (PurchaseRequisitionApprovalToken /
+ * DecideStepByTokenAsync) - there is no authenticated "self" for it to log
+ * in as, so the authenticated decision endpoint always rejects it.
  */
 public class PurchaseRequisitionApprovalStep
 {
@@ -22,10 +31,13 @@ public class PurchaseRequisitionApprovalStep
 
     public int StepOrder { get; set; }
 
-    [Required]
-    public int AssignedApproverUserId { get; set; }
+    public int? AssignedApproverUserId { get; set; }
 
-    public User AssignedApproverUser { get; set; } = null!;
+    public User? AssignedApproverUser { get; set; }
+
+    public int? AssignedApproverContactId { get; set; }
+
+    public PurchaseRequisitionContact? AssignedApproverContact { get; set; }
 
     // Pending, Approved, Rejected, Skipped
     [Required]

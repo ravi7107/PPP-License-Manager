@@ -49,6 +49,17 @@ public class PurchaseRequisition
 
     public User RequestedByUser { get; set; } = null!;
 
+    // Optional - who this PR is being raised on behalf of / who identified
+    // the need, when that's a different person from RequestedByUser (the
+    // actual logged-in operator who filled in the form - there's no public
+    // PR-creation flow, only the public approval-link flow, so someone with
+    // a login always has to be the one who submits it). Purely informational
+    // metadata, shown on the PR and in the future Finance email; has no
+    // effect on the approval routing itself.
+    public int? InitiatedByContactId { get; set; }
+
+    public PurchaseRequisitionContact? InitiatedByContact { get; set; }
+
     [Required]
     [MaxLength(200)]
     public string Title { get; set; } = string.Empty;
@@ -103,6 +114,25 @@ public class PurchaseRequisition
     public string? PdfPath { get; set; }
 
     public DateTime? PdfGeneratedAt { get; set; }
+
+    // PO tracking (Phase 2 feature - schema added now to avoid a second
+    // migration). Set once Finance generates the PO in their external
+    // system (e.g. Tally) and uploads the PO copy back onto this record via
+    // the authenticated web app. None of these 4 columns are protected by
+    // the immutability trigger, so they stay writable after Status becomes
+    // Approved - that's the point, PO generation always happens after
+    // approval.
+    [MaxLength(50)]
+    public string? PoNumber { get; set; }
+
+    [MaxLength(300)]
+    public string? PoDocumentPath { get; set; }
+
+    public DateTime? PoUploadedAt { get; set; }
+
+    public int? PoUploadedByUserId { get; set; }
+
+    public User? PoUploadedByUser { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

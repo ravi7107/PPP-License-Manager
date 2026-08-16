@@ -35,4 +35,23 @@ public class LogOnlyEmailService : IEmailService
 
         return Task.CompletedTask;
     }
+
+    public Task SendWithAttachmentsAsync(
+        string toEmail,
+        string toName,
+        string subject,
+        string htmlBody,
+        IReadOnlyList<EmailAttachment> attachments,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "[EMAIL STUB] Would send email to {ToName} <{ToEmail}> - Subject: {Subject} - Attachments: {AttachmentNames}\n{HtmlBody}",
+            toName,
+            toEmail,
+            subject,
+            string.Join(", ", attachments.Select(a => a.FileName)),
+            htmlBody);
+
+        return Task.CompletedTask;
+    }
 }

@@ -27,8 +27,28 @@ import {
   SubmitPurchaseRequisitionRequest,
 } from '@/lib/api/purchase-requisitions.api';
 
+// Encodes which kind of candidate is selected ("user:5" / "contact:3") so
+// a single <Select> can offer both system Users and standalone Contacts
+// (external, no login) without the two id spaces colliding.
 interface StageRow {
-  approverUserId: string;
+  candidateKey: string;
+}
+
+function candidateKey(
+  candidate: PurchaseRequisitionApproverCandidate
+): string {
+  return `${candidate.candidateType === 'Contact' ? 'contact' : 'user'}:${candidate.id}`;
+}
+
+function parseCandidateKey(
+  key: string
+): { approverUserId?: number; approverContactId?: number } {
+  const [kind, rawId] = key.split(':');
+  const id = Number(rawId);
+
+  return kind === 'contact'
+    ? { approverContactId: id }
+    : { approverUserId: id };
 }
 
 interface SubmitPrDialogProps {
@@ -52,25 +72,25 @@ export function SubmitPrDialog({
   error,
   onSubmit,
 }: SubmitPrDialogProps) {
-  const [stages, setStages] = useState<StageRow[]>([{ approverUserId: '' }]);
+  const [stages, setStages] = useState<StageRow[]>([{ candidateKey: '' }]);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setStages([{ approverUserId: '' }]);
+      setStages([{ candidateKey: '' }]);
       setLocalError(null);
     }
   }, [open, purchaseRequisition]);
 
-  const updateStage = (index: number, approverUserId: string) => {
+  const updateStage = (index: number, key: string) => {
     setStages((prev) =>
-      prev.map((s, i) => (i === index ? { approverUserId } : s))
+      prev.map((s, i) => (i === index ? { candidateKey: key } : s))
     );
   };
 
   const addStage = () => {
     if (stages.length >= MAX_STAGES) return;
-    setStages((prev) => [...prev, { approverUserId: '' }]);
+    setStages((prev) => [...prev, { candidateKey: '' }]);
   };
 
   const removeStage = (index: number) => {
@@ -80,13 +100,13 @@ export function SubmitPrDialog({
   const handleSubmit = async () => {
     setLocalError(null);
 
-    if (stages.some((s) => !s.approverUserId)) {
+    if (stages.some((s) => !s.candidateKey)) {
       setLocalError('Select an approver for every stage.');
       return;
     }
 
-    const approverIds = stages.map((s) => s.approverUserId);
-    if (new Set(approverIds).size !== approverIds.length) {
+    const keys = stages.map((s) => s.candidateKey);
+    if (new Set(keys).size !== keys.length) {
       setLocalError('Each stage must have a different approver.');
       return;
     }
@@ -94,7 +114,7 @@ export function SubmitPrDialog({
     await onSubmit({
       approvalStages: stages.map((s, index) => ({
         stepOrder: index + 1,
-        approverUserId: Number(s.approverUserId),
+        ...parseCandidateKey(s.candidateKey),
       })),
     });
   };
@@ -124,7 +144,7 @@ export function SubmitPrDialog({
               <div className="flex-1">
                 <Label className="text-xs">Stage {index + 1} Approver *</Label>
                 <Select
-                  value={stage.approverUserId}
+                  value={stage.candidateKey}
                   onValueChange={(value) => updateStage(index, value)}
                 >
                   <SelectTrigger className="mt-1">
@@ -137,9 +157,13 @@ export function SubmitPrDialog({
                       </div>
                     ) : (
                       candidates.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
+                        <SelectItem
+                          key={candidateKey(c)}
+                          value={candidateKey(c)}
+                        >
                           {c.fullName}
                           {c.departmentName ? ` (${c.departmentName})` : ''}
+                          {c.candidateType === 'Contact' ? ' (external)' : ''}
                         </SelectItem>
                       ))
                     )}

@@ -37,6 +37,7 @@ import { Company } from '@/lib/api/companies.api';
 import { Vendor } from '@/lib/api/vendors.api';
 import {
   PurchaseRequisition,
+  PurchaseRequisitionApproverCandidate,
   SavePurchaseRequisitionRequest,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -59,6 +60,11 @@ const prFormSchema = z.object({
   vendorId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
   justification: z.string().optional(),
+  // Optional - "" means no initiator contact selected. Purely
+  // informational metadata (see SavePurchaseRequisitionRequest's comment)
+  // - who this PR is being raised on behalf of, when different from the
+  // logged-in user filling in the form.
+  initiatedByContactId: z.string().optional(),
   currency: z.string().min(1).max(3).default('INR'),
   // Default to the standard 9% each (18% combined GST) - changeable.
   cgstPercent: z.coerce.number().min(0).max(100).default(9),
@@ -82,6 +88,7 @@ const EMPTY_FORM: PrFormValues = {
   vendorId: '',
   title: '',
   justification: '',
+  initiatedByContactId: '',
   currency: 'INR',
   cgstPercent: 9,
   sgstPercent: 9,
@@ -98,6 +105,9 @@ function toFormValues(pr: PurchaseRequisition | null): PrFormValues {
     vendorId: pr.vendorId ? String(pr.vendorId) : '',
     title: pr.title,
     justification: pr.justification ?? '',
+    initiatedByContactId: pr.initiatedByContactId
+      ? String(pr.initiatedByContactId)
+      : '',
     currency: pr.currency || 'INR',
     cgstPercent: pr.cgstPercent,
     sgstPercent: pr.sgstPercent,
@@ -120,6 +130,10 @@ interface PrFormDialogProps {
   purchaseRequisition: PurchaseRequisition | null;
   entities: Company[];
   vendors: Vendor[];
+  // Contacts (ContactType "Initiator" or "Both") for the optional
+  // "Initiated by" picker - not scoped to a specific PR, since a Draft
+  // may not exist yet when this form is first opened.
+  initiatorCandidates: PurchaseRequisitionApproverCandidate[];
   saving: boolean;
   error?: string | null;
   onSubmit: (values: SavePurchaseRequisitionRequest) => Promise<void>;
@@ -131,6 +145,7 @@ export function PrFormDialog({
   purchaseRequisition,
   entities,
   vendors,
+  initiatorCandidates,
   saving,
   error,
   onSubmit,
@@ -176,6 +191,9 @@ export function PrFormDialog({
       vendorId: values.vendorId ? Number(values.vendorId) : null,
       title: values.title,
       justification: values.justification || null,
+      initiatedByContactId: values.initiatedByContactId
+        ? Number(values.initiatedByContactId)
+        : null,
       currency: values.currency || 'INR',
       cgstPercent: values.cgstPercent ?? 9,
       sgstPercent: values.sgstPercent ?? 9,
@@ -299,6 +317,41 @@ export function PrFormDialog({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="initiatedByContactId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Initiated By (optional)</FormLabel>
+                  <Select
+                    value={field.value || 'none'}
+                    onValueChange={(value) =>
+                      field.onChange(value === 'none' ? '' : value)
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Raised for myself" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Raised for myself</SelectItem>
+                      {initiatorCandidates.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.fullName} ({c.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Who this requisition is being raised on behalf of, if
+                    different from you. Informational only.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

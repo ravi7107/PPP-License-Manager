@@ -8,8 +8,15 @@ public class ApprovalStageAssignment
     [Range(1, 3, ErrorMessage = "Approval stage order must be between 1 and 3.")]
     public int StepOrder { get; set; }
 
-    [Required]
-    public int ApproverUserId { get; set; }
+    // Exactly one of ApproverUserId / ApproverContactId must be set -
+    // validated in PurchaseRequisitionService.SubmitAsync (a data
+    // annotation can't express an XOR across two nullable properties
+    // cleanly). ApproverUserId targets an existing system User;
+    // ApproverContactId targets a standalone PurchaseRequisitionContact
+    // (external, no login - can only ever decide via the emailed link).
+    public int? ApproverUserId { get; set; }
+
+    public int? ApproverContactId { get; set; }
 }
 
 /*

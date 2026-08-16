@@ -29,6 +29,12 @@ public class SavePurchaseRequisitionRequest
 
     public string? Justification { get; set; }
 
+    // Optional - who this PR is being raised on behalf of, when that's a
+    // different person from the logged-in requester (see
+    // PurchaseRequisition.InitiatedByContactId's comment). Purely
+    // informational.
+    public int? InitiatedByContactId { get; set; }
+
     [MaxLength(3)]
     public string? Currency { get; set; }
 

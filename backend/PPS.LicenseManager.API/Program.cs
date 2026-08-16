@@ -206,11 +206,19 @@ builder.Services.AddScoped<
     IRequestService,
     RequestService>();
 
-// Log-only stub until real SMTP/API credentials are provided - see
-// LogOnlyEmailService's comment. Swap this one registration for a real
-// implementation when they're available; every caller already depends on
-// IEmailService, not this class.
-builder.Services.AddScoped<IEmailService, LogOnlyEmailService>();
+builder.Services.AddScoped<
+    IPurchaseRequisitionContactService,
+    PurchaseRequisitionContactService>();
+
+builder.Services.AddScoped<
+    IPurchaseRequisitionSettingsService,
+    PurchaseRequisitionSettingsService>();
+
+// Real SMTP sender (see SmtpEmailService's comment) - falls back to
+// logging if the Smtp config section is incomplete, so this is safe to
+// register even before real credentials are filled in. LogOnlyEmailService
+// itself is left in place, unregistered, in case it's ever needed again.
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
 var app = builder.Build();
 

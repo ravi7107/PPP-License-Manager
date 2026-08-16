@@ -13,7 +13,8 @@ import {
   Building,
   Landmark,
   Briefcase,
-  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight
+  ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight,
+  Contact, Settings
 } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
@@ -32,6 +33,8 @@ export const navItems: NavItem[] = [
   { key: 'allocations', label: 'Allocations', path: '/allocations', icon: Share2 },
   { key: 'purchaseRequisitions', label: 'Purchase Requisitions', path: '/purchase-requisitions', icon: ClipboardList },
   { key: 'purchaseRequisitionApprovals', label: 'PR Approvals', path: '/purchase-requisition-approvals', icon: ClipboardCheck },
+  { key: 'purchaseRequisitionContacts', label: 'PR Contacts', path: '/purchase-requisition-contacts', icon: Contact },
+  { key: 'purchaseRequisitionSettings', label: 'PR Settings', path: '/purchase-requisition-settings', icon: Settings },
   { key: 'availability', label: 'Resource Availability', path: '/availability', icon: UserX },
   { key: 'approvals', label: 'Approvals', path: '/approvals', icon: ClipboardCheck },
   { key: 'myRequests', label: 'My Requests', path: '/my-requests', icon: FileText },
@@ -66,7 +69,12 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
   { label: 'Assets', keys: ['hardware', 'licenses', 'allocations'] },
   {
     label: 'Procurement',
-    keys: ['purchaseRequisitions', 'purchaseRequisitionApprovals'],
+    keys: [
+      'purchaseRequisitions',
+      'purchaseRequisitionApprovals',
+      'purchaseRequisitionContacts',
+      'purchaseRequisitionSettings',
+    ],
   },
   {
     label: 'Management',

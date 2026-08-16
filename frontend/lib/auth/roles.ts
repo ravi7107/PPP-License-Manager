@@ -24,6 +24,8 @@ export type ModuleKey =
   | 'accessManagement'
   | 'purchaseRequisitions'
   | 'purchaseRequisitionApprovals'
+  | 'purchaseRequisitionContacts'
+  | 'purchaseRequisitionSettings'
   | 'vendors'
   | 'materialItemCategories'
   | 'materialItems'
@@ -165,6 +167,20 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'Team Lead',
     'Manager',
     'Employee',
+  ],
+
+  // Maintaining the Initiator/Approver contact list (external, no-login
+  // Gmail/Office 365 addresses) and the Finance notification email is an
+  // admin task - same access level as the other Directory admin modules
+  // (Departments/Entities/Clients/Vendors).
+  purchaseRequisitionContacts: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  purchaseRequisitionSettings: [
+    'Super Admin',
+    'IT Admin',
   ],
 
   // Material Movement Management masters - same access level as the other

@@ -74,6 +74,12 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<PurchaseRequisitionFinanceNotification> PurchaseRequisitionFinanceNotifications =>
         Set<PurchaseRequisitionFinanceNotification>();
 
+    public DbSet<PurchaseRequisitionContact> PurchaseRequisitionContacts =>
+        Set<PurchaseRequisitionContact>();
+
+    public DbSet<PurchaseRequisitionSettings> PurchaseRequisitionSettings =>
+        Set<PurchaseRequisitionSettings>();
+
     // Material Movement Management module
     public DbSet<MaterialItemCategory> MaterialItemCategories =>
         Set<MaterialItemCategory>();
@@ -589,6 +595,19 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(x => x.VendorId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional - informational only, see PurchaseRequisition.
+            // InitiatedByContactId's comment.
+            entity.HasOne(x => x.InitiatedByContact)
+                  .WithMany()
+                  .HasForeignKey(x => x.InitiatedByContactId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional - only set once Finance uploads the PO copy (Phase 2).
+            entity.HasOne(x => x.PoUploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.PoUploadedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PurchaseRequisitionLineItem>(entity =>
@@ -651,9 +670,21 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasForeignKey(x => x.PurchaseRequisitionId)
                   .OnDelete(DeleteBehavior.Cascade);
 
+            // Exactly one of AssignedApproverUser / AssignedApproverContact
+            // is set - enforced by a DB CHECK constraint added in the
+            // AddPurchaseRequisitionContactsAndEmail migration (data
+            // annotations can't express an XOR across two nullable FKs).
             entity.HasOne(x => x.AssignedApproverUser)
                   .WithMany()
                   .HasForeignKey(x => x.AssignedApproverUserId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .IsRequired(false);
+
+            entity.HasIndex(x => x.AssignedApproverContactId);
+
+            entity.HasOne(x => x.AssignedApproverContact)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssignedApproverContactId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -718,6 +749,40 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.SentByUser)
                   .WithMany()
                   .HasForeignKey(x => x.SentByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionContact>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ContactType)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Approver")
+                  .IsRequired();
+
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.ContactType);
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionSettings>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.HasOne(x => x.UpdatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UpdatedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
