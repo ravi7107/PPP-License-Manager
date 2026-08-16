@@ -22,17 +22,23 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
     private readonly IAssetAssignmentService _assetAssignmentService;
     private readonly IResourceAllocationService _resourceAllocationService;
     private readonly INotificationService _notificationService;
+    private readonly IMaterialMovementService _materialMovementService;
+    private readonly ILogger<AssetReallocationRequestService> _logger;
 
     public AssetReallocationRequestService(
         ApplicationDbContext context,
         IAssetAssignmentService assetAssignmentService,
         IResourceAllocationService resourceAllocationService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IMaterialMovementService materialMovementService,
+        ILogger<AssetReallocationRequestService> logger)
     {
         _context = context;
         _assetAssignmentService = assetAssignmentService;
         _resourceAllocationService = resourceAllocationService;
         _notificationService = notificationService;
+        _materialMovementService = materialMovementService;
+        _logger = logger;
     }
 
 
@@ -497,6 +503,39 @@ public class AssetReallocationRequestService : IAssetReallocationRequestService
             record.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            // Log a tracked Material Movement for the physical asset
+            // leaving/returning to the office on a Remote/WFH toggle, so
+            // "work from home" shows up as an inward/outward transaction
+            // instead of being invisible outside this module - per the
+            // user's decision, this bridges into the existing WFH toggle
+            // here rather than adding a separate WFH concept to Material
+            // Movement. Best-effort and never blocks the reallocation
+            // itself, which already committed above - a logging failure
+            // here must never undo an already-approved reallocation.
+            if (record.RequestType == "RemoteMode" || record.RequestType == "ReturnToOffice")
+            {
+                try
+                {
+                    var movementType = record.RequestType == "RemoteMode"
+                        ? "DirectOutward"
+                        : "DirectInward";
+
+                    var purpose = record.RequestType == "RemoteMode"
+                        ? $"Work From Home - {result.UserName} (Asset Reallocation Request #{record.Id})"
+                        : $"Returned to office - {result.UserName} (Asset Reallocation Request #{record.Id})";
+
+                    await _materialMovementService.CreateSystemLoggedMovementAsync(
+                        movementType, result.AssetId, result.UserId, purpose);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to log a Material Movement for asset reallocation " +
+                        "request {RequestId}'s {RequestType} action.",
+                        record.Id, record.RequestType);
+                }
+            }
 
             // The system moved to a new user - its installed
             // software/license seats should move with it, so one

@@ -16,11 +16,34 @@ export interface MaterialMovementItem {
   remarks: string | null;
 }
 
+export interface MaterialMovementApproval {
+  id: number;
+  stepOrder: number;
+  approverUserId: number | null;
+  approverUserName: string | null;
+  status: string;
+  actionedAt: string | null;
+  comments: string | null;
+}
+
+export interface MaterialMovementDispatch {
+  id: number;
+  dispatchedByUserId: number;
+  dispatchedByUserName: string;
+  dispatchedAt: string;
+  transporterId: number | null;
+  transporterName: string | null;
+  vehicleNumber: string | null;
+  gatePassNumber: string | null;
+  hasGatePassPdf: boolean;
+}
+
 export interface MaterialMovement {
   id: number;
   movementNumber: string | null;
   movementType: string;
   status: string;
+  currentApprovalStepOrder: number | null;
 
   fromCompanyId: number | null;
   fromCompanyName: string | null;
@@ -54,6 +77,8 @@ export interface MaterialMovement {
   updatedAt: string | null;
 
   items: MaterialMovementItem[];
+  approvals: MaterialMovementApproval[];
+  dispatch: MaterialMovementDispatch | null;
 }
 
 export interface MaterialMovementListItem {
@@ -182,4 +207,88 @@ export async function deleteMaterialMovement(
   id: number
 ): Promise<void> {
   await api.delete(`/MaterialMovement/${id}`);
+}
+
+// =========================================================
+// SUBMIT / APPROVE / REJECT
+// =========================================================
+
+export async function submitMaterialMovement(
+  id: number
+): Promise<MaterialMovement> {
+  const response = await api.post<ApiResponse<MaterialMovement>>(
+    `/MaterialMovement/${id}/submit`
+  );
+
+  return response.data.data;
+}
+
+export async function getPendingMyApproval(): Promise<
+  MaterialMovementListItem[]
+> {
+  const response = await api.get<ApiResponse<MaterialMovementListItem[]>>(
+    '/MaterialMovement/pending-my-approval'
+  );
+
+  return response.data.data;
+}
+
+export async function approveMaterialMovement(
+  id: number,
+  comments?: string | null
+): Promise<MaterialMovement> {
+  const response = await api.post<ApiResponse<MaterialMovement>>(
+    `/MaterialMovement/${id}/approve`,
+    { comments: comments ?? null }
+  );
+
+  return response.data.data;
+}
+
+export async function rejectMaterialMovement(
+  id: number,
+  comments?: string | null
+): Promise<MaterialMovement> {
+  const response = await api.post<ApiResponse<MaterialMovement>>(
+    `/MaterialMovement/${id}/reject`,
+    { comments: comments ?? null }
+  );
+
+  return response.data.data;
+}
+
+// =========================================================
+// DISPATCH / GATE PASS
+// =========================================================
+
+export async function dispatchMaterialMovement(
+  id: number,
+  request: { transporterId?: number | null; vehicleNumber?: string | null }
+): Promise<MaterialMovement> {
+  const response = await api.post<ApiResponse<MaterialMovement>>(
+    `/MaterialMovement/${id}/dispatch`,
+    request
+  );
+
+  return response.data.data;
+}
+
+// Same authenticated-blob-download pattern as
+// downloadPurchaseRequisitionPdf - the gate pass PDF isn't a static file
+// under wwwroot, so it can't be a plain <a href>.
+export async function downloadGatePassPdf(
+  id: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(`/MaterialMovement/${id}/gate-pass-pdf`, {
+    responseType: 'blob',
+  });
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `gate-pass-${id}.pdf`,
+  };
 }

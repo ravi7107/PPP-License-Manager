@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import {
   Pencil,
   Plus,
@@ -8,6 +9,11 @@ import {
   Clock,
   CheckCircle2,
   Layers,
+  Send,
+  Check,
+  X,
+  Truck,
+  Download,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -28,10 +34,16 @@ import {
   MaterialMovement,
   MaterialMovementListItem,
   SaveMaterialMovementRequest,
+  approveMaterialMovement,
   createMaterialMovement,
   deleteMaterialMovement,
+  dispatchMaterialMovement,
+  downloadGatePassPdf,
   getMaterialMovement,
   getMyMaterialMovements,
+  getPendingMyApproval,
+  rejectMaterialMovement,
+  submitMaterialMovement,
   updateMaterialMovement,
 } from '@/lib/api/material-movements.api';
 
@@ -51,11 +63,19 @@ import {
   getMaterialItems,
 } from '@/lib/api/material-items.api';
 import { Asset, getAssets } from '@/lib/api/assets.api';
+import {
+  MaterialTransporter,
+  getMaterialTransporters,
+} from '@/lib/api/material-transporters.api';
 
 import {
   MaterialMovementFormDialog,
   MaterialMovementFormValues,
 } from '@/app/pages/material-movement/movements/components/material-movement-form-dialog';
+import { MaterialMovementDecisionDialog } from '@/app/pages/material-movement/movements/components/material-movement-decision-dialog';
+import { MaterialMovementDispatchDialog } from '@/app/pages/material-movement/movements/components/material-movement-dispatch-dialog';
+
+import { AppRole, canManage } from '@/lib/auth/roles';
 
 const NONE = '__none__';
 
@@ -113,9 +133,17 @@ function toNullableText(value: string): string | null {
 }
 
 export default function MaterialMovementsPage() {
+  const { roles } = useOutletContext<{ roles: AppRole[] }>();
+  const canDispatch = canManage(roles);
+
   const [movements, setMovements] = useState<
     MaterialMovementListItem[]
   >([]);
+
+  const [pendingApprovals, setPendingApprovals] = useState<
+    MaterialMovementListItem[]
+  >([]);
+  const [loadingPending, setLoadingPending] = useState(true);
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [officeLocations, setOfficeLocations] = useState<
@@ -128,6 +156,9 @@ export default function MaterialMovementsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [items, setItems] = useState<MaterialItem[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [transporters, setTransporters] = useState<
+    MaterialTransporter[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -145,6 +176,23 @@ export default function MaterialMovementsPage() {
   const [deleteTarget, setDeleteTarget] =
     useState<MaterialMovementListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
+
+  const [decisionOpen, setDecisionOpen] = useState(false);
+  const [decisionMode, setDecisionMode] = useState<'approve' | 'reject'>(
+    'approve'
+  );
+  const [decisionTarget, setDecisionTarget] =
+    useState<MaterialMovementListItem | null>(null);
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchTarget, setDispatchTarget] =
+    useState<MaterialMovementListItem | null>(null);
+  const [dispatchSaving, setDispatchSaving] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -164,8 +212,22 @@ export default function MaterialMovementsPage() {
     }
   }, []);
 
+  const loadPending = useCallback(async () => {
+    setLoadingPending(true);
+
+    try {
+      const data = await getPendingMyApproval();
+      setPendingApprovals(Array.isArray(data) ? data : []);
+    } catch {
+      setPendingApprovals([]);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadList();
+    void loadPending();
 
     void getCompanies()
       .then(setCompanies)
@@ -194,7 +256,11 @@ export default function MaterialMovementsPage() {
     void getAssets()
       .then(setAssets)
       .catch(() => setAssets([]));
-  }, [loadList]);
+
+    void getMaterialTransporters()
+      .then(setTransporters)
+      .catch(() => setTransporters([]));
+  }, [loadList, loadPending]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -350,14 +416,130 @@ export default function MaterialMovementsPage() {
     }
   };
 
+  const handleSubmit = async (row: MaterialMovementListItem) => {
+    setPageError(null);
+    setSubmittingId(row.id);
+
+    try {
+      await submitMaterialMovement(row.id);
+      await loadList();
+    } catch (err: any) {
+      setPageError(
+        err?.response?.data?.message ?? 'Failed to submit movement.'
+      );
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const openApprove = (row: MaterialMovementListItem) => {
+    setDecisionError(null);
+    setDecisionMode('approve');
+    setDecisionTarget(row);
+    setDecisionOpen(true);
+  };
+
+  const openReject = (row: MaterialMovementListItem) => {
+    setDecisionError(null);
+    setDecisionMode('reject');
+    setDecisionTarget(row);
+    setDecisionOpen(true);
+  };
+
+  const handleConfirmDecision = async (comments: string | null) => {
+    if (!decisionTarget) {
+      return;
+    }
+
+    setDecisionSaving(true);
+    setDecisionError(null);
+
+    try {
+      if (decisionMode === 'approve') {
+        await approveMaterialMovement(decisionTarget.id, comments);
+      } else {
+        await rejectMaterialMovement(decisionTarget.id, comments);
+      }
+
+      setDecisionOpen(false);
+      setDecisionTarget(null);
+
+      await Promise.all([loadPending(), loadList()]);
+    } catch (err: any) {
+      setDecisionError(
+        err?.response?.data?.message ?? 'Failed to record decision.'
+      );
+    } finally {
+      setDecisionSaving(false);
+    }
+  };
+
+  const openDispatch = (row: MaterialMovementListItem) => {
+    setDispatchError(null);
+    setDispatchTarget(row);
+    setDispatchOpen(true);
+  };
+
+  const handleConfirmDispatch = async (
+    transporterId: number | null,
+    vehicleNumber: string | null
+  ) => {
+    if (!dispatchTarget) {
+      return;
+    }
+
+    setDispatchSaving(true);
+    setDispatchError(null);
+
+    try {
+      await dispatchMaterialMovement(dispatchTarget.id, {
+        transporterId,
+        vehicleNumber,
+      });
+
+      setDispatchOpen(false);
+      setDispatchTarget(null);
+
+      await loadList();
+    } catch (err: any) {
+      setDispatchError(
+        err?.response?.data?.message ?? 'Failed to dispatch movement.'
+      );
+    } finally {
+      setDispatchSaving(false);
+    }
+  };
+
+  // Same authenticated-blob-download pattern as
+  // pr-detail-dialog.tsx's handleDownloadPdf.
+  const handleDownloadGatePass = async (row: MaterialMovementListItem) => {
+    setPageError(null);
+
+    try {
+      const { blob, fileName } = await downloadGatePassPdf(row.id);
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setPageError(
+        err?.response?.data?.message ?? 'Failed to download gate pass.'
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <div className="nova-cmdbar">
         <div>
           <h1 className="nova-cmdbar-title">Material Movements</h1>
           <p className="nova-cmdbar-desc">
-            Create and manage material movement drafts. Submitting a
-            draft for approval comes in a later update.
+            Create, submit, and track material movements through
+            approval, dispatch, and gate pass generation.
           </p>
         </div>
 
@@ -554,8 +736,138 @@ export default function MaterialMovementsPage() {
                             <Trash2 className="mr-1 h-3.5 w-3.5 text-destructive" />{' '}
                             Delete
                           </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={submittingId === movement.id}
+                            onClick={() => handleSubmit(movement)}
+                          >
+                            <Send className="mr-1 h-3.5 w-3.5" />{' '}
+                            {submittingId === movement.id
+                              ? 'Submitting…'
+                              : 'Submit'}
+                          </Button>
                         </>
                       ) : null}
+
+                      {movement.status === 'Approved' && canDispatch ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDispatch(movement)}
+                        >
+                          <Truck className="mr-1 h-3.5 w-3.5" />{' '}
+                          Dispatch
+                        </Button>
+                      ) : null}
+
+                      {movement.status === 'Dispatched' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadGatePass(movement)}
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />{' '}
+                          Gate Pass
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="nova-panel">
+        <div className="nova-panel-toolbar">
+          <div>
+            <div className="text-sm font-semibold">
+              Pending My Approval
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Movements waiting on your decision at their current stage.
+            </p>
+          </div>
+
+          <div className="nova-spacer" />
+
+          <span className="nova-muted-count">
+            {pendingApprovals.length} movement
+            {pendingApprovals.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="nova-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Movement #</th>
+                <th>Type</th>
+                <th>Requested By</th>
+                <th>From</th>
+                <th>To</th>
+                <th className="nova-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loadingPending ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
+                    Loading…
+                  </td>
+                </tr>
+              ) : pendingApprovals.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
+                    Nothing waiting on your approval.
+                  </td>
+                </tr>
+              ) : (
+                pendingApprovals.map((movement) => (
+                  <tr key={movement.id}>
+                    <td className="nova-mono">
+                      {movement.movementNumber ?? '—'}
+                    </td>
+                    <td>
+                      {MOVEMENT_TYPE_LABELS[movement.movementType] ??
+                        movement.movementType}
+                    </td>
+                    <td className="nova-cell-sub">
+                      {movement.requestedByUserName}
+                    </td>
+                    <td className="nova-cell-sub">
+                      {movement.fromSummary ?? '—'}
+                    </td>
+                    <td className="nova-cell-sub">
+                      {movement.toSummary ?? '—'}
+                    </td>
+                    <td className="nova-right space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openApprove(movement)}
+                      >
+                        <Check className="mr-1 h-3.5 w-3.5 text-[var(--nova-teal-500)]" />{' '}
+                        Approve
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openReject(movement)}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5 text-destructive" />{' '}
+                        Reject
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -619,6 +931,38 @@ export default function MaterialMovementsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MaterialMovementDecisionDialog
+        open={decisionOpen}
+        onOpenChange={(open) => {
+          setDecisionOpen(open);
+
+          if (!open) {
+            setDecisionTarget(null);
+          }
+        }}
+        movement={decisionTarget}
+        mode={decisionMode}
+        saving={decisionSaving}
+        error={decisionError}
+        onConfirm={handleConfirmDecision}
+      />
+
+      <MaterialMovementDispatchDialog
+        open={dispatchOpen}
+        onOpenChange={(open) => {
+          setDispatchOpen(open);
+
+          if (!open) {
+            setDispatchTarget(null);
+          }
+        }}
+        movement={dispatchTarget}
+        transporters={transporters}
+        saving={dispatchSaving}
+        error={dispatchError}
+        onConfirm={handleConfirmDispatch}
+      />
     </div>
   );
 }
