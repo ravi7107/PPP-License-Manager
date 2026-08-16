@@ -11,6 +11,8 @@ import {
   DollarSign,
   AlertTriangle,
   RefreshCw,
+  Download,
+  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,15 @@ import {
   createLicensePurchase,
   updateLicensePurchase,
 } from "@/lib/api/license-purchases.api";
+
+import { LicenseImportDialog, LicenseImportResult } from "@/app/pages/licenses/components/license-import-dialog";
+import {
+  exportLicensesToExcel,
+  ImportedLicenseRow,
+  resolveImportedAllowCheckout,
+  resolveImportedMaxCheckoutDays,
+  resolveImportedPurchaseCost,
+} from "@/lib/utils/license-excel";
 
 import {
   Client,
@@ -252,6 +263,9 @@ export default function LicensesPage() {
 
   const [savingSoftware, setSavingSoftware] = useState(false);
   const [savingLicense, setSavingLicense] = useState(false);
+
+  const [licenseImportOpen, setLicenseImportOpen] = useState(false);
+  const [importingLicenses, setImportingLicenses] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -755,6 +769,100 @@ export default function LicensesPage() {
     }
   }
 
+  function handleExportLicenses() {
+    const rows = filteredLicenses.map((license) => {
+      const purchase = licensePurchases.find(
+        (p) => p.id === license.licensePurchaseId
+      );
+
+      return {
+        ...license,
+        purchasePoNumber: purchase?.poNumber || "",
+      };
+    });
+
+    exportLicensesToExcel(rows, "license-inventory.xlsx");
+  }
+
+  async function handleImportLicenses(
+    rows: ImportedLicenseRow[]
+  ): Promise<LicenseImportResult> {
+    setImportingLicenses(true);
+
+    const failed: LicenseImportResult["failed"] = [];
+    let succeeded = 0;
+
+    try {
+      for (const row of rows) {
+        try {
+          const softwareInput = row.software.trim();
+
+          if (!softwareInput) {
+            throw new Error("Software is required.");
+          }
+
+          const matchedSoftware = software.find(
+            (s) =>
+              s.name.trim().toLowerCase() ===
+              softwareInput.toLowerCase()
+          );
+
+          if (!matchedSoftware) {
+            throw new Error(
+              `Software "${softwareInput}" was not found. Add it under Software Catalog first.`
+            );
+          }
+
+          let licensePurchaseId: number | null = null;
+          const poInput = row.purchasePoNumber.trim();
+
+          if (poInput) {
+            const matchedPurchase = licensePurchases.find(
+              (p) =>
+                (p.poNumber || "").trim().toLowerCase() ===
+                poInput.toLowerCase()
+            );
+
+            licensePurchaseId = matchedPurchase ? matchedPurchase.id : null;
+          }
+
+          const payload: CreateLicenseRequest = {
+            aliasCode: row.aliasCode.trim(),
+            softwareId: matchedSoftware.id,
+            licensePurchaseId,
+            licensedEmail: row.licensedEmail.trim(),
+            subscriptionId: row.subscriptionId.trim() || null,
+            allowTemporaryCheckout: resolveImportedAllowCheckout(row),
+            maxCheckoutDays: resolveImportedMaxCheckoutDays(row),
+            purchaseDate: row.purchaseDate.trim(),
+            expiryDate: row.expiryDate.trim(),
+            purchaseCost: resolveImportedPurchaseCost(row),
+            remarks: row.remarks.trim() || null,
+          };
+
+          await createLicense(payload);
+          succeeded += 1;
+        } catch (rowError: any) {
+          failed.push({
+            row,
+            message:
+              rowError?.response?.data?.message ||
+              rowError?.message ||
+              "Failed to create this license.",
+          });
+        }
+      }
+
+      if (succeeded > 0) {
+        await loadData();
+      }
+    } finally {
+      setImportingLicenses(false);
+    }
+
+    return { succeeded, failed };
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -1124,6 +1232,28 @@ export default function LicensesPage() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportLicenses}
+            disabled={filteredLicenses.length === 0}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLicenseImportOpen(true)}
+              disabled={software.length === 0}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import Excel
+            </Button>
+          ) : null}
 
           {canEdit ? (
             <Button
@@ -2285,6 +2415,13 @@ export default function LicensesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <LicenseImportDialog
+        open={licenseImportOpen}
+        onOpenChange={setLicenseImportOpen}
+        importing={importingLicenses}
+        onImport={handleImportLicenses}
+      />
     </div>
   );
 }
