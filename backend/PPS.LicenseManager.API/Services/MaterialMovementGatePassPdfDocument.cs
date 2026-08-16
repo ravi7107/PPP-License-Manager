@@ -1,3 +1,4 @@
+using System.Reflection;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -5,11 +6,42 @@ using QuestPDF.Infrastructure;
 namespace PPS.LicenseManager.API.Services;
 
 /*
- * Renders a single Material Movement's Gate Pass - header (movement
- * number/type/status), From/To summary, the item table (with linked
- * asset tag where set), the approval trail, and dispatch details
- * (transporter/vehicle/gate pass number) - as a PDF via QuestPDF's fluent
- * API. Structurally cloned from PurchaseRequisitionPdfDocument.cs.
+ * Renders a single Material Movement's Gate Pass as a PDF via QuestPDF's
+ * fluent API. Structurally cloned from PurchaseRequisitionPdfDocument.cs
+ * (including its embedded-logo convention), then redesigned into a fixed
+ * controlled-document layout, top to bottom:
+ *
+ *   1. Company branding + legal entity/address - letterhead logo plus the
+ *      movement's From (or To, if no From) Company's name/address/GSTIN,
+ *      pulled straight from Company.cs (no new fields/migration needed).
+ *   2. Gate Pass identity - Gate Pass #, Movement #, Status, dispatch date.
+ *   3. Movement details - type, requested by, dispatched by/on, From/To,
+ *      purpose.
+ *   4. Asset/material details - the item table.
+ *   5. Transporter - always shown now (used to be conditional), "-" when
+ *      not set, since it's a fixed section of the printed pass.
+ *   6. Approval history.
+ *   7. QR verification - deliberately NOT a real scannable QR code yet;
+ *      per the confirmed v1 decision, adding a QR-generation NuGet
+ *      package carries real risk of a build break that can't be
+ *      compile-verified in the deploy sandbox this session works in (no
+ *      dotnet CLI here - see this class's git history for the same
+ *      reasoning, and the QuestPDF using-directive hotfix that already
+ *      happened once this session). Reserves a clearly labeled
+ *      placeholder box with the Gate Pass Number as the manual
+ *      verification handle, ready to swap in a real QR image later.
+ *   8. Security gate verification - a printed sign-off block only (blank
+ *      lines for the security guard's name/signature/date-time at the
+ *      physical gate). No new digital workflow step or database field,
+ *      per the confirmed v1 scope - this is pure print layout.
+ *   9. Return tracking - read-only display of MaterialMovement.
+ *      ExpectedReturnDate plus MaterialMovementReturn if a row exists.
+ *      Only MovementType == "TemporaryMovement" ever has anything here -
+ *      nothing writes MaterialMovementReturn rows yet (that's still
+ *      later-phase work per that model's own comment), so every other
+ *      movement type prints "Not applicable" instead of blank fields.
+ *  10. Controlled-document footer - reproduction/alteration notice, Gate
+ *      Pass number, generation timestamp, and page numbers.
  *
  * Generated on Dispatch (see MaterialMovementService.
  * GenerateAndStoreGatePassPdfAsync) and lazily (re)generated on download
@@ -17,31 +49,48 @@ namespace PPS.LicenseManager.API.Services;
  * it's reachable only through the authenticated
  * GET /api/MaterialMovement/{id}/gate-pass-pdf endpoint.
  *
- * No QR code - there's no QR-generation library referenced in this
- * project's .csproj, and a new NuGet package can't be compile-verified
- * without a dotnet CLI in the deploy sandbox this session works in. The
- * Gate Pass number itself (printed large, and used as the PDF's file
- * name) is the verification handle for now; a scannable QR is a clean
- * follow-up once a package addition can be tested properly.
- *
  * The caller is responsible for loading every navigation this class
  * reads (From/To Company/Location, Vendor, RequestedByUser, Items with
- * Item/Asset, Approvals with ApproverUser, plus the separately-loaded
- * MaterialMovementDispatch with DispatchedByUser/Transporter) - see
- * MaterialMovementService.GenerateAndStoreGatePassPdfAsync, which already
- * includes all of them.
+ * Item/Asset, Approvals with ApproverUser, the separately-loaded
+ * MaterialMovementDispatch with DispatchedByUser/Transporter, and the
+ * separately-loaded MaterialMovementReturn with ReturnedByUser if one
+ * exists) - see MaterialMovementService.GenerateAndStoreGatePassPdfAsync,
+ * which already includes all of them.
  */
 public class MaterialMovementGatePassPdfDocument : IDocument
 {
     private readonly Models.MaterialMovement _movement;
     private readonly Models.MaterialMovementDispatch _dispatch;
+    private readonly Models.MaterialMovementReturn? _returnRecord;
+
+    // Letterhead logo - same embedded-assembly-resource convention as
+    // PurchaseRequisitionPdfDocument.LogoBytes, so this doesn't depend on
+    // wwwroot or a volume mount being present.
+    private static readonly byte[] LogoBytes = LoadLogoBytes();
+
+    private static byte[] LoadLogoBytes()
+    {
+        var assembly = typeof(MaterialMovementGatePassPdfDocument).Assembly;
+        const string resourceName = "PPS.LicenseManager.API.Assets.pps-logo.jpg";
+
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded resource '{resourceName}' not found - check the " +
+                "EmbeddedResource entry in PPS.LicenseManager.API.csproj.");
+
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
+    }
 
     public MaterialMovementGatePassPdfDocument(
         Models.MaterialMovement movement,
-        Models.MaterialMovementDispatch dispatch)
+        Models.MaterialMovementDispatch dispatch,
+        Models.MaterialMovementReturn? returnRecord)
     {
         _movement = movement;
         _dispatch = dispatch;
+        _returnRecord = returnRecord;
     }
 
     public void Compose(IDocumentContainer container)
@@ -54,35 +103,65 @@ public class MaterialMovementGatePassPdfDocument : IDocument
 
             page.Header().Element(ComposeHeader);
             page.Content().Element(ComposeContent);
-
-            page.Footer().AlignCenter().Text(text =>
-            {
-                text.Span("Page ");
-                text.CurrentPageNumber();
-                text.Span(" of ");
-                text.TotalPages();
-            });
+            page.Footer().Element(ComposeFooter);
         });
     }
 
+    // 1. Company branding + legal entity/address, 2. Gate Pass identity.
     private void ComposeHeader(IContainer container)
     {
         container.Column(column =>
         {
             column.Item().Row(row =>
             {
-                row.RelativeItem().Column(c =>
+                row.ConstantItem(140).Height(45)
+                    .Image(LogoBytes).FitArea();
+
+                row.RelativeItem().PaddingLeft(10).Column(c =>
                 {
-                    c.Item().Text("PPS License Manager").FontSize(12).Bold();
-                    c.Item().Text("Material Movement Gate Pass")
-                        .FontSize(10).FontColor(Colors.Grey.Darken2);
+                    var entity = _movement.FromCompany ?? _movement.ToCompany;
+
+                    c.Item().Text("Material Gate Pass")
+                        .FontSize(9).FontColor(Colors.Grey.Darken1);
+
+                    if (entity != null)
+                    {
+                        c.Item().PaddingTop(2)
+                            .Text(entity.Name).FontSize(12).Bold();
+
+                        if (!string.IsNullOrWhiteSpace(entity.Address))
+                        {
+                            c.Item().Text(entity.Address)
+                                .FontSize(8).FontColor(Colors.Grey.Darken2);
+                        }
+
+                        var registrationParts = new List<string>();
+
+                        if (!string.IsNullOrWhiteSpace(entity.GSTNumber))
+                            registrationParts.Add($"GSTIN: {entity.GSTNumber}");
+
+                        if (!string.IsNullOrWhiteSpace(entity.Code))
+                            registrationParts.Add($"Entity Code: {entity.Code}");
+
+                        if (registrationParts.Count > 0)
+                        {
+                            c.Item().PaddingTop(1)
+                                .Text(string.Join("   ", registrationParts))
+                                .FontSize(8).FontColor(Colors.Grey.Darken2);
+                        }
+                    }
+                    else
+                    {
+                        c.Item().PaddingTop(2)
+                            .Text("PPS License Manager").FontSize(12).Bold();
+                    }
                 });
 
-                row.ConstantItem(200).AlignRight().Column(statusColumn =>
+                row.ConstantItem(170).AlignRight().Column(statusColumn =>
                 {
                     statusColumn.Item().AlignRight()
                         .Text(_dispatch.GatePassNumber ?? $"Movement #{_movement.Id}")
-                        .FontSize(14).Bold();
+                        .FontSize(15).Bold();
 
                     statusColumn.Item().AlignRight()
                         .Text(_movement.MovementNumber ?? $"#{_movement.Id}")
@@ -92,6 +171,10 @@ public class MaterialMovementGatePassPdfDocument : IDocument
                         .Text(_movement.Status)
                         .FontSize(11).Bold()
                         .FontColor(Colors.Green.Darken2);
+
+                    statusColumn.Item().AlignRight().PaddingTop(2)
+                        .Text($"Dispatched {_dispatch.DispatchedAt:d MMM yyyy}")
+                        .FontSize(8).FontColor(Colors.Grey.Darken1);
                 });
             });
 
@@ -103,9 +186,38 @@ public class MaterialMovementGatePassPdfDocument : IDocument
     {
         container.PaddingVertical(15).Column(column =>
         {
-            column.Spacing(12);
+            column.Spacing(14);
 
-            column.Item().Row(row =>
+            // 3. Movement details
+            column.Item().Element(ComposeMovementDetails);
+
+            // 4. Asset/material details
+            column.Item().Element(ComposeItemsTable);
+
+            // 5. Transporter
+            column.Item().Element(ComposeTransporterSection);
+
+            // 6. Approval history
+            column.Item().Element(ComposeApprovalHistoryTable);
+
+            // 7. QR verification
+            column.Item().Element(ComposeQrVerificationPlaceholder);
+
+            // 8. Security gate verification
+            column.Item().Element(ComposeSecurityGateVerification);
+
+            // 9. Return tracking
+            column.Item().Element(ComposeReturnTracking);
+        });
+    }
+
+    private void ComposeMovementDetails(IContainer container)
+    {
+        container.Column(column =>
+        {
+            column.Item().Text("Movement Details").FontSize(11).Bold();
+
+            column.Item().PaddingTop(4).Row(row =>
             {
                 row.RelativeItem().Column(c =>
                 {
@@ -132,24 +244,16 @@ public class MaterialMovementGatePassPdfDocument : IDocument
                 });
             });
 
-            column.Item().Element(ComposeFromToSummary);
-
-            if (_dispatch.TransporterId.HasValue || !string.IsNullOrWhiteSpace(_dispatch.VehicleNumber))
-            {
-                column.Item().Element(ComposeDispatchDetails);
-            }
+            column.Item().PaddingTop(10).Element(ComposeFromToSummary);
 
             if (!string.IsNullOrWhiteSpace(_movement.Purpose))
             {
-                column.Item().Column(c =>
+                column.Item().PaddingTop(10).Column(c =>
                 {
                     c.Item().Text("Purpose").FontSize(9).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(_movement.Purpose);
                 });
             }
-
-            column.Item().Element(ComposeItemsTable);
-            column.Item().Element(ComposeApprovalHistoryTable);
         });
     }
 
@@ -194,20 +298,28 @@ public class MaterialMovementGatePassPdfDocument : IDocument
                 : $"{locationName}, {companyName}";
     }
 
-    private void ComposeDispatchDetails(IContainer container)
+    // 5. Transporter - always rendered now (previously conditional on
+    // TransporterId/VehicleNumber being set), so the printed pass always
+    // has a consistent, predictable set of sections.
+    private void ComposeTransporterSection(IContainer container)
     {
-        container.Row(row =>
+        container.Column(column =>
         {
-            row.RelativeItem().Column(c =>
-            {
-                c.Item().Text("Transporter").FontSize(9).FontColor(Colors.Grey.Darken1);
-                c.Item().Text(_dispatch.Transporter?.Name ?? "-").Bold();
-            });
+            column.Item().Text("Transporter").FontSize(11).Bold();
 
-            row.RelativeItem().Column(c =>
+            column.Item().PaddingTop(4).Row(row =>
             {
-                c.Item().Text("Vehicle Number").FontSize(9).FontColor(Colors.Grey.Darken1);
-                c.Item().Text(_dispatch.VehicleNumber ?? "-").Bold();
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Transporter Name").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_dispatch.Transporter?.Name ?? "-").Bold();
+                });
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Vehicle Number").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_dispatch.VehicleNumber ?? "-").Bold();
+                });
             });
         });
     }
@@ -216,9 +328,9 @@ public class MaterialMovementGatePassPdfDocument : IDocument
     {
         container.Column(column =>
         {
-            column.Item().Text("Items").FontSize(11).Bold();
+            column.Item().Text("Asset / Material Details").FontSize(11).Bold();
 
-            column.Item().Table(table =>
+            column.Item().PaddingTop(4).Table(table =>
             {
                 table.ColumnsDefinition(columns =>
                 {
@@ -276,7 +388,7 @@ public class MaterialMovementGatePassPdfDocument : IDocument
         {
             column.Item().Text("Approval History").FontSize(11).Bold();
 
-            column.Item().Table(table =>
+            column.Item().PaddingTop(4).Table(table =>
             {
                 table.ColumnsDefinition(columns =>
                 {
@@ -318,6 +430,171 @@ public class MaterialMovementGatePassPdfDocument : IDocument
                             .BorderColor(Colors.Grey.Lighten2);
                 }
             });
+        });
+    }
+
+    // 7. QR verification - see this class's top comment for why there's
+    // no real QR image yet. This reserves the visual slot and keeps the
+    // Gate Pass Number as the manual verification handle in the
+    // meantime, so swapping in a real QR image later is a layout-only
+    // change (replace the placeholder box's content with an Image call).
+    private void ComposeQrVerificationPlaceholder(IContainer container)
+    {
+        container.Column(column =>
+        {
+            column.Item().Text("QR Verification").FontSize(11).Bold();
+
+            column.Item().PaddingTop(4).Background(Colors.Grey.Lighten4).Padding(10).Row(row =>
+            {
+                row.ConstantItem(64).Column(c =>
+                {
+                    c.Item().AlignCenter().Text("QR").FontSize(11).Bold()
+                        .FontColor(Colors.Grey.Darken2);
+                    c.Item().AlignCenter().Text("Reserved").FontSize(7)
+                        .FontColor(Colors.Grey.Darken1);
+                });
+
+                row.RelativeItem().PaddingLeft(12).Column(c =>
+                {
+                    c.Item().Text(
+                        "A scannable QR code is reserved for a future update. Until " +
+                        "then, verify this pass manually using the Gate Pass Number below.")
+                        .FontSize(9).FontColor(Colors.Grey.Darken2);
+
+                    c.Item().PaddingTop(6)
+                        .Text(_dispatch.GatePassNumber ?? $"Movement #{_movement.Id}")
+                        .FontSize(13).Bold();
+                });
+            });
+        });
+    }
+
+    // 8. Security gate verification - pure print layout (blank sign-off
+    // lines), no new digital workflow step or database field. Filled in
+    // by hand by the security guard at the physical gate.
+    private void ComposeSecurityGateVerification(IContainer container)
+    {
+        container.Column(column =>
+        {
+            column.Item().Text("Security Gate Verification").FontSize(11).Bold();
+
+            column.Item().PaddingTop(4)
+                .Text("To be completed by security personnel at the gate.")
+                .FontSize(8).FontColor(Colors.Grey.Darken1);
+
+            column.Item().PaddingTop(12).Row(row =>
+            {
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Security Guard Name").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().PaddingTop(16).LineHorizontal(0.75f).LineColor(Colors.Grey.Darken1);
+                });
+
+                row.ConstantItem(20);
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Signature").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().PaddingTop(16).LineHorizontal(0.75f).LineColor(Colors.Grey.Darken1);
+                });
+
+                row.ConstantItem(20);
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Date & Time").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().PaddingTop(16).LineHorizontal(0.75f).LineColor(Colors.Grey.Darken1);
+                });
+            });
+        });
+    }
+
+    // 9. Return tracking - read-only. Only MovementType ==
+    // "TemporaryMovement" ever has real data here; every other type
+    // prints "Not applicable" since a return never applies to it. Even
+    // for a TemporaryMovement, _returnRecord is null until a later phase
+    // builds the actual "mark returned" action - this section is ready
+    // to show real data the moment that exists, without another PDF
+    // change.
+    private void ComposeReturnTracking(IContainer container)
+    {
+        container.Column(column =>
+        {
+            column.Item().Text("Return Tracking").FontSize(11).Bold();
+
+            if (_movement.MovementType != "TemporaryMovement")
+            {
+                column.Item().PaddingTop(4)
+                    .Text("Not applicable - this movement type does not require a return.")
+                    .FontSize(9).FontColor(Colors.Grey.Darken1);
+
+                return;
+            }
+
+            column.Item().PaddingTop(4).Row(row =>
+            {
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Expected Return Date").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_movement.ExpectedReturnDate.HasValue
+                        ? _movement.ExpectedReturnDate.Value.ToString("d MMM yyyy")
+                        : "-").Bold();
+                });
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Status").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_returnRecord?.Status ?? "Not Yet Returned").Bold();
+                });
+
+                row.RelativeItem().Column(c =>
+                {
+                    var actualReturnText = _returnRecord != null && _returnRecord.ActualReturnDate.HasValue
+                        ? _returnRecord.ActualReturnDate.Value.ToString("d MMM yyyy")
+                        : "-";
+
+                    c.Item().Text("Actual Return Date").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(actualReturnText).Bold();
+                });
+
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Returned By").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(_returnRecord?.ReturnedByUser?.FullName ?? "-").Bold();
+                });
+            });
+        });
+    }
+
+    // 10. Controlled-document footer.
+    private void ComposeFooter(IContainer container)
+    {
+        container.Column(column =>
+        {
+            column.Item().PaddingBottom(4).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
+
+            column.Item().Row(row =>
+            {
+                row.RelativeItem().Text(
+                    "This is a system-generated controlled document. Unauthorized " +
+                    "reproduction, alteration, or use outside its intended purpose is " +
+                    "prohibited.")
+                    .FontSize(7).FontColor(Colors.Grey.Darken1);
+
+                row.ConstantItem(140).AlignRight().Text(text =>
+                {
+                    text.Span("Page ");
+                    text.CurrentPageNumber();
+                    text.Span(" of ");
+                    text.TotalPages();
+                });
+            });
+
+            column.Item().PaddingTop(2)
+                .Text(
+                    $"Gate Pass: {_dispatch.GatePassNumber ?? $"Movement #{_movement.Id}"}   |   " +
+                    $"Generated: {DateTime.UtcNow:d MMM yyyy HH:mm} UTC")
+                .FontSize(7).FontColor(Colors.Grey.Darken1);
         });
     }
 }

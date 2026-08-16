@@ -1108,9 +1108,10 @@ public class MaterialMovementService : IMaterialMovementService
     /*
      * Loads every navigation MaterialMovementGatePassPdfDocument reads
      * (From/To Company/Location, Vendor, RequestedByUser, Items with
-     * Item/Asset, Approvals with ApproverUser, and the Dispatch row with
-     * DispatchedByUser/Transporter) and renders the PDF - same
-     * best-effort, never-throws-to-the-caller shape as
+     * Item/Asset, Approvals with ApproverUser, the Dispatch row with
+     * DispatchedByUser/Transporter, and - for TemporaryMovement only - a
+     * MaterialMovementReturn row if one exists) and renders the PDF -
+     * same best-effort, never-throws-to-the-caller shape as
      * PurchaseRequisitionService.GenerateAndStorePdfAsync, since a PDF
      * hiccup must never undo an already-committed Dispatch.
      */
@@ -1143,6 +1144,16 @@ public class MaterialMovementService : IMaterialMovementService
             if (dispatch == null)
                 return; // not actually dispatched - nothing to generate yet
 
+            // Nothing writes MaterialMovementReturn rows yet (that's later-
+            // phase work - see that model's own comment), so this is null
+            // for every movement today; the PDF's Return Tracking section
+            // already handles null gracefully ("Not Yet Returned"). Kept as
+            // a real query rather than always passing null so the PDF picks
+            // up real data automatically the moment a return action exists.
+            var returnRecord = await _context.MaterialMovementReturns
+                .Include(r => r.ReturnedByUser)
+                .FirstOrDefaultAsync(r => r.MovementId == movementId);
+
             var directory = Path.Combine(
                 pdfStorageRootPath, "material-movements", movement.Id.ToString());
 
@@ -1155,7 +1166,8 @@ public class MaterialMovementService : IMaterialMovementService
             var fileName = $"{safeFileNameBase}.pdf";
             var destination = Path.Combine(directory, fileName);
 
-            new MaterialMovementGatePassPdfDocument(movement, dispatch).GeneratePdf(destination);
+            new MaterialMovementGatePassPdfDocument(movement, dispatch, returnRecord)
+                .GeneratePdf(destination);
 
             dispatch.GatePassPdfPath = $"material-movements/{movement.Id}/{fileName}";
 
