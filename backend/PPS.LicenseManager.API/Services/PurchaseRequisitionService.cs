@@ -41,6 +41,23 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // Approvals page instead.
     private const int ApprovalTokenValidityDays = 14;
 
+    // Email brand palette - lifted from the web app's own design tokens
+    // (frontend/index.css --nova-* variables) so approval emails read as
+    // the same product rather than a generic system notification.
+    private const string EmailBrandColor = "#0F4FD1";      // --nova-blue-600
+    private const string EmailApproveColor = "#0D9488";    // --nova-teal-500
+    private const string EmailRejectColor = "#DC2626";     // --nova-red-500
+    private const string EmailAmberColor = "#D97706";      // --nova-amber-500
+    private const string EmailSlateStrong = "#0F172A";
+    private const string EmailSlateText = "#334155";
+    private const string EmailMutedText = "#64748B";
+    private const string EmailFaintText = "#94A3B8";
+    private const string EmailBorderColor = "#E2E8F0";
+    private const string EmailPanelBg = "#F8FAFC";
+    private const string EmailPageBg = "#F1F5F9";
+    private const string EmailFontStack =
+        "Arial, Helvetica, 'Segoe UI', sans-serif";
+
     private readonly ApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly ILogger<PurchaseRequisitionService> _logger;
@@ -707,6 +724,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     {
         var record = await _context.PurchaseRequisitions
             .Include(x => x.Company)
+            .Include(x => x.Vendor)
             .Include(x => x.LineItems)
             .Include(x => x.RequestedByUser)
             .FirstOrDefaultAsync(x => x.Id == id);
@@ -865,7 +883,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // undo the successful submit - IssueTokenAndSendApprovalRequestEmailAsync
         // swallows and logs its own errors.
         var firstStep = createdSteps.First(s => s.StepOrder == record.CurrentApprovalStepOrder);
-        await IssueTokenAndSendApprovalRequestEmailAsync(record, firstStep);
+        await IssueTokenAndSendApprovalRequestEmailAsync(record, firstStep, createdSteps);
 
         return await GetByIdAsync(record.Id, requestedByUserId, isPrivileged: false);
     }
@@ -1070,6 +1088,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.ApprovalSteps)
                 .ThenInclude(s => s.AssignedApproverContact)
             .Include(x => x.RequestedByUser)
+            .Include(x => x.Company)
+            .Include(x => x.Vendor)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (record == null)
@@ -1265,7 +1285,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // catch and log their own failures rather than throwing.
         if (stepToEmailForApproval != null)
         {
-            await IssueTokenAndSendApprovalRequestEmailAsync(record, stepToEmailForApproval);
+            var allSteps = record.ApprovalSteps
+                .OrderBy(s => s.StepOrder)
+                .ToList();
+
+            await IssueTokenAndSendApprovalRequestEmailAsync(
+                record, stepToEmailForApproval, allSteps);
         }
         else if (sendRequesterOutcomeEmail)
         {
@@ -1366,6 +1391,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                     .ThenInclude(r => r.Company)
             .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.PurchaseRequisition)
+                    .ThenInclude(r => r.Vendor)
+            .Include(t => t.ApprovalStep)
+                .ThenInclude(s => s.PurchaseRequisition)
                     .ThenInclude(r => r.RequestedByUser)
             .Include(t => t.ApprovalStep)
                 .ThenInclude(s => s.PurchaseRequisition)
@@ -1442,7 +1470,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
      */
     private async Task IssueTokenAndSendApprovalRequestEmailAsync(
         Models.PurchaseRequisition record,
-        PurchaseRequisitionApprovalStep step)
+        PurchaseRequisitionApprovalStep step,
+        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps)
     {
         // The approver is either a system User or a standalone Contact
         // (external, no login) - resolve whichever one is actually
@@ -1488,17 +1517,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 ? "there"
                 : approverName;
 
-            var subject = $"Approval needed: Purchase Requisition {prLabel}";
-            var body =
-                $"<p>Hi {System.Net.WebUtility.HtmlEncode(approverDisplayName)},</p>" +
-                $"<p>{System.Net.WebUtility.HtmlEncode(record.RequestedByUser?.FullName ?? "A colleague")} " +
-                $"has submitted purchase requisition <strong>{System.Net.WebUtility.HtmlEncode(prLabel)}</strong> " +
-                $"(\"{System.Net.WebUtility.HtmlEncode(record.Title)}\") for " +
-                $"{System.Net.WebUtility.HtmlEncode(record.Currency)} {record.TotalAmount:0.00}, and it is " +
-                $"waiting on your decision (stage {step.StepOrder} of {record.RequiredApprovalStageCount}).</p>" +
-                $"<p><a href=\"{link}\">Review and decide on this purchase requisition</a></p>" +
-                $"<p>This link is valid for {ApprovalTokenValidityDays} days and can only be used once. " +
-                "If it has expired, sign in to the app and check your Pending Approvals page instead.</p>";
+            var subject =
+                $"Action required: Approve {prLabel} — {record.Title} " +
+                $"({record.Currency} {record.TotalAmount:N2})";
+
+            var body = BuildApprovalRequestEmailHtml(
+                record, step, allSteps, approverDisplayName, link);
 
             await _emailService.SendAsync(approverEmail, approverDisplayName, subject, body);
         }
@@ -1509,6 +1533,337 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 "purchase requisition {PurchaseRequisitionId}, stage {StepOrder}.",
                 record.Id, step.StepOrder);
         }
+    }
+
+    /*
+     * Renders the "Approval Progress" stepper shared by the
+     * approval-request email and the final-outcome email - a vertical
+     * list of every stage (in order) with a colored status marker, so an
+     * approver or executive can see the whole chain at a glance without
+     * signing in. highlightStepId marks the one step this particular
+     * email is actually about (null for the outcome email, where nothing
+     * is still "awaiting decision").
+     *
+     * Deliberately built with nested tables and inline styles only (no
+     * <style> block, no flexbox/grid) - this is the only layout approach
+     * that renders consistently across Outlook's Word rendering engine,
+     * Gmail, and mobile mail clients.
+     */
+    private static string BuildApprovalStepperHtml(
+        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
+        int? highlightStepId)
+    {
+        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
+
+        var ordered = allSteps.OrderBy(s => s.StepOrder).ToList();
+
+        var sb = new StringBuilder();
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var s = ordered[i];
+            var isLast = i == ordered.Count - 1;
+
+            string circleColor;
+            var circleTextColor = "#ffffff";
+            string circleContent;
+            string statusLabel;
+            string statusColor;
+            var circleBorder = "";
+
+            if (s.Status == "Approved")
+            {
+                circleColor = EmailApproveColor;
+                circleContent = "&#10003;";
+                statusLabel = "Approved";
+                statusColor = EmailApproveColor;
+            }
+            else if (s.Status == "Rejected")
+            {
+                circleColor = EmailRejectColor;
+                circleContent = "&#10005;";
+                statusLabel = "Rejected";
+                statusColor = EmailRejectColor;
+            }
+            else if (s.Status == "Skipped")
+            {
+                circleColor = "#CBD5E1";
+                circleContent = "&#8211;";
+                statusLabel = "Skipped";
+                statusColor = EmailFaintText;
+                circleTextColor = "#475569";
+            }
+            else if (s.Id == highlightStepId)
+            {
+                circleColor = EmailAmberColor;
+                circleContent = s.StepOrder.ToString();
+                statusLabel = "Awaiting decision";
+                statusColor = EmailAmberColor;
+            }
+            else
+            {
+                circleColor = "#ffffff";
+                circleContent = s.StepOrder.ToString();
+                statusLabel = "Not started yet";
+                statusColor = EmailFaintText;
+                circleTextColor = EmailMutedText;
+                circleBorder = "border:2px solid #CBD5E1;";
+            }
+
+            var approverName = s.AssignedApproverContactId.HasValue
+                ? (s.AssignedApproverContact?.FullName ?? "External contact")
+                : (s.AssignedApproverUser?.FullName ?? "Unassigned");
+
+            var externalTag = s.AssignedApproverContactId.HasValue
+                ? " <span style=\"color:" + EmailFaintText + ";font-weight:400;\">(external)</span>"
+                : "";
+
+            var bottomPadding = isLast ? "0" : "18px";
+
+            sb.Append("<tr>");
+            sb.Append("<td style=\"width:32px;vertical-align:top;padding:0 0 " + bottomPadding + " 0;\">");
+            sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td style=\"width:24px;height:24px;border-radius:12px;background-color:" + circleColor + ";" + circleBorder + "text-align:center;\">");
+            sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:12px;font-weight:700;color:" + circleTextColor + ";line-height:24px;\">" + circleContent + "</span>");
+            sb.Append("</td></tr></table>");
+            sb.Append("</td>");
+            sb.Append("<td style=\"padding:0 0 " + bottomPadding + " 12px;vertical-align:top;\">");
+            sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:600;color:" + EmailSlateStrong + ";\">Stage " + s.StepOrder + ": " + Enc(approverName) + externalTag + "</div>");
+            sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + statusColor + ";margin-top:2px;font-weight:600;\">" + statusLabel + "</div>");
+            sb.Append("</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</table>");
+
+        return sb.ToString();
+    }
+
+    /*
+     * Full HTML for the approval-request email - branded to match the
+     * web app's own palette (frontend/index.css --nova-* tokens), with
+     * two prominent Approve/Reject buttons and the approval stepper at
+     * the bottom. The buttons link to the same secure landing page as a
+     * plain "review" link would, just with ?action=approve/reject so the
+     * landing page can pre-highlight the matching choice - the decision
+     * itself still requires one confirming click ON that page, never
+     * merely opening the email link, since corporate security scanners
+     * routinely pre-fetch links via GET before a human ever sees them
+     * (see PublicPurchaseRequisitionApprovalResponse's comment).
+     */
+    private static string BuildApprovalRequestEmailHtml(
+        Models.PurchaseRequisition record,
+        PurchaseRequisitionApprovalStep step,
+        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
+        string approverDisplayName,
+        string reviewLink)
+    {
+        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
+
+        var prLabel = record.PrNumber ?? $"#{record.Id}";
+        var requesterName = record.RequestedByUser?.FullName ?? "A colleague";
+        var companyName = record.Company?.Name;
+        var vendorName = record.Vendor?.VendorName;
+        var approveLink = reviewLink + "?action=approve";
+        var rejectLink = reviewLink + "?action=reject";
+
+        var preheader =
+            prLabel + ": " + record.Title + " — " + record.Currency + " " +
+            record.TotalAmount.ToString("N2") + " is waiting on your approval " +
+            "(stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount + ").";
+
+        var sb = new StringBuilder();
+
+        sb.Append("<!DOCTYPE html>");
+        sb.Append("<html><head><meta charset=\"utf-8\" />");
+        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />");
+        sb.Append("<title></title></head>");
+        sb.Append("<body style=\"margin:0;padding:0;background-color:" + EmailPageBg + ";\">");
+
+        sb.Append("<div style=\"display:none;max-height:0;overflow:hidden;mso-hide:all;opacity:0;\">");
+        sb.Append(Enc(preheader));
+        sb.Append("&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailPageBg + ";padding:32px 16px;\">");
+        sb.Append("<tr><td align=\"center\">");
+        sb.Append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;\">");
+
+        sb.Append("<tr><td style=\"background-color:" + EmailBrandColor + ";padding:24px 32px;border-radius:12px 12px 0 0;\">");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append("<td style=\"width:44px;height:44px;background-color:#ffffff;border-radius:9px;text-align:center;vertical-align:middle;\">");
+        sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailBrandColor + ";line-height:44px;\">PPS</span>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION APPROVAL</div>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:32px;font-family:" + EmailFontStack + ";\">");
+
+        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:6px;\">");
+        sb.Append("Approval Requested &middot; Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount);
+        sb.Append("</div>");
+
+        sb.Append("<h1 style=\"margin:0 0 16px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
+        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
+        sb.Append("</h1>");
+
+        sb.Append("<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
+        sb.Append("Hi " + Enc(approverDisplayName) + ", <strong>" + Enc(requesterName) + "</strong> has submitted this purchase requisition and it's waiting on your decision.");
+        sb.Append("</p>");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:22px;background-color:" + EmailPanelBg + ";border:1px solid " + EmailBorderColor + ";border-radius:8px;\">");
+
+        sb.Append("<tr>");
+        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Requested By</div>");
+        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:3px;\">" + Enc(requesterName) + "</div>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Entity</div>");
+        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:3px;\">" + (string.IsNullOrWhiteSpace(companyName) ? "—" : Enc(companyName)) + "</div>");
+        sb.Append("</td>");
+        sb.Append("</tr>");
+
+        sb.Append("<tr>");
+        sb.Append("<td style=\"padding:14px 18px;\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Amount</div>");
+        sb.Append("<div style=\"font-size:15px;color:" + EmailSlateStrong + ";font-weight:700;margin-top:3px;\">" + Enc(record.Currency) + " " + record.TotalAmount.ToString("N2") + "</div>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding:14px 18px;\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Vendor</div>");
+        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:3px;\">" + (string.IsNullOrWhiteSpace(vendorName) ? "Not yet selected" : Enc(vendorName)) + "</div>");
+        sb.Append("</td>");
+        sb.Append("</tr>");
+
+        sb.Append("</table>");
+
+        if (!string.IsNullOrWhiteSpace(record.Justification))
+        {
+            sb.Append("<div style=\"margin:0 0 22px;padding:12px 16px;background-color:" + EmailPanelBg + ";border-left:3px solid " + EmailBrandColor + ";border-radius:0 6px 6px 0;\">");
+            sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;\">Justification</div>");
+            sb.Append("<div style=\"font-size:13px;color:" + EmailSlateText + ";line-height:1.5;\">" + Enc(record.Justification) + "</div>");
+            sb.Append("</div>");
+        }
+
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:4px 0 10px;\"><tr>");
+        sb.Append("<td style=\"border-radius:8px;background-color:" + EmailApproveColor + ";\">");
+        sb.Append("<a href=\"" + approveLink + "\" style=\"display:inline-block;padding:13px 32px;font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;\">&#10003; Approve</a>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"width:12px;\">&nbsp;</td>");
+        sb.Append("<td style=\"border-radius:8px;background-color:#ffffff;border:2px solid " + EmailRejectColor + ";\">");
+        sb.Append("<a href=\"" + rejectLink + "\" style=\"display:inline-block;padding:11px 30px;font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailRejectColor + ";text-decoration:none;border-radius:8px;\">&#10005; Reject</a>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+
+        sb.Append("<p style=\"margin:10px 0 26px;font-size:11.5px;line-height:1.6;color:" + EmailFaintText + ";\">");
+        sb.Append("Either button opens a secure confirmation page - for your security, the decision is only recorded once you confirm it there, not directly from this email. Link not working? Paste this into your browser: ");
+        sb.Append("<a href=\"" + reviewLink + "\" style=\"color:" + EmailBrandColor + ";\">" + reviewLink + "</a>");
+        sb.Append("</p>");
+
+        sb.Append("<div style=\"border-top:1px solid " + EmailBorderColor + ";margin:0 0 24px;\"></div>");
+
+        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.05em;color:" + EmailSlateText + ";text-transform:uppercase;margin-bottom:16px;\">Approval Progress</div>");
+        sb.Append(BuildApprovalStepperHtml(allSteps, step.Id));
+
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
+        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
+        sb.Append("This link is valid for " + ApprovalTokenValidityDays + " days and can only be used once. If it has expired, sign in to the app and check your Pending Approvals page instead. Please don't forward this email - it grants approval access to this request.");
+        sb.Append("</p>");
+        sb.Append("</td></tr>");
+
+        sb.Append("</table>");
+        sb.Append("</td></tr></table>");
+        sb.Append("</body></html>");
+
+        return sb.ToString();
+    }
+
+    /*
+     * Full HTML for the final-outcome email (sent to the requester once
+     * the requisition is fully approved or rejected at any stage) - same
+     * branded shell as the approval-request email, colored by outcome,
+     * with the same stepper at the bottom (highlightStepId null, since
+     * nothing is "awaiting decision" once there's a final outcome) so the
+     * requester can see the full trail without signing in.
+     */
+    private static string BuildOutcomeEmailHtml(
+        Models.PurchaseRequisition record,
+        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
+        bool approved,
+        string? remarks)
+    {
+        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
+
+        var prLabel = record.PrNumber ?? $"#{record.Id}";
+        var requesterName = record.RequestedByUser?.FullName ?? "there";
+        var accentColor = approved ? EmailApproveColor : EmailRejectColor;
+        var statusWord = approved ? "APPROVED" : "REJECTED";
+
+        var sb = new StringBuilder();
+
+        sb.Append("<!DOCTYPE html>");
+        sb.Append("<html><head><meta charset=\"utf-8\" />");
+        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />");
+        sb.Append("<title></title></head>");
+        sb.Append("<body style=\"margin:0;padding:0;background-color:" + EmailPageBg + ";\">");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailPageBg + ";padding:32px 16px;\">");
+        sb.Append("<tr><td align=\"center\">");
+        sb.Append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;\">");
+
+        sb.Append("<tr><td style=\"background-color:" + accentColor + ";padding:24px 32px;border-radius:12px 12px 0 0;\">");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append("<td style=\"width:44px;height:44px;background-color:#ffffff;border-radius:9px;text-align:center;vertical-align:middle;\">");
+        sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + accentColor + ";line-height:44px;\">PPS</span>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION " + statusWord + "</div>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:32px;font-family:" + EmailFontStack + ";\">");
+
+        sb.Append("<h1 style=\"margin:0 0 16px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
+        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
+        sb.Append("</h1>");
+
+        var outcomeSentence = approved
+            ? "has been <strong style=\"color:" + EmailApproveColor + ";\">fully approved</strong>."
+            : "was <strong style=\"color:" + EmailRejectColor + ";\">rejected</strong>" +
+              (string.IsNullOrWhiteSpace(remarks) ? "." : ": " + Enc(remarks));
+
+        sb.Append("<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
+        sb.Append("Hi " + Enc(requesterName) + ", your purchase requisition <strong>" + Enc(prLabel) + "</strong> (\"" + Enc(record.Title) + "\") " + outcomeSentence);
+        sb.Append("</p>");
+
+        if (allSteps.Count > 0)
+        {
+            sb.Append("<div style=\"border-top:1px solid " + EmailBorderColor + ";margin:8px 0 24px;\"></div>");
+            sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.05em;color:" + EmailSlateText + ";text-transform:uppercase;margin-bottom:16px;\">Approval Trail</div>");
+            sb.Append(BuildApprovalStepperHtml(allSteps, null));
+        }
+
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
+        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
+        sb.Append("Sign in to PPS License Manager to view the full details" + (approved ? " or download the PDF copy." : "."));
+        sb.Append("</p>");
+        sb.Append("</td></tr>");
+
+        sb.Append("</table>");
+        sb.Append("</td></tr></table>");
+        sb.Append("</body></html>");
+
+        return sb.ToString();
     }
 
     private async Task SendOutcomeEmailAsync(
@@ -1528,17 +1883,11 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 ? $"Approved: Purchase Requisition {prLabel}"
                 : $"Rejected: Purchase Requisition {prLabel}";
 
-            var outcomeSentence = approved
-                ? "has been fully approved."
-                : "was rejected" +
-                  (string.IsNullOrWhiteSpace(remarks)
-                      ? "."
-                      : $": {System.Net.WebUtility.HtmlEncode(remarks)}");
+            var allSteps = record.ApprovalSteps
+                .OrderBy(s => s.StepOrder)
+                .ToList();
 
-            var body =
-                $"<p>Hi {System.Net.WebUtility.HtmlEncode(requester.FullName)},</p>" +
-                $"<p>Your purchase requisition <strong>{System.Net.WebUtility.HtmlEncode(prLabel)}</strong> " +
-                $"(\"{System.Net.WebUtility.HtmlEncode(record.Title)}\") {outcomeSentence}</p>";
+            var body = BuildOutcomeEmailHtml(record, allSteps, approved, remarks);
 
             await _emailService.SendAsync(requester.Email, requester.FullName, subject, body);
         }

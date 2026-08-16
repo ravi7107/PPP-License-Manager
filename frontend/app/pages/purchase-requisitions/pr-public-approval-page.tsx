@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Check, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,22 @@ import {
 // would end up deciding it.
 export default function PrPublicApprovalPage() {
   const { token } = useParams<{ token: string }>();
+
+  // Which button the approver clicked in the email, if any - "?action=
+  // approve" / "?action=reject" on the link (see
+  // PurchaseRequisitionService.BuildApprovalRequestEmailHtml). Purely a
+  // UI hint for which choice to pre-emphasize; it never decides anything
+  // by itself - only an explicit click on this page (handleDecide) does,
+  // same reasoning as the rest of this page's GET-is-read-only design.
+  const [searchParams] = useSearchParams();
+  const quickAction =
+    searchParams.get('action') === 'approve'
+      ? 'approve'
+      : searchParams.get('action') === 'reject'
+        ? 'reject'
+        : null;
+
+  const remarksRef = useRef<HTMLTextAreaElement>(null);
 
   const [pr, setPr] = useState<PublicPurchaseRequisitionApproval | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +108,17 @@ export default function PrPublicApprovalPage() {
     !pr.isDecided &&
     pr.purchaseRequisitionStatus === 'InApproval' &&
     pr.stepStatus === 'Pending';
+
+  // A straight one-click Approve from the email itself isn't safe (see
+  // this file's top comment), but Reject additionally can't be one-click
+  // even here - remarks are required server-side. Auto-focusing the
+  // field at least means clicking "Reject" in the email drops the
+  // approver straight into typing a reason, no extra click to get there.
+  useEffect(() => {
+    if (canDecide && quickAction === 'reject') {
+      remarksRef.current?.focus();
+    }
+  }, [canDecide, quickAction]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
@@ -237,10 +264,37 @@ export default function PrPublicApprovalPage() {
                     </div>
                   ) : null}
 
+                  {quickAction === 'approve' ? (
+                    <div
+                      className="mb-3 rounded-md border px-3 py-2 text-xs"
+                      style={{
+                        borderColor: 'var(--nova-teal-500)',
+                        background: 'var(--nova-teal-50)',
+                        color: 'var(--nova-teal-600)',
+                      }}
+                    >
+                      You clicked <strong>Approve</strong> in the email. Confirm below to record it — this
+                      is the one click that actually approves it.
+                    </div>
+                  ) : quickAction === 'reject' ? (
+                    <div
+                      className="mb-3 rounded-md border px-3 py-2 text-xs"
+                      style={{
+                        borderColor: 'var(--nova-red-500)',
+                        background: 'var(--nova-amber-50)',
+                        color: 'var(--nova-red-600)',
+                      }}
+                    >
+                      You clicked <strong>Reject</strong> in the email. Add a brief reason below, then
+                      confirm.
+                    </div>
+                  ) : null}
+
                   <Label className="text-xs">
                     Remarks {'(required to reject)'}
                   </Label>
                   <Textarea
+                    ref={remarksRef}
                     className="mt-1"
                     placeholder="Add any remarks for the requester..."
                     value={remarks}
@@ -252,17 +306,21 @@ export default function PrPublicApprovalPage() {
                     <Button
                       type="button"
                       variant="destructive"
+                      size={quickAction === 'reject' ? 'default' : 'sm'}
                       disabled={deciding}
                       onClick={() => handleDecide(false)}
                     >
-                      <X className="mr-1.5 h-3.5 w-3.5" /> Reject
+                      <X className="mr-1.5 h-3.5 w-3.5" />
+                      {quickAction === 'reject' ? 'Confirm Rejection' : 'Reject'}
                     </Button>
                     <Button
                       type="button"
+                      size={quickAction === 'approve' ? 'default' : 'sm'}
                       disabled={deciding}
                       onClick={() => handleDecide(true)}
                     >
-                      <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      {quickAction === 'approve' ? 'Confirm Approval' : 'Approve'}
                     </Button>
                   </div>
                 </div>
