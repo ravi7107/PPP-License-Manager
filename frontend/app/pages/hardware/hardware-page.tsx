@@ -130,6 +130,7 @@ import {
   resolveImportedAssetType,
   resolveImportedOwnershipType,
   resolveImportedDualMonitor,
+  resolveImportedGb,
 } from '@/lib/utils/asset-excel';
 import { AssetImportResult } from '@/app/pages/hardware/components/asset-import-dialog';
 
@@ -1643,6 +1644,18 @@ const handleSubmit = async (
 
           model:
             row.model || null,
+
+          processor:
+            row.processor || null,
+
+          ramGb:
+            resolveImportedGb(row.ramGb) ?? null,
+
+          storageGb:
+            resolveImportedGb(row.storageGb) ?? null,
+
+          graphicsCard:
+            row.graphicsCard || null,
 
           purchaseDate:
             row.purchaseDate || null,

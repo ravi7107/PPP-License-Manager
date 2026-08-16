@@ -69,11 +69,12 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
           <DialogDescription>
             Upload the .xlsx template exported from this page (Export button above) filled in with your real
             inventory data, or any .xlsx with matching column headers: Asset ID, Asset Name, Asset Type, Entity,
-            Department, Host Name, Serial Number, Manufacturer, Model, Purchase Date, Warranty Expiry, Operating
-            System, Status, Ownership Type, Vendor, Rental Start Date, Rental End Date, Dual Monitor. Only Asset ID
-            is strictly required — everything else falls back to a sensible default. Entity and Department are
-            matched by name against what's already set up in the system, per row (so one file can cover multiple
-            departments).
+            Department, Host Name, Serial Number, Manufacturer, Model, Processor, RAM (GB), Storage (GB), Graphics
+            Card, Purchase Date, Warranty Expiry, Operating System, Status, Ownership Type, Vendor, Rental Start
+            Date, Rental End Date, Dual Monitor. Only Asset ID is strictly required — everything else falls back to
+            a sensible default. Entity and Department are matched by name against what's already set up in the
+            system, per row (so one file can cover multiple departments). Column headers are matched
+            case-insensitively and ignore extra spacing.
           </DialogDescription>
         </DialogHeader>
 

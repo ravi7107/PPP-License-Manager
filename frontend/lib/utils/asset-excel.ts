@@ -21,6 +21,10 @@ const EXPORT_COLUMNS: { key: string; header: string }[] = [
   { key: 'serialNumber', header: 'Serial Number' },
   { key: 'manufacturer', header: 'Manufacturer' },
   { key: 'model', header: 'Model' },
+  { key: 'processor', header: 'Processor' },
+  { key: 'ramGb', header: 'RAM (GB)' },
+  { key: 'storageGb', header: 'Storage (GB)' },
+  { key: 'graphicsCard', header: 'Graphics Card' },
   { key: 'purchaseDate', header: 'Purchase Date' },
   { key: 'warrantyExpiry', header: 'Warranty Expiry' },
   { key: 'operatingSystem', header: 'Operating System' },
@@ -67,6 +71,10 @@ export interface ImportedAssetRow {
   serialNumber: string;
   manufacturer: string;
   model: string;
+  processor: string;
+  ramGb: string;
+  storageGb: string;
+  graphicsCard: string;
   purchaseDate: string;
   warrantyExpiry: string;
   operatingSystem: string;
@@ -90,6 +98,10 @@ const IMPORT_HEADER_MAP: Record<string, keyof ImportedAssetRow> = {
   'Serial Number': 'serialNumber',
   Manufacturer: 'manufacturer',
   Model: 'model',
+  Processor: 'processor',
+  'RAM (GB)': 'ramGb',
+  'Storage (GB)': 'storageGb',
+  'Graphics Card': 'graphicsCard',
   'Purchase Date': 'purchaseDate',
   'Warranty Expiry': 'warrantyExpiry',
   'Operating System': 'operatingSystem',
@@ -104,6 +116,14 @@ const IMPORT_HEADER_MAP: Record<string, keyof ImportedAssetRow> = {
 
 export const IMPORT_ASSET_TYPES = ['Desktop', 'Laptop', 'Workstation', 'Server'] as const;
 
+// Trims stray whitespace and ignores case, so a header like " ownership
+// type " or "OWNERSHIP TYPE" (someone re-typing headers by hand instead
+// of using the exported template as-is) still resolves instead of
+// silently defaulting that whole column for every row.
+function normalizeHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 export async function parseAssetsExcelFile(file: File): Promise<ImportedAssetRow[]> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
@@ -111,12 +131,22 @@ export async function parseAssetsExcelFile(file: File): Promise<ImportedAssetRow
   const sheet = workbook.Sheets[firstSheetName];
   const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
+  const fieldByNormalizedHeader = new Map(
+    Object.entries(IMPORT_HEADER_MAP).map(([header, field]) => [normalizeHeader(header), field]),
+  );
+
   return rawRows.map((raw) => {
     const row: Partial<ImportedAssetRow> = {};
-    Object.entries(IMPORT_HEADER_MAP).forEach(([header, field]) => {
-      const value = raw[header];
+
+    const valueByNormalizedHeader = new Map(
+      Object.entries(raw).map(([header, value]) => [normalizeHeader(header), value]),
+    );
+
+    fieldByNormalizedHeader.forEach((field, normalizedHeader) => {
+      const value = valueByNormalizedHeader.get(normalizedHeader);
       row[field] = value === undefined || value === null ? '' : String(value).trim();
     });
+
     return row as ImportedAssetRow;
   });
 }
@@ -147,4 +177,15 @@ export function resolveImportedOwnershipType(row: ImportedAssetRow): 'Owned' | '
 // the Add/Edit Asset form's own default.
 export function resolveImportedDualMonitor(row: ImportedAssetRow): boolean {
   return row.dualMonitor.trim().toLowerCase() === 'yes';
+}
+
+// RAM/Storage come in as free-text cells (Excel numbers still arrive as
+// strings by the time they reach ImportedAssetRow) - parse to a whole
+// number of GB, or undefined if blank/not a number, so a bad cell
+// doesn't crash the row.
+export function resolveImportedGb(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
