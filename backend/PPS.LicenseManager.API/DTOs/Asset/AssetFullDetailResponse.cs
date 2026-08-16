@@ -37,6 +37,15 @@ public class AssetFullDetailResponse
     public string? CompanyName { get; set; }
 
     // -----------------------------------------------------------
+    // Rental tracking - "Owned" (default) or "Rented"
+    // -----------------------------------------------------------
+    public string? OwnershipType { get; set; }
+    public int? VendorId { get; set; }
+    public string? VendorName { get; set; }
+    public DateTime? RentalStartDate { get; set; }
+    public DateTime? RentalEndDate { get; set; }
+
+    // -----------------------------------------------------------
     // Current holder / location (null if unassigned)
     // -----------------------------------------------------------
     public int? AssignmentId { get; set; }

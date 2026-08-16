@@ -40,6 +40,11 @@ import {
   LookupOption,
 } from "@/app/pages/hardware/types";
 
+interface VendorOption {
+  id: number;
+  vendorName: string;
+}
+
 const assetFormSchema = z.object({
   assetTag: z.string().min(1, "Asset ID is required"),
 
@@ -81,6 +86,14 @@ const assetFormSchema = z.object({
   remarks: z.string().default(""),
 
   departmentId: z.string().default(""),
+
+  ownershipType: z.enum(["Owned", "Rented"]).default("Owned"),
+
+  vendorId: z.string().default(""),
+
+  rentalStartDate: z.string().default(""),
+
+  rentalEndDate: z.string().default(""),
 });
 
 interface AssetFormDialogProps {
@@ -92,6 +105,8 @@ interface AssetFormDialogProps {
   isAssigned?: boolean;
 
   departments: LookupOption[];
+
+  vendors: VendorOption[];
 
   saving: boolean;
 
@@ -145,6 +160,10 @@ function toFormValues(
       operatingSystem: EMPTY_ASSET_FORM.operatingSystem ?? "",
       remarks: EMPTY_ASSET_FORM.remarks ?? "",
       departmentId: EMPTY_ASSET_FORM.departmentId ?? "",
+      ownershipType: EMPTY_ASSET_FORM.ownershipType,
+      vendorId: EMPTY_ASSET_FORM.vendorId ?? "",
+      rentalStartDate: EMPTY_ASSET_FORM.rentalStartDate ?? "",
+      rentalEndDate: EMPTY_ASSET_FORM.rentalEndDate ?? "",
     };
   }
 
@@ -186,6 +205,18 @@ function toFormValues(
     departmentId: asset.departmentId
       ? String(asset.departmentId)
       : "",
+
+    ownershipType: asset.ownershipType ?? "Owned",
+
+    vendorId: asset.vendorId ? String(asset.vendorId) : "",
+
+    rentalStartDate: asset.rentalStartDate
+      ? asset.rentalStartDate.slice(0, 10)
+      : "",
+
+    rentalEndDate: asset.rentalEndDate
+      ? asset.rentalEndDate.slice(0, 10)
+      : "",
   };
 }
 
@@ -195,6 +226,7 @@ export function AssetFormDialog({
   asset,
   isAssigned = false,
   departments,
+  vendors,
   saving,
   onSubmit,
   error,
@@ -203,6 +235,8 @@ export function AssetFormDialog({
     resolver: zodResolver(assetFormSchema),
     defaultValues: toFormValues(null),
   });
+
+  const ownershipType = form.watch("ownershipType");
 
   useEffect(() => {
     if (open) {
@@ -224,6 +258,10 @@ export function AssetFormDialog({
     departments
   )
     ? (departments as LookupItem[])
+    : [];
+
+  const safeVendors: VendorOption[] = Array.isArray(vendors)
+    ? vendors
     : [];
 
   return (
@@ -618,6 +656,142 @@ export function AssetFormDialog({
                 To assign this asset to a user, save it first, then use
                 the &quot;Allocate&quot; action from the asset list.
               </p>
+            </div>
+
+            {/* OWNERSHIP / RENTAL */}
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Ownership
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="ownershipType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ownership *</FormLabel>
+
+                      <Select
+                        value={field.value ?? "Owned"}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select ownership" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          <SelectItem value="Owned">
+                            Owned
+                          </SelectItem>
+
+                          <SelectItem value="Rented">
+                            Rented
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {ownershipType === "Rented" ? (
+                  <FormField
+                    control={form.control}
+                    name="vendorId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rental Vendor</FormLabel>
+
+                        <Select
+                          value={field.value || ""}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select vendor" />
+                            </SelectTrigger>
+                          </FormControl>
+
+                          <SelectContent>
+                            {safeVendors.length === 0 ? (
+                              <div className="px-2 py-3 text-sm text-muted-foreground">
+                                No vendors available
+                              </div>
+                            ) : (
+                              safeVendors.map((v) => (
+                                <SelectItem
+                                  key={v.id}
+                                  value={String(v.id)}
+                                >
+                                  {v.vendorName}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {ownershipType === "Rented" ? (
+                  <FormField
+                    control={form.control}
+                    name="rentalStartDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rental Start Date</FormLabel>
+
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {ownershipType === "Rented" ? (
+                  <FormField
+                    control={form.control}
+                    name="rentalEndDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rental End Date</FormLabel>
+
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+              </div>
+
+              {ownershipType === "Rented" ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This asset will be tracked as rented - vendor and rental
+                  dates below are optional and can be filled in later.
+                </p>
+              ) : null}
             </div>
 
             {/* PURCHASE / WARRANTY */}

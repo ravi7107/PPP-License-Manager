@@ -44,4 +44,13 @@ public class UpdateAssetRequest
     public bool IsReadyForAssignment { get; set; } = true;
 
     public string Status { get; set; } = "Available";
+
+    // Rental tracking - "Owned" (default) or "Rented".
+    public string? OwnershipType { get; set; }
+
+    public int? VendorId { get; set; }
+
+    public DateTime? RentalStartDate { get; set; }
+
+    public DateTime? RentalEndDate { get; set; }
 }

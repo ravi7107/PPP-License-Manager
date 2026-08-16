@@ -47,6 +47,21 @@ public class Asset
 
     public OfficeLocation? CurrentLocation { get; set; }
 
+    // Rental tracking - "Owned" (default) or "Rented". Rented assets are
+    // tracked the same way as owned ones (same Assign/Transfer/Audit
+    // behavior); this just tags them and records who they're rented from
+    // and for how long, for management visibility. No cost/agreement
+    // fields and no expiry alerting by design - just Vendor + dates.
+    public string OwnershipType { get; set; } = "Owned";
+
+    public int? VendorId { get; set; }
+
+    public Vendor? Vendor { get; set; }
+
+    public DateTime? RentalStartDate { get; set; }
+
+    public DateTime? RentalEndDate { get; set; }
+
     // Available, Assigned, Maintenance, Reserved, Retired
     public string Status { get; set; } = "Available";
 

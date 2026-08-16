@@ -41,7 +41,15 @@ export interface AssetRecord {
 
   isReadyForAssignment: boolean;
   isActive: boolean;
+
+  ownershipType?: OwnershipType;
+  vendorId?: number;
+  vendorName?: string;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
 }
+
+export type OwnershipType = "Owned" | "Rented";
 
 export interface LookupOption {
   id: number;
@@ -71,7 +79,14 @@ export interface AssetFormValues {
   warrantyExpiry: string;
 
   remarks: string;
+
+  ownershipType: OwnershipType;
+  vendorId: string;
+  rentalStartDate: string;
+  rentalEndDate: string;
 }
+
+export const OWNERSHIP_TYPES: OwnershipType[] = ["Owned", "Rented"];
 
 export const ASSET_TYPES: AssetType[] = [
   "Desktop",
@@ -110,4 +125,9 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
   warrantyExpiry: "",
 
   remarks: "",
+
+  ownershipType: "Owned",
+  vendorId: "",
+  rentalStartDate: "",
+  rentalEndDate: "",
 };

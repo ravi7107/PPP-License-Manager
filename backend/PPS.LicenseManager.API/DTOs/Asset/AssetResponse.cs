@@ -43,4 +43,15 @@ public int DepartmentId { get; set; }
 public DateTime? PurchaseDate { get; set; }
 
 public string? Remarks { get; set; }
+
+// Rental tracking - "Owned" (default) or "Rented".
+public string? OwnershipType { get; set; }
+
+public int? VendorId { get; set; }
+
+public string? VendorName { get; set; }
+
+public DateTime? RentalStartDate { get; set; }
+
+public DateTime? RentalEndDate { get; set; }
 }

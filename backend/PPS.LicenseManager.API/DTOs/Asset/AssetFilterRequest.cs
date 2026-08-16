@@ -14,6 +14,9 @@ public class AssetFilterRequest
 
     public bool? IsActive { get; set; }
 
+    // Rental tracking - "Owned" or "Rented".
+    public string? OwnershipType { get; set; }
+
     public int Page { get; set; } = 1;
 
     public int PageSize { get; set; } = 20;

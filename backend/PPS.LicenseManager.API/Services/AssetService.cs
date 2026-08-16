@@ -32,6 +32,7 @@ public class AssetService : IAssetService
 
         var query = _context.Assets
             .Include(a => a.Department)
+            .Include(a => a.Vendor)
             .Where(a => a.IsActive);
 
         if (isEntityRestricted)
@@ -62,7 +63,12 @@ public class AssetService : IAssetService
                 Status = a.Status,
                 WarrantyExpiry = a.WarrantyExpiry,
                 IsReadyForAssignment = a.IsReadyForAssignment,
-                IsActive = a.IsActive
+                IsActive = a.IsActive,
+                OwnershipType = a.OwnershipType,
+                VendorId = a.VendorId,
+                VendorName = a.Vendor != null ? a.Vendor.VendorName : null,
+                RentalStartDate = a.RentalStartDate,
+                RentalEndDate = a.RentalEndDate
             })
             .ToListAsync();
     }
@@ -71,6 +77,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
 {
     var query = _context.Assets
         .Include(a => a.Department)
+        .Include(a => a.Vendor)
         .Where(a => a.IsActive);
 
     // Global Search
@@ -111,6 +118,12 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         query = query.Where(a => a.Status == request.Status);
     }
 
+    // Ownership (Owned/Rented)
+    if (!string.IsNullOrWhiteSpace(request.OwnershipType))
+    {
+        query = query.Where(a => a.OwnershipType == request.OwnershipType);
+    }
+
     var totalRecords = await query.CountAsync();
 
     query = request.SortDirection.ToLower() == "desc"
@@ -135,6 +148,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
     {
         var asset = await _context.Assets
             .Include(a => a.Department)
+            .Include(a => a.Vendor)
             .FirstOrDefaultAsync(a => a.Id == id);
 
         if (asset == null)
@@ -160,7 +174,12 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             Status = asset.Status,
             WarrantyExpiry = asset.WarrantyExpiry,
             IsReadyForAssignment = asset.IsReadyForAssignment,
-            IsActive = asset.IsActive
+            IsActive = asset.IsActive,
+            OwnershipType = asset.OwnershipType,
+            VendorId = asset.VendorId,
+            VendorName = asset.Vendor?.VendorName,
+            RentalStartDate = asset.RentalStartDate,
+            RentalEndDate = asset.RentalEndDate
         };
     }
 
@@ -181,6 +200,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         var asset = await _context.Assets
             .Include(a => a.Department)
                 .ThenInclude(d => d!.Company)
+            .Include(a => a.Vendor)
             .FirstOrDefaultAsync(a => a.Id == id);
 
         if (asset == null)
@@ -240,6 +260,12 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             DepartmentName = asset.Department?.DepartmentName,
             CompanyId = asset.Department?.CompanyId,
             CompanyName = asset.Department?.Company?.Name,
+
+            OwnershipType = asset.OwnershipType,
+            VendorId = asset.VendorId,
+            VendorName = asset.Vendor?.VendorName,
+            RentalStartDate = asset.RentalStartDate,
+            RentalEndDate = asset.RentalEndDate,
 
             AssignmentId = assignment?.Id,
             UserId = assignment?.UserId,
@@ -459,6 +485,10 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             PurchaseDate = request.PurchaseDate,
             WarrantyExpiry = request.WarrantyExpiry,
             Remarks = request.Remarks,
+            OwnershipType = string.IsNullOrWhiteSpace(request.OwnershipType) ? "Owned" : request.OwnershipType,
+            VendorId = request.VendorId,
+            RentalStartDate = request.RentalStartDate,
+            RentalEndDate = request.RentalEndDate,
             Status = "Available",
             IsReadyForAssignment = true,
             IsActive = true,
@@ -514,6 +544,10 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         asset.Status = request.Status;
         asset.IsActive = request.IsActive;
         asset.IsReadyForAssignment = request.IsReadyForAssignment;
+        asset.OwnershipType = string.IsNullOrWhiteSpace(request.OwnershipType) ? "Owned" : request.OwnershipType;
+        asset.VendorId = request.VendorId;
+        asset.RentalStartDate = request.RentalStartDate;
+        asset.RentalEndDate = request.RentalEndDate;
         asset.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -574,7 +608,12 @@ private static AssetResponse MapToResponse(Asset asset)
         WarrantyExpiry = asset.WarrantyExpiry,
         Remarks = asset.Remarks,
         IsReadyForAssignment = asset.IsReadyForAssignment,
-        IsActive = asset.IsActive
+        IsActive = asset.IsActive,
+        OwnershipType = asset.OwnershipType,
+        VendorId = asset.VendorId,
+        VendorName = asset.Vendor?.VendorName,
+        RentalStartDate = asset.RentalStartDate,
+        RentalEndDate = asset.RentalEndDate
     };
 }
 }

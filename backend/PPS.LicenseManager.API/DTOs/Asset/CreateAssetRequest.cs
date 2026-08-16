@@ -38,4 +38,13 @@ public class CreateAssetRequest
     public DateTime? WarrantyExpiry { get; set; }
 
     public string? Remarks { get; set; }
+
+    // Rental tracking - "Owned" (default) or "Rented".
+    public string? OwnershipType { get; set; }
+
+    public int? VendorId { get; set; }
+
+    public DateTime? RentalStartDate { get; set; }
+
+    public DateTime? RentalEndDate { get; set; }
 }

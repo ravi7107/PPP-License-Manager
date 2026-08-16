@@ -1100,6 +1100,10 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.Property(a => a.IsActive)
                   .HasDefaultValue(true);
 
+            entity.Property(a => a.OwnershipType)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Owned");
+
             entity.HasOne(a => a.Department)
                   .WithMany()
                   .HasForeignKey(a => a.DepartmentId)
@@ -1113,6 +1117,17 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(a => a.CurrentLocation)
                   .WithMany()
                   .HasForeignKey(a => a.CurrentLocationId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Rental tracking - see Asset.VendorId's comment. SetNull (not
+            // Restrict) for the same reason as CurrentLocation above: a
+            // vendor being deactivated/removed shouldn't block that,
+            // it just leaves the asset's rental vendor blank.
+            entity.HasIndex(a => a.VendorId);
+
+            entity.HasOne(a => a.Vendor)
+                  .WithMany()
+                  .HasForeignKey(a => a.VendorId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
 

@@ -26,6 +26,7 @@ import {
   MapPin,
   SlidersHorizontal,
   X,
+  Truck,
 } from 'lucide-react';
 
 import {
@@ -118,6 +119,8 @@ import {
   LookupOption,
   ASSET_TYPES,
 } from '@/app/pages/hardware/types';
+
+import { getVendors, Vendor } from '@/lib/api/vendors.api';
 
 import { exportAssetsToExcel } from '@/lib/utils/asset-excel';
 import { ImportedAssetRow } from '@/lib/utils/asset-excel';
@@ -554,6 +557,19 @@ export default function HardwarePage() {
   const [warrantyFilter, setWarrantyFilter] =
     useState<string>('all');
 
+  const [ownershipFilter, setOwnershipFilter] =
+    useState<string>('all');
+
+  // Rental vendor picker for the Add/Edit Asset form's Ownership
+  // section (rented assets - see AssetFormDialog).
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+
+  useEffect(() => {
+    getVendors()
+      .then((all) => setVendors(all.filter((v) => v.isActive)))
+      .catch(() => setVendors([]));
+  }, []);
+
   /*
    * --------------------------------------------------------------------------
    * ROW SELECTION (bulk export only - every other row action already goes
@@ -840,6 +856,12 @@ export default function HardwarePage() {
         );
       }
 
+      if (ownershipFilter !== 'all') {
+        list = list.filter(
+          (a) => (a.ownershipType ?? 'Owned') === ownershipFilter,
+        );
+      }
+
       list.sort((a, b) => {
         const av =
           (a[sortKey] ?? '') as string;
@@ -865,6 +887,7 @@ export default function HardwarePage() {
       departmentFilter,
       assetTypeFilter,
       warrantyFilter,
+      ownershipFilter,
       sortKey,
       sortDir,
       isTeamLeader,
@@ -901,6 +924,7 @@ export default function HardwarePage() {
     departmentFilter,
     assetTypeFilter,
     warrantyFilter,
+    ownershipFilter,
     pageSize,
   ]);
 
@@ -1005,8 +1029,16 @@ export default function HardwarePage() {
       });
     }
 
+    if (ownershipFilter !== 'all') {
+      chips.push({
+        key: 'ownership',
+        label: `Ownership: ${ownershipFilter}`,
+        onRemove: () => setOwnershipFilter('all'),
+      });
+    }
+
     return chips;
-  }, [statusFilter, departmentFilter, assetTypeFilter, warrantyFilter, departments]);
+  }, [statusFilter, departmentFilter, assetTypeFilter, warrantyFilter, ownershipFilter, departments]);
 
   const resetAllFilters = () => {
     setSearch('');
@@ -1014,6 +1046,7 @@ export default function HardwarePage() {
     setDepartmentFilter('all');
     setAssetTypeFilter('all');
     setWarrantyFilter('all');
+    setOwnershipFilter('all');
   };
 
   /*
@@ -1353,6 +1386,24 @@ const handleSubmit = async (
 
       remarks:
         values.remarks || null,
+
+      ownershipType:
+        values.ownershipType || 'Owned',
+
+      vendorId:
+        values.ownershipType === 'Rented' && values.vendorId
+          ? Number(values.vendorId)
+          : null,
+
+      rentalStartDate:
+        values.ownershipType === 'Rented'
+          ? values.rentalStartDate || null
+          : null,
+
+      rentalEndDate:
+        values.ownershipType === 'Rented'
+          ? values.rentalEndDate || null
+          : null,
     };
 
     if (selectedAsset) {
@@ -1781,6 +1832,29 @@ const handleSubmit = async (
                 </SelectItem>
               </SelectContent>
             </Select>
+
+            <Select
+              value={ownershipFilter}
+              onValueChange={setOwnershipFilter}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Ownership" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">
+                  Owned & Rented
+                </SelectItem>
+
+                <SelectItem value="Owned">
+                  Owned
+                </SelectItem>
+
+                <SelectItem value="Rented">
+                  Rented
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* ---------------------------------------------------------- */}
@@ -2040,7 +2114,23 @@ const handleSubmit = async (
                           </TableCell>
 
                           <TableCell>
-                            <StatusPill status={asset.status} />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <StatusPill status={asset.status} />
+
+                              {asset.ownershipType === 'Rented' && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-800"
+                                  title={
+                                    asset.vendorName
+                                      ? `Rented from ${asset.vendorName}`
+                                      : 'Rented asset'
+                                  }
+                                >
+                                  <Truck className="h-3 w-3" aria-hidden />
+                                  Rented
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
 
                           <TableCell className="text-right">
@@ -2252,6 +2342,7 @@ const handleSubmit = async (
           selectedAsset?.assignedUserId,
         )}
         departments={departments}
+        vendors={vendors}
         saving={saving || updating}
         onSubmit={handleSubmit}
         error={formError}
