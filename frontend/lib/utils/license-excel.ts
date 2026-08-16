@@ -28,6 +28,11 @@ const EXPORT_COLUMNS: { key: string; header: string }[] = [
   { key: 'remarks', header: 'Remarks' },
 ];
 
+// Explicit header list (rather than letting json_to_sheet infer columns
+// from rows[0]) so exporting with zero rows still writes a header-only
+// template instead of a completely blank sheet.
+const EXPORT_HEADERS = EXPORT_COLUMNS.map((c) => c.header);
+
 export function exportLicensesToExcel(licenses: ExportableLicense[], fileName = 'license-inventory.xlsx') {
   const rows = licenses.map((license) => {
     const row: Record<string, unknown> = {};
@@ -46,7 +51,7 @@ export function exportLicensesToExcel(licenses: ExportableLicense[], fileName = 
     return row;
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: EXPORT_HEADERS });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Licenses');
   XLSX.writeFile(workbook, fileName);
