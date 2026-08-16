@@ -14,6 +14,9 @@ import {
   X,
   Truck,
   Download,
+  Repeat,
+  AlertTriangle,
+  PackageCheck,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +36,8 @@ import {
 import {
   MaterialMovement,
   MaterialMovementListItem,
+  RgpTrackingItem,
+  RgpTrackingResponse,
   SaveMaterialMovementRequest,
   approveMaterialMovement,
   createMaterialMovement,
@@ -42,6 +47,8 @@ import {
   getMaterialMovement,
   getMyMaterialMovements,
   getPendingMyApproval,
+  getRgpTracking,
+  markReturned,
   rejectMaterialMovement,
   submitMaterialMovement,
   updateMaterialMovement,
@@ -74,6 +81,7 @@ import {
 } from '@/app/pages/material-movement/movements/components/material-movement-form-dialog';
 import { MaterialMovementDecisionDialog } from '@/app/pages/material-movement/movements/components/material-movement-decision-dialog';
 import { MaterialMovementDispatchDialog } from '@/app/pages/material-movement/movements/components/material-movement-dispatch-dialog';
+import { MaterialMovementMarkReturnedDialog } from '@/app/pages/material-movement/movements/components/material-movement-mark-returned-dialog';
 
 import { AppRole, canManage } from '@/lib/auth/roles';
 
@@ -118,6 +126,21 @@ function statusPillClass(status: string): string {
       return 'nova-pill-danger';
     default:
       return 'nova-pill-neutral';
+  }
+}
+
+// RGP ReturnStatus (Pending/Overdue/Returned) is a separate value from
+// Movement.Status above - computed by the backend, not stored - so it
+// gets its own pill-color mapping rather than reusing statusPillClass.
+function rgpStatusPillClass(status: string): string {
+  switch (status) {
+    case 'Returned':
+      return 'nova-pill-success';
+    case 'Overdue':
+      return 'nova-pill-danger';
+    case 'Pending':
+    default:
+      return 'nova-pill-pending';
   }
 }
 
@@ -194,6 +217,19 @@ export default function MaterialMovementsPage() {
   const [dispatchSaving, setDispatchSaving] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
 
+  const [rgpTracking, setRgpTracking] = useState<RgpTrackingResponse | null>(
+    null
+  );
+  const [loadingRgp, setLoadingRgp] = useState(false);
+
+  const [markReturnedOpen, setMarkReturnedOpen] = useState(false);
+  const [markReturnedTarget, setMarkReturnedTarget] =
+    useState<RgpTrackingItem | null>(null);
+  const [markReturnedSaving, setMarkReturnedSaving] = useState(false);
+  const [markReturnedError, setMarkReturnedError] = useState<string | null>(
+    null
+  );
+
   const loadList = useCallback(async () => {
     setLoading(true);
     setListError(null);
@@ -225,9 +261,29 @@ export default function MaterialMovementsPage() {
     }
   }, []);
 
+  // Privileged-only on the backend (same gate as GetAll/Dispatch) - only
+  // called when canDispatch is true, so a regular user never hits a 403
+  // just from loading this page.
+  const loadRgpTracking = useCallback(async () => {
+    setLoadingRgp(true);
+
+    try {
+      const data = await getRgpTracking();
+      setRgpTracking(data);
+    } catch {
+      setRgpTracking(null);
+    } finally {
+      setLoadingRgp(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadList();
     void loadPending();
+
+    if (canDispatch) {
+      void loadRgpTracking();
+    }
 
     void getCompanies()
       .then(setCompanies)
@@ -260,7 +316,7 @@ export default function MaterialMovementsPage() {
     void getMaterialTransporters()
       .then(setTransporters)
       .catch(() => setTransporters([]));
-  }, [loadList, loadPending]);
+  }, [loadList, loadPending, loadRgpTracking, canDispatch]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -500,13 +556,49 @@ export default function MaterialMovementsPage() {
       setDispatchOpen(false);
       setDispatchTarget(null);
 
-      await loadList();
+      // Dispatching a TemporaryMovement (RGP) now opens its return-
+      // tracking row too - refresh both lists rather than guessing at the
+      // dispatched movement's type here.
+      await Promise.all([
+        loadList(),
+        canDispatch ? loadRgpTracking() : Promise.resolve(),
+      ]);
     } catch (err: any) {
       setDispatchError(
         err?.response?.data?.message ?? 'Failed to dispatch movement.'
       );
     } finally {
       setDispatchSaving(false);
+    }
+  };
+
+  const openMarkReturned = (item: RgpTrackingItem) => {
+    setMarkReturnedError(null);
+    setMarkReturnedTarget(item);
+    setMarkReturnedOpen(true);
+  };
+
+  const handleConfirmMarkReturned = async (remarks: string | null) => {
+    if (!markReturnedTarget) {
+      return;
+    }
+
+    setMarkReturnedSaving(true);
+    setMarkReturnedError(null);
+
+    try {
+      await markReturned(markReturnedTarget.id, remarks);
+
+      setMarkReturnedOpen(false);
+      setMarkReturnedTarget(null);
+
+      await Promise.all([loadRgpTracking(), loadList()]);
+    } catch (err: any) {
+      setMarkReturnedError(
+        err?.response?.data?.message ?? 'Failed to mark movement returned.'
+      );
+    } finally {
+      setMarkReturnedSaving(false);
     }
   };
 
@@ -877,6 +969,191 @@ export default function MaterialMovementsPage() {
         </div>
       </div>
 
+      {canDispatch ? (
+        <>
+          <div className="nova-kpi-grid">
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Total RGP</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-blue-50)' }}
+                >
+                  <Repeat
+                    className="text-[var(--nova-blue-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.totalCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Pending Return</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-amber-50)' }}
+                >
+                  <Clock
+                    className="text-[var(--nova-amber-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.pendingCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Overdue</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-red-50)' }}
+                >
+                  <AlertTriangle
+                    className="text-[var(--nova-red-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.overdueCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Returned</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-teal-50)' }}
+                >
+                  <PackageCheck
+                    className="text-[var(--nova-teal-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.returnedCount ?? 0}
+              </div>
+            </div>
+          </div>
+
+          <div className="nova-panel">
+            <div className="nova-panel-toolbar">
+              <div>
+                <div className="text-sm font-semibold">RGP Tracking</div>
+                <p className="text-xs text-muted-foreground">
+                  Every dispatched Temporary Movement (RGP), with its
+                  expected and actual return status.
+                </p>
+              </div>
+
+              <div className="nova-spacer" />
+
+              <span className="nova-muted-count">
+                {rgpTracking?.items.length ?? 0} RGP
+                {(rgpTracking?.items.length ?? 0) === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div className="nova-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Movement #</th>
+                    <th>Gate Pass #</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Requested By</th>
+                    <th>Dispatched On</th>
+                    <th>Expected Return</th>
+                    <th>Status</th>
+                    <th className="nova-right">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loadingRgp ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        Loading…
+                      </td>
+                    </tr>
+                  ) : !rgpTracking || rgpTracking.items.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        No RGPs dispatched yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    rgpTracking.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="nova-mono">
+                          {item.movementNumber ?? '—'}
+                        </td>
+                        <td className="nova-mono">
+                          {item.gatePassNumber ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.fromSummary ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.toSummary ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.requestedByUserName}
+                        </td>
+                        <td className="nova-cell-faint">
+                          {item.dispatchedAt.slice(0, 10)}
+                        </td>
+                        <td className="nova-cell-faint">
+                          {item.expectedReturnDate.slice(0, 10)}
+                        </td>
+                        <td>
+                          <span
+                            className={`nova-pill ${rgpStatusPillClass(item.returnStatus)}`}
+                          >
+                            <span className="nova-dot" />
+                            {item.returnStatus === 'Overdue'
+                              ? `Overdue (${item.daysOverdue}d)`
+                              : item.returnStatus}
+                          </span>
+                        </td>
+                        <td className="nova-right space-x-1">
+                          {item.returnStatus !== 'Returned' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openMarkReturned(item)}
+                            >
+                              <PackageCheck className="mr-1 h-3.5 w-3.5 text-[var(--nova-teal-500)]" />{' '}
+                              Mark Returned
+                            </Button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       <MaterialMovementFormDialog
         open={formOpen}
         onOpenChange={(open) => {
@@ -962,6 +1239,21 @@ export default function MaterialMovementsPage() {
         saving={dispatchSaving}
         error={dispatchError}
         onConfirm={handleConfirmDispatch}
+      />
+
+      <MaterialMovementMarkReturnedDialog
+        open={markReturnedOpen}
+        onOpenChange={(open) => {
+          setMarkReturnedOpen(open);
+
+          if (!open) {
+            setMarkReturnedTarget(null);
+          }
+        }}
+        item={markReturnedTarget}
+        saving={markReturnedSaving}
+        error={markReturnedError}
+        onConfirm={handleConfirmMarkReturned}
       />
     </div>
   );

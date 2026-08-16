@@ -292,3 +292,56 @@ export async function downloadGatePassPdf(
     fileName: match?.[1] ?? `gate-pass-${id}.pdf`,
   };
 }
+
+// =========================================================
+// RGP (RETURNABLE GATE PASS) TRACKING
+// =========================================================
+
+// TemporaryMovement is treated as an RGP - this covers every dispatched
+// one, with ReturnStatus computed by the backend (Pending/Overdue/
+// Returned), not a stored/scheduled status.
+export interface RgpTrackingItem {
+  id: number;
+  movementNumber: string | null;
+  gatePassNumber: string | null;
+  fromSummary: string | null;
+  toSummary: string | null;
+  requestedByUserName: string;
+  dispatchedAt: string;
+  expectedReturnDate: string;
+  actualReturnDate: string | null;
+  returnStatus: 'Pending' | 'Overdue' | 'Returned';
+  daysOverdue: number;
+}
+
+export interface RgpTrackingSummary {
+  totalCount: number;
+  pendingCount: number;
+  overdueCount: number;
+  returnedCount: number;
+}
+
+export interface RgpTrackingResponse {
+  summary: RgpTrackingSummary;
+  items: RgpTrackingItem[];
+}
+
+export async function getRgpTracking(): Promise<RgpTrackingResponse> {
+  const response = await api.get<ApiResponse<RgpTrackingResponse>>(
+    '/MaterialMovement/rgp-tracking'
+  );
+
+  return response.data.data;
+}
+
+export async function markReturned(
+  id: number,
+  remarks?: string | null
+): Promise<MaterialMovement> {
+  const response = await api.post<ApiResponse<MaterialMovement>>(
+    `/MaterialMovement/${id}/mark-returned`,
+    { remarks: remarks ?? null }
+  );
+
+  return response.data.data;
+}

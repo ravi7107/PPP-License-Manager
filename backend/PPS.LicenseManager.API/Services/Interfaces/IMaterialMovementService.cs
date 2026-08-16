@@ -82,6 +82,28 @@ public interface IMaterialMovementService
         string pdfStorageRootPath);
 
     // =========================================================
+    // RGP (RETURNABLE GATE PASS) TRACKING
+    // =========================================================
+
+    // Every dispatched MovementType == "TemporaryMovement" - the type this
+    // system treats as an RGP - with a computed ReturnStatus (Pending/
+    // Overdue/Returned) and summary counts. "Overdue" is computed live
+    // against today's date, not a stored/scheduled status.
+    Task<RgpTrackingResponse> GetRgpTrackingAsync();
+
+    // Closes out an RGP - creates the MaterialMovementReturn row if
+    // DispatchAsync hasn't already (movements dispatched before this
+    // existed), sets it to Returned, and moves the movement's own Status
+    // to "TemporaryReturned". Throws InvalidOperationException if the
+    // movement isn't a dispatched TemporaryMovement or is already marked
+    // returned.
+    Task<MaterialMovementResponse?> MarkReturnedAsync(
+        int id,
+        int returnedByUserId,
+        string? remarks,
+        string? ipAddress);
+
+    // =========================================================
     // SYSTEM-LOGGED MOVEMENTS (e.g. Work From Home via Asset Reallocation)
     // =========================================================
 

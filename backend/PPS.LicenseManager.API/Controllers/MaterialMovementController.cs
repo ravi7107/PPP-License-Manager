@@ -361,4 +361,51 @@ public class MaterialMovementController : BaseController
             return Unauthorized(new { message = ex.Message });
         }
     }
+
+    // =========================================================
+    // RGP (RETURNABLE GATE PASS) TRACKING
+    // =========================================================
+
+    // Same admin-level access as GetAll/Dispatch - this is a company-wide
+    // logistics view (every outstanding RGP, not just the caller's own),
+    // not a "my movements" scope.
+    [HttpGet("rgp-tracking")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> GetRgpTracking()
+    {
+        var result = await _service.GetRgpTrackingAsync();
+
+        return Success(result, "RGP tracking retrieved successfully.");
+    }
+
+    // Same admin-level access as Dispatch - marking material physically
+    // returned is a logistics/security action, not something the original
+    // requester self-certifies.
+    [HttpPost("{id:int}/mark-returned")]
+    [Authorize(Roles = "Super Admin,IT Admin")]
+    public async Task<IActionResult> MarkReturned(
+        int id,
+        [FromBody] MarkReturnedRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.MarkReturnedAsync(
+                id, currentUserId, request.Remarks, GetClientIpAddress());
+
+            if (result == null)
+                return NotFoundResponse("Movement not found.");
+
+            return Success(result, "Movement marked as returned.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
 }

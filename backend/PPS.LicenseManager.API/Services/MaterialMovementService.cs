@@ -1070,6 +1070,31 @@ public class MaterialMovementService : IMaterialMovementService
         movement.Status = "Dispatched";
         movement.UpdatedAt = DateTime.UtcNow;
 
+        // This movement type is treated as an RGP (Returnable Gate Pass) -
+        // open the round-trip tracking row here, at dispatch time, rather
+        // than waiting for a return to actually happen. Matches
+        // MaterialMovementReturn.cs's own doc comment ("created alongside
+        // the movement's dispatch"). Guarded with an existence check so
+        // this stays safe to run even if a Return row somehow already
+        // exists (shouldn't happen via this path, but AlreadyDispatched
+        // above already guarantees Dispatch itself only runs once).
+        if (movement.MovementType == "TemporaryMovement")
+        {
+            var alreadyHasReturnRow = await _context.MaterialMovementReturns
+                .AnyAsync(r => r.MovementId == movement.Id);
+
+            if (!alreadyHasReturnRow)
+            {
+                _context.MaterialMovementReturns.Add(new Models.MaterialMovementReturn
+                {
+                    MovementId = movement.Id,
+                    ExpectedReturnDate = movement.ExpectedReturnDate ?? DateTime.UtcNow,
+                    Status = "Pending",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
         AddAuditLog(movement.Id, "Dispatched", dispatchedByUserId,
             details: $"Gate pass {gatePassNumber}", ipAddress: ipAddress);
 
@@ -1221,6 +1246,193 @@ public class MaterialMovementService : IMaterialMovementService
             return null;
 
         return (physicalPath, Path.GetFileName(physicalPath));
+    }
+
+    // =========================================================
+    // RGP (RETURNABLE GATE PASS) TRACKING
+    // =========================================================
+
+    public async Task<RgpTrackingResponse> GetRgpTrackingAsync()
+    {
+        // Starting from Dispatches (not Movements) means this naturally
+        // only ever includes movements that have actually left the
+        // building - a still-Draft/PendingApproval/Approved
+        // TemporaryMovement isn't an outstanding RGP yet.
+        var dispatches = await _context.MaterialMovementDispatches
+            .AsNoTracking()
+            .Where(d => d.Movement.MovementType == "TemporaryMovement")
+            .Select(d => new
+            {
+                d.MovementId,
+                MovementNumber = d.Movement.MovementNumber,
+                d.DispatchedAt,
+                d.GatePassNumber,
+                ExpectedReturnDate = d.Movement.ExpectedReturnDate,
+                RequestedByUserName = d.Movement.RequestedByUser.FullName,
+                FromSummary = d.Movement.FromLocation != null
+                    ? d.Movement.FromLocation.LocationName
+                    : (d.Movement.FromCompany != null ? d.Movement.FromCompany.Name : null),
+                ToSummary = d.Movement.ToLocation != null
+                    ? d.Movement.ToLocation.LocationName
+                    : (d.Movement.ToCompany != null ? d.Movement.ToCompany.Name : null)
+            })
+            .ToListAsync();
+
+        var movementIds = dispatches.Select(d => d.MovementId).ToList();
+
+        var returnsList = await _context.MaterialMovementReturns
+            .AsNoTracking()
+            .Where(r => movementIds.Contains(r.MovementId))
+            .ToListAsync();
+
+        var returnsByMovementId = returnsList.ToDictionary(r => r.MovementId);
+
+        var today = DateTime.UtcNow.Date;
+        var items = new List<RgpTrackingItemResponse>();
+
+        foreach (var d in dispatches)
+        {
+            returnsByMovementId.TryGetValue(d.MovementId, out var returnRecord);
+
+            // TemporaryMovement always requires ExpectedReturnDate at
+            // create time (see ValidateAndNormalizeAsync) - the
+            // DispatchedAt fallback below only guards against pre-existing
+            // data from before that validation existed.
+            var expectedReturnDate = d.ExpectedReturnDate ?? d.DispatchedAt;
+
+            string returnStatus;
+            var daysOverdue = 0;
+
+            if (returnRecord != null && returnRecord.Status == "Returned")
+            {
+                returnStatus = "Returned";
+            }
+            else if (expectedReturnDate.Date < today)
+            {
+                // Computed live against today's date, not a stored/
+                // scheduled status - see this method's interface doc
+                // comment.
+                returnStatus = "Overdue";
+                daysOverdue = (today - expectedReturnDate.Date).Days;
+            }
+            else
+            {
+                returnStatus = "Pending";
+            }
+
+            items.Add(new RgpTrackingItemResponse
+            {
+                Id = d.MovementId,
+                MovementNumber = d.MovementNumber,
+                GatePassNumber = d.GatePassNumber,
+                FromSummary = d.FromSummary,
+                ToSummary = d.ToSummary,
+                RequestedByUserName = d.RequestedByUserName,
+                DispatchedAt = d.DispatchedAt,
+                ExpectedReturnDate = expectedReturnDate,
+                ActualReturnDate = returnRecord?.ActualReturnDate,
+                ReturnStatus = returnStatus,
+                DaysOverdue = daysOverdue
+            });
+        }
+
+        // Outstanding (Pending/Overdue) first, soonest/most-overdue expected
+        // date first within each group - the operationally useful order for
+        // a logistics/security desk chasing returns.
+        var ordered = items
+            .OrderBy(i => i.ReturnStatus == "Returned" ? 1 : 0)
+            .ThenBy(i => i.ExpectedReturnDate)
+            .ToList();
+
+        return new RgpTrackingResponse
+        {
+            Summary = new RgpTrackingSummaryResponse
+            {
+                TotalCount = items.Count,
+                PendingCount = items.Count(i => i.ReturnStatus == "Pending"),
+                OverdueCount = items.Count(i => i.ReturnStatus == "Overdue"),
+                ReturnedCount = items.Count(i => i.ReturnStatus == "Returned")
+            },
+            Items = ordered
+        };
+    }
+
+    public async Task<MaterialMovementResponse?> MarkReturnedAsync(
+        int id,
+        int returnedByUserId,
+        string? remarks,
+        string? ipAddress)
+    {
+        var movement = await _context.MaterialMovements
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (movement == null)
+            return null;
+
+        if (movement.MovementType != "TemporaryMovement")
+            throw new InvalidOperationException(
+                "Only Temporary Movements (RGP) can be marked returned.");
+
+        var dispatched = await _context.MaterialMovementDispatches
+            .AnyAsync(d => d.MovementId == id);
+
+        if (!dispatched)
+            throw new InvalidOperationException(
+                "This movement has not been dispatched yet.");
+
+        var returnRecord = await _context.MaterialMovementReturns
+            .FirstOrDefaultAsync(r => r.MovementId == id);
+
+        if (returnRecord != null && returnRecord.Status == "Returned")
+            throw new InvalidOperationException(
+                "This movement has already been marked returned.");
+
+        // Normally DispatchAsync already created this row (Status =
+        // "Pending") - this branch only covers a movement dispatched
+        // before that existed.
+        if (returnRecord == null)
+        {
+            returnRecord = new Models.MaterialMovementReturn
+            {
+                MovementId = id,
+                ExpectedReturnDate = movement.ExpectedReturnDate ?? DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.MaterialMovementReturns.Add(returnRecord);
+        }
+
+        var trimmedRemarks = string.IsNullOrWhiteSpace(remarks) ? null : remarks.Trim();
+
+        returnRecord.Status = "Returned";
+        returnRecord.ActualReturnDate = DateTime.UtcNow;
+        returnRecord.ReturnedByUserId = returnedByUserId;
+        returnRecord.ReturnedAt = DateTime.UtcNow;
+        returnRecord.Remarks = trimmedRemarks;
+
+        movement.Status = "TemporaryReturned";
+        movement.UpdatedAt = DateTime.UtcNow;
+
+        AddAuditLog(movement.Id, "Returned", returnedByUserId,
+            details: trimmedRemarks, ipAddress: ipAddress);
+
+        AddNotification(
+            movement.RequestedByUserId,
+            "MaterialMovementReturned",
+            "Temporary movement marked returned",
+            $"Your temporarily moved material for {movement.MovementNumber ?? $"#{movement.Id}"} " +
+            "has been marked as returned.",
+            movement.Id);
+
+        await _context.SaveChangesAsync();
+
+        // isPrivileged: true - same "having been allowed to act IS the
+        // authorization for viewing the result" reasoning as DecideAsync/
+        // DispatchAsync's own final GetByIdAsync calls. Marking an RGP
+        // returned is a privileged (Super Admin/IT Admin) action at the
+        // controller level, so the caller is never the movement's owner
+        // by default.
+        return await GetByIdAsync(id, returnedByUserId, isPrivileged: true);
     }
 
     // =========================================================
