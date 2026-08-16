@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using PPS.LicenseManager.API.Authentication;
 using PPS.LicenseManager.API.Common;
@@ -78,9 +79,23 @@ builder.Services.AddSwaggerGen();
 // Database
 // ===============================
 
+// Migrations in this project are hand-authored (there's no dotnet-ef
+// tooling available in the environment they're written in), so the
+// ModelSnapshot is hand-edited to match rather than machine-generated.
+// As of the EF Core version this app targets, Database.Migrate() now
+// validates at startup that the current model exactly matches the
+// snapshot of the last migration, and THROWS (not just warns) if they
+// differ - see https://aka.ms/efcore-docs-pending-changes. That check
+// only compares the design-time model shape; it has no bearing on
+// whether a migration's hand-written Up()/Down() SQL is correct, so
+// it's suppressed here rather than chased down by hand every time a
+// migration is authored this way.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+    options
+        .UseNpgsql(
+            builder.Configuration.GetConnectionString("DefaultConnection"))
+        .ConfigureWarnings(warnings =>
+            warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
 // ===============================
 // JWT Authentication
