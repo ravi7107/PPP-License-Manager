@@ -94,6 +94,8 @@ const assetFormSchema = z.object({
   rentalStartDate: z.string().default(""),
 
   rentalEndDate: z.string().default(""),
+
+  dualMonitor: z.boolean().default(false),
 });
 
 interface AssetFormDialogProps {
@@ -164,6 +166,7 @@ function toFormValues(
       vendorId: EMPTY_ASSET_FORM.vendorId ?? "",
       rentalStartDate: EMPTY_ASSET_FORM.rentalStartDate ?? "",
       rentalEndDate: EMPTY_ASSET_FORM.rentalEndDate ?? "",
+      dualMonitor: EMPTY_ASSET_FORM.dualMonitor ?? false,
     };
   }
 
@@ -217,6 +220,8 @@ function toFormValues(
     rentalEndDate: asset.rentalEndDate
       ? asset.rentalEndDate.slice(0, 10)
       : "",
+
+    dualMonitor: asset.dualMonitor ?? false,
   };
 }
 
@@ -792,6 +797,44 @@ export function AssetFormDialog({
                   dates below are optional and can be filled in later.
                 </p>
               ) : null}
+            </div>
+
+            {/* SETUP */}
+
+            <div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Setup
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="dualMonitor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dual Monitor</FormLabel>
+
+                      <Select
+                        value={field.value ? "yes" : "no"}
+                        onValueChange={(v) => field.onChange(v === "yes")}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="yes">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             {/* PURCHASE / WARRANTY */}

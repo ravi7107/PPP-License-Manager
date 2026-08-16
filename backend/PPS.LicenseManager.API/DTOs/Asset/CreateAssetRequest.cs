@@ -47,4 +47,6 @@ public class CreateAssetRequest
     public DateTime? RentalStartDate { get; set; }
 
     public DateTime? RentalEndDate { get; set; }
+
+    public bool DualMonitor { get; set; } = false;
 }

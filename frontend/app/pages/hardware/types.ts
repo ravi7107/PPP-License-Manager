@@ -32,6 +32,9 @@ export interface AssetRecord {
   departmentId: number;
   departmentName: string;
 
+  companyId?: number;
+  companyName?: string;
+
   purchaseDate?: string;
   warrantyExpiry?: string;
 
@@ -47,6 +50,8 @@ export interface AssetRecord {
   vendorName?: string;
   rentalStartDate?: string;
   rentalEndDate?: string;
+
+  dualMonitor?: boolean;
 }
 
 export type OwnershipType = "Owned" | "Rented";
@@ -84,6 +89,8 @@ export interface AssetFormValues {
   vendorId: string;
   rentalStartDate: string;
   rentalEndDate: string;
+
+  dualMonitor: boolean;
 }
 
 export const OWNERSHIP_TYPES: OwnershipType[] = ["Owned", "Rented"];
@@ -130,4 +137,6 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
   vendorId: "",
   rentalStartDate: "",
   rentalEndDate: "",
+
+  dualMonitor: false,
 };

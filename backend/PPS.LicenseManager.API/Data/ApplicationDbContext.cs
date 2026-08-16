@@ -1104,6 +1104,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasMaxLength(20)
                   .HasDefaultValue("Owned");
 
+            entity.Property(a => a.DualMonitor)
+                  .HasDefaultValue(false);
+
             entity.HasOne(a => a.Department)
                   .WithMany()
                   .HasForeignKey(a => a.DepartmentId)

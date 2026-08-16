@@ -17,6 +17,8 @@ public class AssetFilterRequest
     // Rental tracking - "Owned" or "Rented".
     public string? OwnershipType { get; set; }
 
+    public bool? DualMonitor { get; set; }
+
     public int Page { get; set; } = 1;
 
     public int PageSize { get; set; } = 20;

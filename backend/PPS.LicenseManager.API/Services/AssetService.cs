@@ -32,6 +32,7 @@ public class AssetService : IAssetService
 
         var query = _context.Assets
             .Include(a => a.Department)
+                .ThenInclude(d => d!.Company)
             .Include(a => a.Vendor)
             .Where(a => a.IsActive);
 
@@ -68,7 +69,12 @@ public class AssetService : IAssetService
                 VendorId = a.VendorId,
                 VendorName = a.Vendor != null ? a.Vendor.VendorName : null,
                 RentalStartDate = a.RentalStartDate,
-                RentalEndDate = a.RentalEndDate
+                RentalEndDate = a.RentalEndDate,
+                DualMonitor = a.DualMonitor,
+                CompanyId = a.Department != null ? a.Department.CompanyId : (int?)null,
+                CompanyName = a.Department != null && a.Department.Company != null
+                    ? a.Department.Company.Name
+                    : null
             })
             .ToListAsync();
     }
@@ -77,6 +83,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
 {
     var query = _context.Assets
         .Include(a => a.Department)
+            .ThenInclude(d => d!.Company)
         .Include(a => a.Vendor)
         .Where(a => a.IsActive);
 
@@ -124,6 +131,12 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         query = query.Where(a => a.OwnershipType == request.OwnershipType);
     }
 
+    // Dual Monitor
+    if (request.DualMonitor.HasValue)
+    {
+        query = query.Where(a => a.DualMonitor == request.DualMonitor.Value);
+    }
+
     var totalRecords = await query.CountAsync();
 
     query = request.SortDirection.ToLower() == "desc"
@@ -148,6 +161,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
     {
         var asset = await _context.Assets
             .Include(a => a.Department)
+                .ThenInclude(d => d!.Company)
             .Include(a => a.Vendor)
             .FirstOrDefaultAsync(a => a.Id == id);
 
@@ -179,7 +193,10 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             VendorId = asset.VendorId,
             VendorName = asset.Vendor?.VendorName,
             RentalStartDate = asset.RentalStartDate,
-            RentalEndDate = asset.RentalEndDate
+            RentalEndDate = asset.RentalEndDate,
+            DualMonitor = asset.DualMonitor,
+            CompanyId = asset.Department?.CompanyId,
+            CompanyName = asset.Department?.Company?.Name
         };
     }
 
@@ -266,6 +283,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             VendorName = asset.Vendor?.VendorName,
             RentalStartDate = asset.RentalStartDate,
             RentalEndDate = asset.RentalEndDate,
+            DualMonitor = asset.DualMonitor,
 
             AssignmentId = assignment?.Id,
             UserId = assignment?.UserId,
@@ -489,6 +507,7 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             VendorId = request.VendorId,
             RentalStartDate = request.RentalStartDate,
             RentalEndDate = request.RentalEndDate,
+            DualMonitor = request.DualMonitor,
             Status = "Available",
             IsReadyForAssignment = true,
             IsActive = true,
@@ -548,6 +567,7 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         asset.VendorId = request.VendorId;
         asset.RentalStartDate = request.RentalStartDate;
         asset.RentalEndDate = request.RentalEndDate;
+        asset.DualMonitor = request.DualMonitor;
         asset.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -613,7 +633,10 @@ private static AssetResponse MapToResponse(Asset asset)
         VendorId = asset.VendorId,
         VendorName = asset.Vendor?.VendorName,
         RentalStartDate = asset.RentalStartDate,
-        RentalEndDate = asset.RentalEndDate
+        RentalEndDate = asset.RentalEndDate,
+        DualMonitor = asset.DualMonitor,
+        CompanyId = asset.Department?.CompanyId,
+        CompanyName = asset.Department?.Company?.Name
     };
 }
 }

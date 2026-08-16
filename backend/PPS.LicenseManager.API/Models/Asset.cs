@@ -62,6 +62,10 @@ public class Asset
 
     public DateTime? RentalEndDate { get; set; }
 
+    // Whether this system is set up with two monitors. Purely informational
+    // (inventory tracking) - doesn't affect Assign/Transfer/Audit behavior.
+    public bool DualMonitor { get; set; } = false;
+
     // Available, Assigned, Maintenance, Reserved, Retired
     public string Status { get; set; } = "Available";
 

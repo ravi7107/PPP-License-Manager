@@ -54,4 +54,14 @@ public string? VendorName { get; set; }
 public DateTime? RentalStartDate { get; set; }
 
 public DateTime? RentalEndDate { get; set; }
+
+public bool DualMonitor { get; set; }
+
+// Entity - needed for the "complete" Excel export/import template, which
+// resolves Department per-row via Entity + Department name text rather
+// than a single dialog-level picker (a real org can have multiple
+// Departments per Entity, so Department name alone isn't enough).
+public int? CompanyId { get; set; }
+
+public string? CompanyName { get; set; }
 }

@@ -121,9 +121,17 @@ import {
 } from '@/app/pages/hardware/types';
 
 import { getVendors, Vendor } from '@/lib/api/vendors.api';
+import { getCompanies, Company } from '@/lib/api/companies.api';
 
-import { exportAssetsToExcel } from '@/lib/utils/asset-excel';
-import { ImportedAssetRow } from '@/lib/utils/asset-excel';
+import {
+  exportAssetsToExcel,
+  ImportedAssetRow,
+  resolveImportedAssetName,
+  resolveImportedAssetType,
+  resolveImportedOwnershipType,
+  resolveImportedDualMonitor,
+} from '@/lib/utils/asset-excel';
+import { AssetImportResult } from '@/app/pages/hardware/components/asset-import-dialog';
 
 import {
   AssetAssignment,
@@ -560,6 +568,9 @@ export default function HardwarePage() {
   const [ownershipFilter, setOwnershipFilter] =
     useState<string>('all');
 
+  const [dualMonitorFilter, setDualMonitorFilter] =
+    useState<string>('all');
+
   // Rental vendor picker for the Add/Edit Asset form's Ownership
   // section (rented assets - see AssetFormDialog).
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -568,6 +579,18 @@ export default function HardwarePage() {
     getVendors()
       .then((all) => setVendors(all.filter((v) => v.isActive)))
       .catch(() => setVendors([]));
+  }, []);
+
+  // Entities for the "complete" Excel import template's per-row
+  // Entity/Department resolution (see handleImport) - a real org can
+  // have multiple Departments per Entity, so each row names both rather
+  // than relying on a single dialog-level picker for the whole file.
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  useEffect(() => {
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => setCompanies([]));
   }, []);
 
   /*
@@ -862,6 +885,12 @@ export default function HardwarePage() {
         );
       }
 
+      if (dualMonitorFilter !== 'all') {
+        list = list.filter(
+          (a) => Boolean(a.dualMonitor) === (dualMonitorFilter === 'yes'),
+        );
+      }
+
       list.sort((a, b) => {
         const av =
           (a[sortKey] ?? '') as string;
@@ -888,6 +917,7 @@ export default function HardwarePage() {
       assetTypeFilter,
       warrantyFilter,
       ownershipFilter,
+      dualMonitorFilter,
       sortKey,
       sortDir,
       isTeamLeader,
@@ -925,6 +955,7 @@ export default function HardwarePage() {
     assetTypeFilter,
     warrantyFilter,
     ownershipFilter,
+    dualMonitorFilter,
     pageSize,
   ]);
 
@@ -1037,8 +1068,16 @@ export default function HardwarePage() {
       });
     }
 
+    if (dualMonitorFilter !== 'all') {
+      chips.push({
+        key: 'dualMonitor',
+        label: `Dual Monitor: ${dualMonitorFilter === 'yes' ? 'Yes' : 'No'}`,
+        onRemove: () => setDualMonitorFilter('all'),
+      });
+    }
+
     return chips;
-  }, [statusFilter, departmentFilter, assetTypeFilter, warrantyFilter, ownershipFilter, departments]);
+  }, [statusFilter, departmentFilter, assetTypeFilter, warrantyFilter, ownershipFilter, dualMonitorFilter, departments]);
 
   const resetAllFilters = () => {
     setSearch('');
@@ -1047,6 +1086,7 @@ export default function HardwarePage() {
     setAssetTypeFilter('all');
     setWarrantyFilter('all');
     setOwnershipFilter('all');
+    setDualMonitorFilter('all');
   };
 
   /*
@@ -1404,6 +1444,9 @@ const handleSubmit = async (
         values.ownershipType === 'Rented'
           ? values.rentalEndDate || null
           : null,
+
+      dualMonitor:
+        Boolean(values.dualMonitor),
     };
 
     if (selectedAsset) {
@@ -1526,55 +1569,135 @@ const handleSubmit = async (
 
   const handleImport = async (
     rows: ImportedAssetRow[],
-  ) => {
+  ): Promise<AssetImportResult> => {
+    const failed: AssetImportResult['failed'] = [];
+    let succeeded = 0;
+
+    // Each row resolves its own Entity/Department (a real org can have
+    // multiple Departments per Entity, so a single dialog-level picker
+    // for the whole file isn't enough) and, if Rented, its own Vendor -
+    // by exact name match (case-insensitive) against what's already in
+    // the system. A row failing to resolve doesn't abort the batch; it's
+    // reported individually so the rest of the file still imports.
     for (const row of rows) {
-      await saveAsset({
-        assetTag: row.assetTag,
-        assetType: 'Workstation',
+      try {
+        const entityInput = row.entity.trim();
+        const departmentInput = row.department.trim();
 
-        hostName:
-          row.hostName || row.computerName || null,
+        if (!entityInput) {
+          throw new Error('Entity is required (see the "Entity" column).');
+        }
 
-        serialNumber:
-          row.serialNumber || null,
+        if (!departmentInput) {
+          throw new Error('Department is required (see the "Department" column).');
+        }
 
-        manufacturer:
-          row.manufacturer || null,
+        const company = companies.find(
+          (c) => c.name.trim().toLowerCase() === entityInput.toLowerCase(),
+        );
 
-        model:
-          row.model || null,
+        if (!company) {
+          throw new Error(`Entity "${entityInput}" was not found.`);
+        }
 
-        purchaseDate:
-          row.purchaseDate || null,
+        const department = departments.find(
+          (d) =>
+            d.companyId === company.id &&
+            (d.name ?? '').trim().toLowerCase() === departmentInput.toLowerCase(),
+        );
 
-        warrantyExpiry:
-          row.warrantyExpiry || null,
+        if (!department) {
+          throw new Error(
+            `Department "${departmentInput}" was not found under Entity "${entityInput}".`,
+          );
+        }
 
-        operatingSystem:
-          row.operatingSystem || null,
+        const ownershipType = resolveImportedOwnershipType(row);
 
-        status:
-          row.status || 'Available',
+        let vendorId: number | null = null;
+        if (ownershipType === 'Rented' && row.vendor.trim()) {
+          const vendorInput = row.vendor.trim();
+          const vendor = vendors.find(
+            (v) => v.vendorName.trim().toLowerCase() === vendorInput.toLowerCase(),
+          );
+          // A non-matching Vendor name doesn't fail the row - the asset
+          // still imports as Rented, just without a linked vendor (can
+          // be filled in later from the Add/Edit form).
+          vendorId = vendor ? vendor.id : null;
+        }
 
-        remarks: null,
-      });
+        await saveAsset({
+          assetTag: row.assetTag,
+          assetName: resolveImportedAssetName(row),
+          assetType: resolveImportedAssetType(row),
+          departmentId: department.id,
+
+          hostName:
+            row.hostName || row.computerName || null,
+
+          serialNumber:
+            row.serialNumber || null,
+
+          manufacturer:
+            row.manufacturer || null,
+
+          model:
+            row.model || null,
+
+          purchaseDate:
+            row.purchaseDate || null,
+
+          warrantyExpiry:
+            row.warrantyExpiry || null,
+
+          operatingSystem:
+            row.operatingSystem || null,
+
+          status:
+            row.status || 'Available',
+
+          ownershipType,
+          vendorId,
+
+          rentalStartDate:
+            ownershipType === 'Rented' ? row.rentalStartDate || null : null,
+
+          rentalEndDate:
+            ownershipType === 'Rented' ? row.rentalEndDate || null : null,
+
+          dualMonitor: resolveImportedDualMonitor(row),
+
+          remarks: null,
+        });
+
+        succeeded += 1;
+      } catch (error: any) {
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          'Failed to create this asset.';
+
+        failed.push({ row, message });
+      }
     }
 
-    await logAudit({
-      recordId: null,
-      action: 'INSERT',
-      oldValues: null,
-      newValues:
-        JSON.stringify({
-          importedCount:
-            rows.length,
-        }),
-      actorName,
-    });
+    if (succeeded > 0) {
+      await logAudit({
+        recordId: null,
+        action: 'INSERT',
+        oldValues: null,
+        newValues:
+          JSON.stringify({
+            importedCount: succeeded,
+            failedCount: failed.length,
+          }),
+        actorName,
+      });
 
-    setImportOpen(false);
+      await reload();
+    }
 
-    await reload();
+    return { succeeded, failed };
   };
 
   /*
@@ -1855,6 +1978,29 @@ const handleSubmit = async (
                 </SelectItem>
               </SelectContent>
             </Select>
+
+            <Select
+              value={dualMonitorFilter}
+              onValueChange={setDualMonitorFilter}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Dual Monitor" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">
+                  Any Monitor Setup
+                </SelectItem>
+
+                <SelectItem value="yes">
+                  Dual Monitor
+                </SelectItem>
+
+                <SelectItem value="no">
+                  Single Monitor
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* ---------------------------------------------------------- */}
@@ -2128,6 +2274,16 @@ const handleSubmit = async (
                                 >
                                   <Truck className="h-3 w-3" aria-hidden />
                                   Rented
+                                </span>
+                              )}
+
+                              {asset.dualMonitor && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800"
+                                  title="Dual monitor setup"
+                                >
+                                  <Monitor className="h-3 w-3" aria-hidden />
+                                  Dual Monitor
                                 </span>
                               )}
                             </div>

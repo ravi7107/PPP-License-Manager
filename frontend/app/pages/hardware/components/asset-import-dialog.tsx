@@ -12,21 +12,28 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { parseAssetsExcelFile, ImportedAssetRow } from '@/lib/utils/asset-excel';
 
+export interface AssetImportResult {
+  succeeded: number;
+  failed: { row: ImportedAssetRow; message: string }[];
+}
+
 interface AssetImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   importing: boolean;
-  onImport: (rows: ImportedAssetRow[]) => Promise<void>;
+  onImport: (rows: ImportedAssetRow[]) => Promise<AssetImportResult>;
 }
 
 export function AssetImportDialog({ open, onOpenChange, importing, onImport }: AssetImportDialogProps) {
   const [rows, setRows] = useState<ImportedAssetRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [result, setResult] = useState<AssetImportResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
     setError('');
+    setResult(null);
     try {
       const parsed = await parseAssetsExcelFile(file);
       const valid = parsed.filter((r) => r.assetTag);
@@ -44,6 +51,7 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
     setRows([]);
     setFileName('');
     setError('');
+    setResult(null);
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -59,8 +67,13 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
         <DialogHeader>
           <DialogTitle>Import Assets from Excel</DialogTitle>
           <DialogDescription>
-            Upload an .xlsx file with columns: Asset ID, Computer Name, Host Name, Serial Number, Manufacturer, Model,
-            Purchase Date, Warranty Expiry, Operating System, Location, Status.
+            Upload the .xlsx template exported from this page (Export button above) filled in with your real
+            inventory data, or any .xlsx with matching column headers: Asset ID, Asset Name, Asset Type, Entity,
+            Department, Host Name, Serial Number, Manufacturer, Model, Purchase Date, Warranty Expiry, Operating
+            System, Status, Ownership Type, Vendor, Rental Start Date, Rental End Date, Dual Monitor. Only Asset ID
+            is strictly required — everything else falls back to a sensible default. Entity and Department are
+            matched by name against what's already set up in the system, per row (so one file can cover multiple
+            departments).
           </DialogDescription>
         </DialogHeader>
 
@@ -84,14 +97,15 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        {rows.length > 0 ? (
+        {rows.length > 0 && !result ? (
           <div className="max-h-64 overflow-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Asset ID</TableHead>
-                  <TableHead>Computer Name</TableHead>
-                  <TableHead>Serial Number</TableHead>
+                  <TableHead>Asset Name</TableHead>
+                  <TableHead>Entity</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -99,8 +113,9 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
                 {rows.slice(0, 50).map((row, idx) => (
                   <TableRow key={idx}>
                     <TableCell>{row.assetTag}</TableCell>
-                    <TableCell>{row.computerName}</TableCell>
-                    <TableCell>{row.serialNumber}</TableCell>
+                    <TableCell>{row.assetName || row.computerName || row.hostName || '—'}</TableCell>
+                    <TableCell>{row.entity || '—'}</TableCell>
+                    <TableCell>{row.department || '—'}</TableCell>
                     <TableCell>{row.status || 'Available'}</TableCell>
                   </TableRow>
                 ))}
@@ -110,20 +125,55 @@ export function AssetImportDialog({ open, onOpenChange, importing, onImport }: A
           </div>
         ) : null}
 
+        {result ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              <span className="font-medium text-emerald-700">{result.succeeded} imported</span>
+              {result.failed.length > 0 ? (
+                <span className="text-destructive"> · {result.failed.length} failed</span>
+              ) : null}
+            </p>
+
+            {result.failed.length > 0 ? (
+              <div className="max-h-64 overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Asset ID</TableHead>
+                      <TableHead>Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.failed.map((f, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{f.row.assetTag || '—'}</TableCell>
+                        <TableCell className="text-destructive">{f.message}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {result ? 'Close' : 'Cancel'}
           </Button>
-          <Button
-            type="button"
-            disabled={rows.length === 0 || importing}
-            onClick={async () => {
-              await onImport(rows);
-              reset();
-            }}
-          >
-            {importing ? 'Importing…' : `Import ${rows.length || ''} Asset(s)`}
-          </Button>
+
+          {!result ? (
+            <Button
+              type="button"
+              disabled={rows.length === 0 || importing}
+              onClick={async () => {
+                const outcome = await onImport(rows);
+                setResult(outcome);
+              }}
+            >
+              {importing ? 'Importing…' : `Import ${rows.length || ''} Asset(s)`}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
