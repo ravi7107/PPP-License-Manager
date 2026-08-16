@@ -721,6 +721,191 @@ export default function MaterialMovementsPage() {
         </div>
       </div>
 
+      {canDispatch ? (
+        <>
+          <div className="nova-kpi-grid">
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Total RGP</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-blue-50)' }}
+                >
+                  <Repeat
+                    className="text-[var(--nova-blue-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.totalCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Pending Return</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-amber-50)' }}
+                >
+                  <Clock
+                    className="text-[var(--nova-amber-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.pendingCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Overdue</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-red-50)' }}
+                >
+                  <AlertTriangle
+                    className="text-[var(--nova-red-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.overdueCount ?? 0}
+              </div>
+            </div>
+
+            <div className="nova-kpi-card">
+              <div className="nova-kpi-top">
+                <span className="nova-kpi-label">Returned</span>
+                <div
+                  className="nova-kpi-icon"
+                  style={{ background: 'var(--nova-teal-50)' }}
+                >
+                  <PackageCheck
+                    className="text-[var(--nova-teal-500)]"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+              <div className="nova-kpi-value">
+                {rgpTracking?.summary.returnedCount ?? 0}
+              </div>
+            </div>
+          </div>
+
+          <div className="nova-panel">
+            <div className="nova-panel-toolbar">
+              <div>
+                <div className="text-sm font-semibold">RGP Tracking</div>
+                <p className="text-xs text-muted-foreground">
+                  Every dispatched Temporary Movement (RGP), with its
+                  expected and actual return status.
+                </p>
+              </div>
+
+              <div className="nova-spacer" />
+
+              <span className="nova-muted-count">
+                {rgpTracking?.items.length ?? 0} RGP
+                {(rgpTracking?.items.length ?? 0) === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div className="nova-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Movement #</th>
+                    <th>Gate Pass #</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Requested By</th>
+                    <th>Dispatched On</th>
+                    <th>Expected Return</th>
+                    <th>Status</th>
+                    <th className="nova-right">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loadingRgp ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        Loading…
+                      </td>
+                    </tr>
+                  ) : !rgpTracking || rgpTracking.items.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                      >
+                        No RGPs dispatched yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    rgpTracking.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="nova-mono">
+                          {item.movementNumber ?? '—'}
+                        </td>
+                        <td className="nova-mono">
+                          {item.gatePassNumber ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.fromSummary ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.toSummary ?? '—'}
+                        </td>
+                        <td className="nova-cell-sub">
+                          {item.requestedByUserName}
+                        </td>
+                        <td className="nova-cell-faint">
+                          {item.dispatchedAt.slice(0, 10)}
+                        </td>
+                        <td className="nova-cell-faint">
+                          {item.expectedReturnDate.slice(0, 10)}
+                        </td>
+                        <td>
+                          <span
+                            className={`nova-pill ${rgpStatusPillClass(item.returnStatus)}`}
+                          >
+                            <span className="nova-dot" />
+                            {item.returnStatus === 'Overdue'
+                              ? `Overdue (${item.daysOverdue}d)`
+                              : item.returnStatus}
+                          </span>
+                        </td>
+                        <td className="nova-right space-x-1">
+                          {item.returnStatus !== 'Returned' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openMarkReturned(item)}
+                            >
+                              <PackageCheck className="mr-1 h-3.5 w-3.5 text-[var(--nova-teal-500)]" />{' '}
+                              Mark Returned
+                            </Button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       <div className="nova-panel">
         <div className="nova-panel-toolbar">
           <div className="relative w-full sm:max-w-sm">
@@ -968,191 +1153,6 @@ export default function MaterialMovementsPage() {
           </table>
         </div>
       </div>
-
-      {canDispatch ? (
-        <>
-          <div className="nova-kpi-grid">
-            <div className="nova-kpi-card">
-              <div className="nova-kpi-top">
-                <span className="nova-kpi-label">Total RGP</span>
-                <div
-                  className="nova-kpi-icon"
-                  style={{ background: 'var(--nova-blue-50)' }}
-                >
-                  <Repeat
-                    className="text-[var(--nova-blue-500)]"
-                    strokeWidth={2}
-                  />
-                </div>
-              </div>
-              <div className="nova-kpi-value">
-                {rgpTracking?.summary.totalCount ?? 0}
-              </div>
-            </div>
-
-            <div className="nova-kpi-card">
-              <div className="nova-kpi-top">
-                <span className="nova-kpi-label">Pending Return</span>
-                <div
-                  className="nova-kpi-icon"
-                  style={{ background: 'var(--nova-amber-50)' }}
-                >
-                  <Clock
-                    className="text-[var(--nova-amber-500)]"
-                    strokeWidth={2}
-                  />
-                </div>
-              </div>
-              <div className="nova-kpi-value">
-                {rgpTracking?.summary.pendingCount ?? 0}
-              </div>
-            </div>
-
-            <div className="nova-kpi-card">
-              <div className="nova-kpi-top">
-                <span className="nova-kpi-label">Overdue</span>
-                <div
-                  className="nova-kpi-icon"
-                  style={{ background: 'var(--nova-red-50)' }}
-                >
-                  <AlertTriangle
-                    className="text-[var(--nova-red-500)]"
-                    strokeWidth={2}
-                  />
-                </div>
-              </div>
-              <div className="nova-kpi-value">
-                {rgpTracking?.summary.overdueCount ?? 0}
-              </div>
-            </div>
-
-            <div className="nova-kpi-card">
-              <div className="nova-kpi-top">
-                <span className="nova-kpi-label">Returned</span>
-                <div
-                  className="nova-kpi-icon"
-                  style={{ background: 'var(--nova-teal-50)' }}
-                >
-                  <PackageCheck
-                    className="text-[var(--nova-teal-500)]"
-                    strokeWidth={2}
-                  />
-                </div>
-              </div>
-              <div className="nova-kpi-value">
-                {rgpTracking?.summary.returnedCount ?? 0}
-              </div>
-            </div>
-          </div>
-
-          <div className="nova-panel">
-            <div className="nova-panel-toolbar">
-              <div>
-                <div className="text-sm font-semibold">RGP Tracking</div>
-                <p className="text-xs text-muted-foreground">
-                  Every dispatched Temporary Movement (RGP), with its
-                  expected and actual return status.
-                </p>
-              </div>
-
-              <div className="nova-spacer" />
-
-              <span className="nova-muted-count">
-                {rgpTracking?.items.length ?? 0} RGP
-                {(rgpTracking?.items.length ?? 0) === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <div className="nova-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Movement #</th>
-                    <th>Gate Pass #</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Requested By</th>
-                    <th>Dispatched On</th>
-                    <th>Expected Return</th>
-                    <th>Status</th>
-                    <th className="nova-right">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {loadingRgp ? (
-                    <tr>
-                      <td
-                        colSpan={9}
-                        className="py-6 text-center text-sm text-muted-foreground"
-                      >
-                        Loading…
-                      </td>
-                    </tr>
-                  ) : !rgpTracking || rgpTracking.items.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={9}
-                        className="py-6 text-center text-sm text-muted-foreground"
-                      >
-                        No RGPs dispatched yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    rgpTracking.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="nova-mono">
-                          {item.movementNumber ?? '—'}
-                        </td>
-                        <td className="nova-mono">
-                          {item.gatePassNumber ?? '—'}
-                        </td>
-                        <td className="nova-cell-sub">
-                          {item.fromSummary ?? '—'}
-                        </td>
-                        <td className="nova-cell-sub">
-                          {item.toSummary ?? '—'}
-                        </td>
-                        <td className="nova-cell-sub">
-                          {item.requestedByUserName}
-                        </td>
-                        <td className="nova-cell-faint">
-                          {item.dispatchedAt.slice(0, 10)}
-                        </td>
-                        <td className="nova-cell-faint">
-                          {item.expectedReturnDate.slice(0, 10)}
-                        </td>
-                        <td>
-                          <span
-                            className={`nova-pill ${rgpStatusPillClass(item.returnStatus)}`}
-                          >
-                            <span className="nova-dot" />
-                            {item.returnStatus === 'Overdue'
-                              ? `Overdue (${item.daysOverdue}d)`
-                              : item.returnStatus}
-                          </span>
-                        </td>
-                        <td className="nova-right space-x-1">
-                          {item.returnStatus !== 'Returned' ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openMarkReturned(item)}
-                            >
-                              <PackageCheck className="mr-1 h-3.5 w-3.5 text-[var(--nova-teal-500)]" />{' '}
-                              Mark Returned
-                            </Button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      ) : null}
 
       <MaterialMovementFormDialog
         open={formOpen}
