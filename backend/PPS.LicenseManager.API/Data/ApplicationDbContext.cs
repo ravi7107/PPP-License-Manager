@@ -51,6 +51,10 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<AssetReallocationRequest> AssetReallocationRequests =>
         Set<AssetReallocationRequest>();
 
+    // PPS Asset Scanner mobile app - physical audit/stocktake sessions.
+    public DbSet<AssetAudit> AssetAudits => Set<AssetAudit>();
+    public DbSet<AssetAuditItem> AssetAuditItems => Set<AssetAuditItem>();
+
     public DbSet<Notification> Notifications => Set<Notification>();
 
     public DbSet<PurchaseRequisition> PurchaseRequisitions =>
@@ -534,6 +538,80 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.ApproverUser)
                   .WithMany()
                   .HasForeignKey(x => x.ApproverUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // PPS Asset Scanner mobile app - physical audit/stocktake sessions.
+        modelBuilder.Entity<AssetAudit>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("InProgress")
+                  .IsRequired();
+
+            entity.Property(x => x.Remarks).HasMaxLength(500);
+
+            entity.HasIndex(x => x.LocationId);
+            entity.HasIndex(x => x.DepartmentId);
+            entity.HasIndex(x => x.StartedByUserId);
+            entity.HasIndex(x => x.CompletedByUserId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasOne(x => x.Location)
+                  .WithMany()
+                  .HasForeignKey(x => x.LocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Department)
+                  .WithMany()
+                  .HasForeignKey(x => x.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StartedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.StartedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CompletedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompletedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AssetAuditItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ResultState)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Missing")
+                  .IsRequired();
+
+            entity.Property(x => x.Remarks).HasMaxLength(500);
+
+            // One row per asset per audit session - a rescan updates the
+            // existing row instead of creating a second one.
+            entity.HasIndex(x => new { x.AssetAuditId, x.AssetId }).IsUnique();
+
+            entity.HasIndex(x => x.AssetId);
+            entity.HasIndex(x => x.ScannedByUserId);
+            entity.HasIndex(x => x.ResultState);
+
+            entity.HasOne(x => x.AssetAudit)
+                  .WithMany(x => x.Items)
+                  .HasForeignKey(x => x.AssetAuditId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Asset)
+                  .WithMany()
+                  .HasForeignKey(x => x.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ScannedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.ScannedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 

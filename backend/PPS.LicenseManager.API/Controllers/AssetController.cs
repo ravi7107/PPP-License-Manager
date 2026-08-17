@@ -116,6 +116,30 @@ public async Task<IActionResult> Dashboard()
         return Ok(detail);
     }
 
+    // Exact-match lookup for the PPS Asset Scanner mobile app: a scanned
+    // QR/barcode encodes an AssetTag (or, for older/manufacturer labels,
+    // a SerialNumber) and needs to resolve to exactly one asset, not the
+    // nearest fuzzy match GET list?search= would give a human typing in
+    // a search box. Returns the same aggregated shape as full-detail
+    // (current holder, seat/location, installed software) so the mobile
+    // app never needs a second round-trip after a scan.
+    [HttpGet("by-code/{code}")]
+    public async Task<IActionResult> GetByCode(string code)
+    {
+        var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
+        var detail = await _assetService.GetFullDetailByCodeAsync(
+            code,
+            isEntityRestricted,
+            companyId);
+
+        if (detail == null)
+            return NotFound(ApiResponse<AssetFullDetailResponse>.FailureResponse(
+                "No asset matches this code."));
+
+        return Ok(ApiResponse<AssetFullDetailResponse>.SuccessResponse(detail));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(CreateAssetRequest request)
     {

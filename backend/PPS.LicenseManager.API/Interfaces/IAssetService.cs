@@ -23,5 +23,16 @@ public interface IAssetService
         int id,
         bool isEntityRestricted = false,
         int? companyId = null);
+
+    // Exact-match lookup by AssetTag (checked first, since it's uniquely
+    // indexed) then SerialNumber (not unique - if more than one active
+    // asset shares a serial, this deliberately returns null rather than
+    // guessing, since a QR/barcode scan needs a single unambiguous
+    // answer). Used by the mobile scanner - never by the web app's
+    // free-text search, which stays on GetPagedAsync's Contains match.
+    Task<AssetFullDetailResponse?> GetFullDetailByCodeAsync(
+        string code,
+        bool isEntityRestricted = false,
+        int? companyId = null);
 }
 

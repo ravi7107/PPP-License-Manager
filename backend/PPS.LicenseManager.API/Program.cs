@@ -153,6 +153,11 @@ builder.Services.AddScoped<
     IAssetReallocationRequestService,
     AssetReallocationRequestService>();
 
+// PPS Asset Scanner mobile app - physical audit/stocktake sessions.
+builder.Services.AddScoped<
+    IAssetAuditService,
+    AssetAuditService>();
+
 builder.Services.AddScoped<
     IAssetSoftwareService,
     AssetSoftwareService>();

@@ -304,6 +304,57 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         };
     }
 
+    // Backs the mobile scanner's "scan -> lookup" step. Deliberately an
+    // exact match, not the Contains-based search GetPagedAsync uses -
+    // a scanned code identifies exactly one physical asset, and a
+    // substring match (e.g. "AST-001" inside "AST-0010") could silently
+    // resolve to the wrong one. AssetTag is checked first since it's
+    // uniquely indexed; SerialNumber has no such constraint, so if more
+    // than one active asset shares a serial this returns null (treated
+    // as not-found by the controller) instead of picking one arbitrarily.
+    // Entity scoping and the rest of the response shape are unchanged -
+    // this only finds the id, then defers entirely to the existing
+    // GetFullDetailAsync for everything else.
+    public async Task<AssetFullDetailResponse?> GetFullDetailByCodeAsync(
+        string code,
+        bool isEntityRestricted = false,
+        int? companyId = null)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return null;
+
+        var trimmed = code.Trim();
+        var normalized = trimmed.ToLower();
+
+        var byTag = await _context.Assets
+            .Where(a => a.IsActive && a.AssetTag.ToLower() == normalized)
+            .Select(a => (int?)a.Id)
+            .FirstOrDefaultAsync();
+
+        int? assetId = byTag;
+
+        if (assetId == null)
+        {
+            var serialMatches = await _context.Assets
+                .Where(a =>
+                    a.IsActive &&
+                    a.SerialNumber != null &&
+                    a.SerialNumber.ToLower() == normalized)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            if (serialMatches.Count == 1)
+            {
+                assetId = serialMatches[0];
+            }
+        }
+
+        if (assetId == null)
+            return null;
+
+        return await GetFullDetailAsync(assetId.Value, isEntityRestricted, companyId);
+    }
+
 public async Task<IEnumerable<RecentAssetResponse>> GetRecentAssetsAsync(int count = 10)
 {
     return await _context.Assets
