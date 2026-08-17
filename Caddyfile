@@ -1,0 +1,25 @@
+# Caddy reverse proxy config for ppsl.net.in.
+#
+# Caddy automatically requests and renews a free Let's Encrypt certificate
+# for every domain listed in a site block the first time it starts (and
+# on every renewal afterward) - no certbot, no manual cron job. It needs:
+#   - a public DNS A record for ppsl.net.in pointing at this server's
+#     public IP (root/apex record, host "@" at most registrars)
+#   - ports 80 and 443 reaching this host from the internet (80 is used
+#     for the ACME HTTP-01 challenge that proves domain ownership, 443
+#     for the actual HTTPS traffic afterward)
+#
+# Everything is forwarded to the frontend container's own nginx, which
+# already proxies /api/ and /uploads/ to the backend internally - so this
+# only needs one upstream, not one entry per service.
+ppsl.net.in {
+	reverse_proxy frontend:80
+}
+
+# Once you've also added a DNS A record for www.ppsl.net.in pointing at
+# the same IP, add this block too so www redirects to the root domain
+# instead of failing to resolve:
+#
+# www.ppsl.net.in {
+# 	redir https://ppsl.net.in{uri} permanent
+# }

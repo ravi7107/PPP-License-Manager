@@ -60,7 +60,34 @@ services:
     ports:
       - "3000:80"
 
+  # Public HTTPS entry point for ppsl.net.in - terminates TLS with a
+  # Let's Encrypt certificate it obtains and renews automatically, then
+  # forwards everything to the frontend container's own nginx (which
+  # already proxies /api/ and /uploads/ to the backend internally, so
+  # Caddy only needs to know about one upstream). Requires a public DNS A
+  # record for ppsl.net.in pointing at this server's public IP, and ports
+  # 80/443 reaching this host (80 is needed for the ACME HTTP-01
+  # challenge, not just as an HTTP->HTTPS redirect).
+  #
+  # This does not replace the existing frontend:3000/backend:8080 direct
+  # ports above - they're left in place as a plain-HTTP fallback (e.g.
+  # for local-network access without a working domain yet).
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   pgdata:
   backend_uploads:
   backend_pdfs:
+  caddy_data:
+  caddy_config:
