@@ -85,6 +85,34 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  # Alternative/fallback path to ppsl.net.in when no inbound port on this
+  # network can be opened (CGNAT, ISP-side blocking, etc. - the situation
+  # Caddy above needs 80/443 reachable from the internet for, which this
+  # doesn't). cloudflared makes only an OUTBOUND connection to Cloudflare,
+  # which then relays public traffic for ppsl.net.in back through that
+  # connection - no router or ISP change needed, and Cloudflare manages
+  # its own edge TLS certificate automatically.
+  #
+  # Requires CLOUDFLARE_TUNNEL_TOKEN in .env (from the tunnel you create
+  # in the Cloudflare Zero Trust dashboard under Networks > Tunnels - see
+  # deploy-cloudflare-tunnel.sh for the full setup walkthrough). The
+  # tunnel's Public Hostname is configured in that same Cloudflare
+  # dashboard, not here - point it at service http://frontend:80, the
+  # same upstream Caddy uses.
+  #
+  # Both this and caddy can run at the same time without conflict - they
+  # don't share ports, and only whichever one Cloudflare/DNS is actually
+  # routing ppsl.net.in through is "live" from the outside at any given
+  # moment.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env - see deploy-cloudflare-tunnel.sh}
+    depends_on:
+      - frontend
+
 volumes:
   pgdata:
   backend_uploads:
