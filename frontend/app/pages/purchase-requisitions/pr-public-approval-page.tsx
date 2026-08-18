@@ -225,16 +225,54 @@ export default function PrPublicApprovalPage() {
 
               {outcome ? (
                 <div
-                  className="rounded-md border px-4 py-3 text-sm"
+                  className="flex flex-col items-center gap-1 rounded-lg border px-6 py-8 text-center"
                   style={{
-                    borderColor: 'var(--nova-teal-500)',
-                    background: 'var(--nova-teal-50)',
-                    color: 'var(--nova-teal-600)',
+                    borderColor:
+                      outcome === 'Approved'
+                        ? 'var(--nova-teal-500)'
+                        : 'var(--nova-red-500)',
+                    background:
+                      outcome === 'Approved'
+                        ? 'var(--nova-teal-50)'
+                        : 'var(--nova-amber-50)',
                   }}
                 >
-                  Recorded: this purchase requisition was{' '}
-                  <strong>{outcome.toLowerCase()}</strong> at stage{' '}
-                  {pr.stepOrder}. You can close this page now.
+                  <div
+                    className="mb-2 flex h-14 w-14 items-center justify-center rounded-full"
+                    style={{
+                      background:
+                        outcome === 'Approved'
+                          ? 'var(--nova-teal-500)'
+                          : 'var(--nova-red-500)',
+                    }}
+                  >
+                    {outcome === 'Approved' ? (
+                      <Check className="h-7 w-7 text-white" strokeWidth={3} />
+                    ) : (
+                      <X className="h-7 w-7 text-white" strokeWidth={3} />
+                    )}
+                  </div>
+                  <p
+                    className="text-lg font-semibold"
+                    style={{
+                      color:
+                        outcome === 'Approved'
+                          ? 'var(--nova-teal-600)'
+                          : 'var(--nova-red-600)',
+                    }}
+                  >
+                    {outcome === 'Approved'
+                      ? 'Request Approved'
+                      : 'Request Rejected'}
+                  </p>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    {pr.prNumber ?? 'This purchase requisition'} has been
+                    recorded as <strong>{outcome.toLowerCase()}</strong> at
+                    stage {pr.stepOrder} of {pr.requiredApprovalStageCount}.
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    You can safely close this page now.
+                  </p>
                 </div>
               ) : !canDecide ? (
                 <div
