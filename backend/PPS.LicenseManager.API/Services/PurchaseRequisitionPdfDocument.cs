@@ -229,7 +229,14 @@ public class PurchaseRequisitionPdfDocument : IDocument
             column.Item().Element(c => ComposeSection(c, "5. Vendor Information", ComposeVendorDetails));
             column.Item().Element(c => ComposeSection(c, "6. Commercial Summary", ComposeCommercialSummary));
             column.Item().Element(c => ComposeSection(c, "7. Approval History", ComposeApprovalHistoryTable));
-            column.Item().Element(c => ComposeSection(c, "8. Finance / Procurement Action", ComposeFinanceAction));
+
+            // Reported: this section was splitting across the page break
+            // (title/first row on page 1, rest on page 2). Reserve enough
+            // room for the whole section before starting it - if that much
+            // space isn't left on the current page, QuestPDF moves it to
+            // a fresh page instead of splitting it mid-way.
+            column.Item().EnsureSpaceBeforeStartsNewPage(120)
+                .Element(c => ComposeSection(c, "8. Finance / Procurement Action", ComposeFinanceAction));
 
             if (_pr.Attachments.Count > 0)
             {
