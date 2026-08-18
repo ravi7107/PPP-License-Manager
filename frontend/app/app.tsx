@@ -15,6 +15,7 @@ import AllocationsPage from '@/app/pages/allocations/allocations-page';
 import PurchaseRequisitionsPage from '@/app/pages/purchase-requisitions/purchase-requisitions-page';
 import PendingApprovalsPage from '@/app/pages/purchase-requisitions/pending-approvals-page';
 import PrPublicApprovalPage from '@/app/pages/purchase-requisitions/pr-public-approval-page';
+import PrPublicFinancePage from '@/app/pages/purchase-requisitions/pr-public-finance-page';
 import PurchaseRequisitionContactsPage from '@/app/pages/directory/purchase-requisition-contacts-page';
 import PurchaseRequisitionSettingsPage from '@/app/pages/settings/purchase-requisition-settings-page';
 import AvailabilityPage from '@/app/pages/availability/availability-page';
@@ -49,6 +50,14 @@ function App() {
           ProtectedRoute (see pr-public-approval-page.tsx).
         */}
         <Route path="/pr-approval/:token" element={<PrPublicApprovalPage />} />
+
+        {/*
+          Unauthenticated Finance landing page, reached from the
+          "Purchase Requisition Approved" Finance notification email -
+          deliberately outside ProtectedRoute (see
+          pr-public-finance-page.tsx).
+        */}
+        <Route path="/pr-finance/:token" element={<PrPublicFinancePage />} />
 
         <Route
           path="/"

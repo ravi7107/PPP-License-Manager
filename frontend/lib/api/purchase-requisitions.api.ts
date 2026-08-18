@@ -92,6 +92,13 @@ export interface PurchaseRequisition {
   rejectedAt: string | null;
   pdfPath: string | null;
   pdfGeneratedAt: string | null;
+  // Set once Finance uploads a PO copy via the emailed Finance link -
+  // null until then. poUploadedByUserName is always null today (Finance
+  // acts through that link, not an in-app account).
+  poNumber: string | null;
+  poDocumentPath: string | null;
+  poUploadedAt: string | null;
+  poUploadedByUserName: string | null;
   createdAt: string;
   updatedAt: string | null;
   isOwner: boolean;
@@ -376,5 +383,26 @@ export async function downloadPurchaseRequisitionPdf(
   return {
     blob: response.data,
     fileName: match?.[1] ?? `purchase-requisition-${id}.pdf`,
+  };
+}
+
+// Same "not a static file, has to be fetched as a blob" reasoning as
+// downloadPurchaseRequisitionPdf above - the PO document lives under the
+// same private, non-wwwroot storage area (see the backend's
+// GetPoDocumentFileAsync).
+export async function downloadPurchaseRequisitionPoDocument(
+  id: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(`/PurchaseRequisition/${id}/po-document`, {
+    responseType: 'blob',
+  });
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `purchase-order-${id}`,
   };
 }

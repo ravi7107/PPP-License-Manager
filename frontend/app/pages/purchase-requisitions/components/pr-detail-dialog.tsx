@@ -37,6 +37,7 @@ import {
   AttachmentType,
   buildAttachmentUrl,
   downloadPurchaseRequisitionPdf,
+  downloadPurchaseRequisitionPoDocument,
   PurchaseRequisition,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -95,6 +96,8 @@ export function PrDetailDialog({
   const [decisionRemarks, setDecisionRemarks] = useState('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadingPo, setDownloadingPo] = useState(false);
+  const [poDownloadError, setPoDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -174,6 +177,45 @@ export function PrDetailDialog({
       );
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  // Same blob-fetch pattern as handleDownloadPdf above - the PO document
+  // lives under the same private, authenticated-only storage area as the
+  // PR PDF (see GetPoDocumentFileAsync's comment), so it can't be a plain
+  // <a href> either.
+  const handleDownloadPo = async () => {
+    setDownloadingPo(true);
+    setPoDownloadError(null);
+
+    try {
+      const { blob, fileName } = await downloadPurchaseRequisitionPoDocument(pr.id);
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      let message: string | undefined;
+
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          message = JSON.parse(text)?.message;
+        } catch {
+          // Not JSON - fall through to the generic message below.
+        }
+      }
+
+      setPoDownloadError(
+        message ?? err?.message ?? 'Failed to download the PO document.'
+      );
+    } finally {
+      setDownloadingPo(false);
     }
   };
 
@@ -425,6 +467,12 @@ export function PrDetailDialog({
           </div>
         ) : null}
 
+        {poDownloadError ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+            {poDownloadError}
+          </div>
+        ) : null}
+
         {revisionError ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
             {revisionError}
@@ -449,6 +497,21 @@ export function PrDetailDialog({
             >
               <Download className="mr-1.5 h-3.5 w-3.5" />
               {downloadingPdf ? 'Downloading...' : 'Download PDF'}
+            </Button>
+          ) : null}
+          {pr.poDocumentPath ? (
+            // Only offered once Finance has actually uploaded a PO copy
+            // through the /pr-finance/:token link - unlike the PR PDF,
+            // there's no lazy-generation fallback here, so gate strictly
+            // on the field being set rather than on status alone.
+            <Button
+              type="button"
+              variant="outline"
+              disabled={downloadingPo}
+              onClick={handleDownloadPo}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {downloadingPo ? 'Downloading...' : 'Download PO'}
             </Button>
           ) : null}
           {pr.status === 'Approved' && pr.isOwner && onCreateRevision ? (

@@ -364,6 +364,33 @@ public class PurchaseRequisitionController : BaseController
         }
     }
 
+    // Same access rule as DownloadPdf - only the owner, an assigned
+    // approver, or a privileged user can retrieve it. Whatever Finance
+    // most recently uploaded via the emailed link (see
+    // PurchaseRequisitionPublicFinanceController) is what this serves;
+    // 404 until Finance has uploaded anything.
+    [HttpGet("{id:int}/po-document")]
+    public async Task<IActionResult> DownloadPoDocument(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var file = await _service.GetPoDocumentFileAsync(
+                id, currentUserId, IsPrivileged(), GetPdfStorageRootPath());
+
+            if (file == null)
+                return NotFoundResponse(
+                    "No PO document has been uploaded for this purchase requisition yet.");
+
+            return PhysicalFile(file.Value.PhysicalPath, "application/octet-stream", file.Value.FileName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
 
     // =========================================================
     // SUBMIT

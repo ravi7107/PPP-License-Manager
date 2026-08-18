@@ -41,6 +41,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // Approvals page instead.
     private const int ApprovalTokenValidityDays = 14;
 
+    // How long the Finance "verify + upload PO" link stays usable. Longer
+    // than an approval link's window - unlike an approver deciding a
+    // single stage, Finance's PO turnaround usually depends on an
+    // external system (e.g. Tally) and this link is deliberately
+    // reusable (not single-use) so they can revisit it to fix a mistake.
+    private const int FinanceTokenValidityDays = 30;
+
     // Email brand palette - lifted from the web app's own design tokens
     // (frontend/index.css --nova-* variables) so approval emails read as
     // the same product rather than a generic system notification.
@@ -62,6 +69,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     private readonly IEmailService _emailService;
     private readonly ILogger<PurchaseRequisitionService> _logger;
     private readonly string _publicBaseUrl;
+    private readonly string _publicApiBaseUrl;
 
     public PurchaseRequisitionService(
         ApplicationDbContext context,
@@ -81,6 +89,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // changes.
         _publicBaseUrl = (configuration["App:PublicBaseUrl"]
             ?? "http://localhost:5173").TrimEnd('/');
+
+        // Base URL the BACKEND (not the frontend) is reachable at -
+        // separate from _publicBaseUrl above because attachments live
+        // under this API's own /uploads/ static path, not the frontend's
+        // origin. Only used to build clickable quotation-attachment links
+        // for the Finance landing page; configurable via
+        // App:PublicApiBaseUrl / App__PublicApiBaseUrl the same way.
+        _publicApiBaseUrl = (configuration["App:PublicApiBaseUrl"]
+            ?? "http://localhost:8080").TrimEnd('/');
     }
 
 
@@ -151,6 +168,11 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             PdfPath = r.PdfPath,
             PdfGeneratedAt = r.PdfGeneratedAt,
+
+            PoNumber = r.PoNumber,
+            PoDocumentPath = r.PoDocumentPath,
+            PoUploadedAt = r.PoUploadedAt,
+            PoUploadedByUserName = r.PoUploadedByUser?.FullName,
 
             CreatedAt = r.CreatedAt,
             UpdatedAt = r.UpdatedAt,
@@ -1430,6 +1452,18 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         {
             await SendOutcomeEmailAsync(record, approve, remarks);
         }
+
+        // Also best-effort (see IssueFinanceTokenAndSendNotificationAsync's
+        // own comment) - runs after GenerateAndStorePdfAsync so `record`
+        // has PdfPath set and every navigation this needs (Vendor,
+        // Attachments, RequestedByUser) already loaded via the identity
+        // map. Only fires on the final approval, never on a mid-chain
+        // step approval or a rejection.
+        if (isFinalApproval)
+        {
+            await IssueFinanceTokenAndSendNotificationAsync(
+                record, decidingUserId, pdfStorageRootPath);
+        }
     }
 
 
@@ -2033,6 +2067,542 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         }
     }
 
+    /*
+     * Fires automatically the moment a PR reaches its final Approved
+     * state (called from DecideStepCoreAsync's isFinalApproval branch,
+     * after GenerateAndStorePdfAsync - see that method's comment on why
+     * `record`'s navigations are already fully loaded by the time this
+     * runs). Skips silently (with a log line, per
+     * PurchaseRequisitionSettings.FinanceNotificationEmail's own comment)
+     * if no Finance address has been configured yet - a missing setting
+     * must never block an approval from completing.
+     *
+     * Attaches the PR PDF's actual bytes to the email (Finance has no
+     * in-app login, so the authenticated GetPdfFileAsync endpoint isn't
+     * reachable to them - the email is the only channel). Vendor
+     * quotation attachments are linked instead of attached - they
+     * already live under the API's public /uploads/ path like every
+     * other attachment in this module (see UploadAttachmentAsync), so a
+     * link is enough and avoids inflating the email with duplicate
+     * bytes the PDF's own Vendor Information section already summarizes.
+     */
+    private async Task IssueFinanceTokenAndSendNotificationAsync(
+        Models.PurchaseRequisition record,
+        int? decidingUserId,
+        string pdfStorageRootPath)
+    {
+        var settings = await _context.PurchaseRequisitionSettings.FirstOrDefaultAsync();
+        var financeEmail = settings?.FinanceNotificationEmail?.Trim();
+
+        if (string.IsNullOrWhiteSpace(financeEmail))
+        {
+            _logger.LogInformation(
+                "Skipped notifying Finance for purchase requisition {PurchaseRequisitionId} - " +
+                "no Finance Notification Email is configured yet (Purchase Requisition Settings).",
+                record.Id);
+            return;
+        }
+
+        var notification = new PurchaseRequisitionFinanceNotification
+        {
+            PurchaseRequisitionId = record.Id,
+            SentToEmail = financeEmail,
+            // Whoever's decision caused this final approval - falls back
+            // to the requester on the rare path where the final step was
+            // decided by an external Contact (no User row to attribute
+            // it to). See this model's own comment for why this column's
+            // meaning shifted once the trigger became automatic.
+            SentByUserId = decidingUserId ?? record.RequestedByUserId,
+            SentAt = DateTime.UtcNow,
+            DeliveryStatus = "Sent"
+        };
+
+        try
+        {
+            var rawToken = GenerateSecureToken();
+            notification.TokenHash = HashToken(rawToken);
+            notification.ExpiresAt = DateTime.UtcNow.AddDays(FinanceTokenValidityDays);
+
+            _context.PurchaseRequisitionFinanceNotifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            var link = $"{_publicBaseUrl}/pr-finance/{rawToken}";
+            var prLabel = record.PrNumber ?? $"#{record.Id}";
+
+            var attachments = new List<EmailAttachment>();
+
+            if (!string.IsNullOrWhiteSpace(record.PdfPath))
+            {
+                var pdfPhysicalPath = Path.Combine(
+                    pdfStorageRootPath, record.PdfPath.Replace('/', Path.DirectorySeparatorChar));
+
+                if (File.Exists(pdfPhysicalPath))
+                {
+                    attachments.Add(new EmailAttachment
+                    {
+                        FileName = Path.GetFileName(pdfPhysicalPath),
+                        ContentType = "application/pdf",
+                        Content = await File.ReadAllBytesAsync(pdfPhysicalPath)
+                    });
+                }
+            }
+
+            var quotationAttachments = record.Attachments
+                .Where(a => a.AttachmentType == "VendorQuotation")
+                .OrderBy(a => a.UploadedAt)
+                .ToList();
+
+            var subject =
+                $"Purchase Requisition Approved — {prLabel}: verify and issue PO " +
+                $"({record.Currency} {record.TotalAmount:N2})";
+
+            var body = BuildFinanceNotificationEmailHtml(record, quotationAttachments, link);
+
+            await _emailService.SendWithAttachmentsAsync(
+                financeEmail, "Finance", subject, body, attachments);
+
+            AddAuditLog(record.Id, "SharedWithFinance", decidingUserId,
+                $"Finance notification emailed to {financeEmail}.", "WebApp");
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            notification.DeliveryStatus = "Failed";
+            notification.ErrorMessage = ex.Message.Length > 1000
+                ? ex.Message[..1000]
+                : ex.Message;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch
+            {
+                // Best-effort logging of the failure itself failed too -
+                // nothing more to do here, the error is already logged
+                // below.
+            }
+
+            _logger.LogError(ex,
+                "Failed to issue a Finance action token or send the Finance " +
+                "notification email for purchase requisition {PurchaseRequisitionId}.",
+                record.Id);
+        }
+    }
+
+    /*
+     * Looked up by GetPublicFinanceViewAsync/UploadPoByTokenAsync -
+     * mirrors FindTokenAsync's shape for the approval-link flow, hashing
+     * the incoming raw token and matching it against the stored hash.
+     * Unlike FindTokenAsync this never checks ConsumedAt (there isn't
+     * one - see PurchaseRequisitionFinanceNotification.TokenHash's
+     * comment on why this link is deliberately reusable).
+     */
+    private async Task<PurchaseRequisitionFinanceNotification?> FindFinanceTokenAsync(string rawToken)
+    {
+        if (string.IsNullOrWhiteSpace(rawToken))
+            return null;
+
+        var tokenHash = HashToken(rawToken);
+
+        return await _context.PurchaseRequisitionFinanceNotifications
+            .Include(n => n.PurchaseRequisition)
+                .ThenInclude(r => r.Company)
+            .Include(n => n.PurchaseRequisition)
+                .ThenInclude(r => r.Vendor)
+            .Include(n => n.PurchaseRequisition)
+                .ThenInclude(r => r.RequestedByUser)
+            .Include(n => n.PurchaseRequisition)
+                .ThenInclude(r => r.LineItems)
+            .Include(n => n.PurchaseRequisition)
+                .ThenInclude(r => r.Attachments)
+            .Where(n => n.TokenHash == tokenHash)
+            // A PR could in principle be re-approved via a revision,
+            // issuing a second Finance token - always act on the most
+            // recently issued one for a given hash (hashes shouldn't
+            // collide across rows in practice, but this keeps the lookup
+            // well-defined regardless).
+            .OrderByDescending(n => n.SentAt)
+            .FirstOrDefaultAsync();
+    }
+
+    private static PublicPurchaseRequisitionFinanceResponse MapPublicFinanceView(
+        PurchaseRequisitionFinanceNotification notification,
+        string publicApiBaseUrl)
+    {
+        var record = notification.PurchaseRequisition;
+
+        return new PublicPurchaseRequisitionFinanceResponse
+        {
+            PrNumber = record.PrNumber,
+            Title = record.Title,
+            CompanyName = record.Company?.Name ?? string.Empty,
+            RequestedByUserName = record.RequestedByUser?.FullName ?? string.Empty,
+
+            VendorName = record.Vendor?.VendorName,
+            VendorGstin = record.Vendor?.GSTIN,
+
+            Currency = record.Currency,
+            SubtotalAmount = record.SubtotalAmount,
+            TaxAmount = record.TaxAmount,
+            TotalAmount = record.TotalAmount,
+
+            PurchaseRequisitionStatus = record.Status,
+            IsExpired = notification.ExpiresAt.HasValue && notification.ExpiresAt.Value < DateTime.UtcNow,
+
+            LineItems = record.LineItems
+                .OrderBy(li => li.LineNumber)
+                .Select(li => new PurchaseRequisitionLineItemResponse
+                {
+                    Id = li.Id,
+                    LineNumber = li.LineNumber,
+                    ItemDescription = li.ItemDescription,
+                    Category = li.Category,
+                    Quantity = li.Quantity,
+                    UnitOfMeasure = li.UnitOfMeasure,
+                    UnitPrice = li.UnitPrice,
+                    LineTotal = li.LineTotal,
+                    Notes = li.Notes
+                })
+                .ToList(),
+
+            QuotationAttachments = record.Attachments
+                .Where(a => a.AttachmentType == "VendorQuotation")
+                .OrderBy(a => a.UploadedAt)
+                .Select(a => new PublicPurchaseRequisitionQuotationResponse
+                {
+                    FileName = a.FileName,
+                    DownloadUrl = $"{publicApiBaseUrl}{a.StoredPath}"
+                })
+                .ToList(),
+
+            PoNumber = record.PoNumber,
+            HasPoDocument = !string.IsNullOrWhiteSpace(record.PoDocumentPath),
+            PoUploadedAt = record.PoUploadedAt
+        };
+    }
+
+    /*
+     * Read-only lookup for the unauthenticated Finance landing page -
+     * never throws for an expired token, mirrors
+     * GetPublicApprovalViewAsync's GET-is-always-safe contract. Only
+     * returns null when the token itself doesn't exist at all.
+     */
+    public async Task<PublicPurchaseRequisitionFinanceResponse?> GetPublicFinanceViewAsync(
+        string rawToken)
+    {
+        var notification = await FindFinanceTokenAsync(rawToken);
+
+        return notification == null ? null : MapPublicFinanceView(notification, _publicApiBaseUrl);
+    }
+
+    /*
+     * Records Finance's PO upload via the secure, reusable link - no
+     * authenticated session backs this call, same token-as-credential
+     * principle as DecideStepByTokenAsync. Unlike that flow this is
+     * deliberately re-callable: a second upload simply overwrites
+     * PoNumber/PoDocumentPath/PoUploadedAt and re-sends the "PO ready"
+     * email to the requester with the latest file, rather than being
+     * rejected as already-consumed (see TokenHash's comment).
+     *
+     * PoUploadedByUserId is left null - Finance isn't a User in this
+     * app (same reasoning as PurchaseRequisitionFinanceNotification's
+     * email-only addressing) - the audit log entry captures which
+     * Finance address performed the upload instead.
+     */
+    public async Task<PublicPurchaseRequisitionFinanceResponse?> UploadPoByTokenAsync(
+        string rawToken,
+        IFormFile file,
+        string? poNumber,
+        string pdfStorageRootPath)
+    {
+        var notification = await FindFinanceTokenAsync(rawToken);
+
+        if (notification == null)
+            return null;
+
+        if (notification.ExpiresAt.HasValue && notification.ExpiresAt.Value < DateTime.UtcNow)
+            throw new InvalidOperationException(
+                "This Finance link has expired. Please ask the requester to have a new approval " +
+                "notification sent, or contact them directly for the purchase requisition details.");
+
+        var record = notification.PurchaseRequisition;
+
+        if (record.Status != "Approved")
+            throw new InvalidOperationException(
+                "This purchase requisition is not (or no longer) in an Approved state.");
+
+        if (file == null || file.Length == 0)
+            throw new InvalidOperationException("Please select a PO file to upload.");
+
+        if (file.Length > MaxAttachmentSizeBytes)
+            throw new InvalidOperationException("The PO file must not exceed 15 MB.");
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+        if (!AllowedAttachmentExtensions.Contains(extension))
+            throw new InvalidOperationException(
+                "Only PDF, JPG, PNG, DOCX, and XLSX files are allowed.");
+
+        await ValidateFileSignatureAsync(file, extension);
+
+        // Stored under the same private, non-wwwroot area as the
+        // generated PR PDF (see GetPdfStorageRootPath's comment on the
+        // controller) - a PO copy can carry vendor pricing/bank details,
+        // so it gets the same "authenticated download only" treatment as
+        // the PDF, not the public /uploads/ path attachments use.
+        var directory = Path.Combine(
+            pdfStorageRootPath, "purchase-requisitions", record.Id.ToString(), "po");
+
+        Directory.CreateDirectory(directory);
+
+        var generatedFileName = $"{Guid.NewGuid():N}{extension}";
+        var destination = Path.Combine(directory, generatedFileName);
+
+        byte[] fileBytes;
+
+        await using (var output = new FileStream(
+            destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            await file.CopyToAsync(output);
+        }
+
+        fileBytes = await File.ReadAllBytesAsync(destination);
+
+        var trimmedPoNumber = string.IsNullOrWhiteSpace(poNumber) ? null : poNumber.Trim();
+
+        record.PoNumber = trimmedPoNumber;
+        record.PoDocumentPath =
+            $"purchase-requisitions/{record.Id}/po/{generatedFileName}";
+        record.PoUploadedAt = DateTime.UtcNow;
+        record.PoUploadedByUserId = null;
+        record.UpdatedAt = DateTime.UtcNow;
+
+        AddAuditLog(record.Id, "PoUploaded", null,
+            $"PO document uploaded via the Finance link ({notification.SentToEmail})." +
+            (trimmedPoNumber != null ? $" PO Number: {trimmedPoNumber}." : string.Empty),
+            "EmailLink");
+
+        await _context.SaveChangesAsync();
+
+        await SendPoReadyEmailAsync(record, Path.GetFileName(destination), fileBytes);
+
+        return MapPublicFinanceView(notification, _publicApiBaseUrl);
+    }
+
+    /*
+     * Best-effort, matching every other outbound email in this module -
+     * a delivery failure must never undo the PO upload that's already
+     * been committed to the database. Attaches the PO file's bytes
+     * directly (same reasoning as the PDF attached to the Finance
+     * notification) so the requester can "collect" it straight from
+     * their inbox without needing to sign in.
+     */
+    private async Task SendPoReadyEmailAsync(
+        Models.PurchaseRequisition record,
+        string poFileName,
+        byte[] poFileBytes)
+    {
+        if (record.RequestedByUser == null)
+            return;
+
+        try
+        {
+            var prLabel = record.PrNumber ?? $"#{record.Id}";
+            var requester = record.RequestedByUser;
+
+            var subject = $"Purchase Order ready: {prLabel}";
+            var body = BuildPoReadyEmailHtml(record);
+
+            var extension = Path.GetExtension(poFileName).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".pdf" => "application/pdf",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                _ => "application/octet-stream"
+            };
+
+            var attachments = new List<EmailAttachment>
+            {
+                new()
+                {
+                    FileName = poFileName,
+                    ContentType = contentType,
+                    Content = poFileBytes
+                }
+            };
+
+            await _emailService.SendWithAttachmentsAsync(
+                requester.Email, requester.FullName, subject, body, attachments);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send the PO-ready email for purchase requisition {PurchaseRequisitionId}.",
+                record.Id);
+        }
+    }
+
+    private static string BuildFinanceNotificationEmailHtml(
+        Models.PurchaseRequisition record,
+        IReadOnlyList<PurchaseRequisitionAttachment> quotationAttachments,
+        string reviewLink)
+    {
+        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
+
+        var prLabel = record.PrNumber ?? $"#{record.Id}";
+        var requesterName = record.RequestedByUser?.FullName ?? "A colleague";
+        var vendorName = record.Vendor?.VendorName;
+
+        var sb = new StringBuilder();
+
+        sb.Append("<!DOCTYPE html>");
+        sb.Append("<html><head><meta charset=\"utf-8\" />");
+        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />");
+        sb.Append("<title></title></head>");
+        sb.Append("<body style=\"margin:0;padding:0;background-color:" + EmailPageBg + ";\">");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailPageBg + ";padding:32px 16px;\">");
+        sb.Append("<tr><td align=\"center\">");
+        sb.Append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;\">");
+
+        sb.Append("<tr><td style=\"background-color:" + EmailApproveColor + ";padding:24px 32px;border-radius:12px 12px 0 0;\">");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append("<td style=\"width:44px;height:44px;background-color:#ffffff;border-radius:9px;text-align:center;vertical-align:middle;\">");
+        sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailApproveColor + ";line-height:44px;\">PPS</span>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">APPROVED — FINANCE ACTION NEEDED</div>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:32px;font-family:" + EmailFontStack + ";\">");
+
+        sb.Append("<h1 style=\"margin:0 0 16px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
+        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
+        sb.Append("</h1>");
+
+        sb.Append("<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
+        sb.Append("This purchase requisition, raised by <strong>" + Enc(requesterName) + "</strong>, has been fully approved. Please verify the request and the attached quotation, then issue the PO and upload a copy using the secure link below.");
+        sb.Append("</p>");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:22px;background-color:" + EmailPanelBg + ";border:1px solid " + EmailBorderColor + ";border-radius:8px;\">");
+        sb.Append("<tr>");
+        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Vendor</div>");
+        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:3px;\">" + (string.IsNullOrWhiteSpace(vendorName) ? "Not selected" : Enc(vendorName)) + "</div>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Total Amount</div>");
+        sb.Append("<div style=\"font-size:15px;color:" + EmailSlateStrong + ";font-weight:700;margin-top:3px;\">" + Enc(record.Currency) + " " + record.TotalAmount.ToString("N2") + "</div>");
+        sb.Append("</td>");
+        sb.Append("</tr>");
+        sb.Append("</table>");
+
+        if (quotationAttachments.Count > 0)
+        {
+            sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.05em;color:" + EmailSlateText + ";text-transform:uppercase;margin-bottom:8px;\">Vendor Quotation</div>");
+            sb.Append("<ul style=\"margin:0 0 22px;padding-left:18px;\">");
+            foreach (var attachment in quotationAttachments)
+            {
+                sb.Append("<li style=\"font-size:13px;color:" + EmailSlateText + ";margin-bottom:4px;\">" + Enc(attachment.FileName) + "</li>");
+            }
+            sb.Append("</ul>");
+        }
+
+        sb.Append("<p style=\"margin:0 0 8px;font-size:13px;color:" + EmailSlateText + ";\">The full purchase requisition PDF is attached to this email.</p>");
+
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:16px 0 10px;\"><tr>");
+        sb.Append("<td style=\"border-radius:8px;background-color:" + EmailApproveColor + ";\">");
+        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;padding:13px 32px;font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;\">Verify &amp; Upload PO Copy</a>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+
+        sb.Append("<p style=\"margin:10px 0 0;font-size:11.5px;line-height:1.6;color:" + EmailFaintText + ";\">");
+        sb.Append("Link not working? Paste this into your browser: <a href=\"" + reviewLink + "\" style=\"color:" + EmailBrandColor + ";\">" + reviewLink + "</a>. This link stays usable for " + FinanceTokenValidityDays + " days, and can be revisited if the PO copy or number needs correcting.");
+        sb.Append("</p>");
+
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
+        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
+        sb.Append("Once a PO copy is uploaded, " + Enc(requesterName) + " will automatically receive an email with the PO copy attached.");
+        sb.Append("</p>");
+        sb.Append("</td></tr>");
+
+        sb.Append("</table>");
+        sb.Append("</td></tr></table>");
+        sb.Append("</body></html>");
+
+        return sb.ToString();
+    }
+
+    private static string BuildPoReadyEmailHtml(Models.PurchaseRequisition record)
+    {
+        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
+
+        var prLabel = record.PrNumber ?? $"#{record.Id}";
+        var requesterName = record.RequestedByUser?.FullName ?? "there";
+
+        var sb = new StringBuilder();
+
+        sb.Append("<!DOCTYPE html>");
+        sb.Append("<html><head><meta charset=\"utf-8\" />");
+        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />");
+        sb.Append("<title></title></head>");
+        sb.Append("<body style=\"margin:0;padding:0;background-color:" + EmailPageBg + ";\">");
+
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailPageBg + ";padding:32px 16px;\">");
+        sb.Append("<tr><td align=\"center\">");
+        sb.Append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;\">");
+
+        sb.Append("<tr><td style=\"background-color:" + EmailBrandColor + ";padding:24px 32px;border-radius:12px 12px 0 0;\">");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append("<td style=\"width:44px;height:44px;background-color:#ffffff;border-radius:9px;text-align:center;vertical-align:middle;\">");
+        sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailBrandColor + ";line-height:44px;\">PPS</span>");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE ORDER READY</div>");
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:32px;font-family:" + EmailFontStack + ";\">");
+
+        sb.Append("<h1 style=\"margin:0 0 16px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
+        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
+        sb.Append("</h1>");
+
+        sb.Append("<p style=\"margin:0 0 12px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
+        sb.Append("Hi " + Enc(requesterName) + ", Finance has verified your purchase requisition and issued the Purchase Order.");
+        sb.Append("</p>");
+
+        sb.Append("<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
+        sb.Append("The PO copy is attached to this email" +
+            (string.IsNullOrWhiteSpace(record.PoNumber) ? "." : " (PO Number: <strong>" + Enc(record.PoNumber) + "</strong>).") );
+        sb.Append("</p>");
+
+        sb.Append("</td></tr>");
+
+        sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
+        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
+        sb.Append("Sign in to PPS License Manager to view the full purchase requisition details.");
+        sb.Append("</p>");
+        sb.Append("</td></tr>");
+
+        sb.Append("</table>");
+        sb.Append("</td></tr></table>");
+        sb.Append("</body></html>");
+
+        return sb.ToString();
+    }
+
     private static string GenerateSecureToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
@@ -2179,6 +2749,46 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             if (!File.Exists(physicalPath))
                 return null;
         }
+
+        return (physicalPath, Path.GetFileName(physicalPath));
+    }
+
+    /*
+     * Same access rule and "not under wwwroot" storage principle as
+     * GetPdfFileAsync, but no lazy-generation branch - unlike the PDF, a
+     * missing PO document just means Finance hasn't uploaded one yet,
+     * there's nothing to generate on demand.
+     */
+    public async Task<(string PhysicalPath, string FileName)?> GetPoDocumentFileAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (record == null)
+            return null;
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        if (string.IsNullOrWhiteSpace(record.PoDocumentPath))
+            return null;
+
+        var physicalPath = Path.Combine(
+            pdfStorageRootPath,
+            record.PoDocumentPath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(physicalPath))
+            return null;
 
         return (physicalPath, Path.GetFileName(physicalPath));
     }

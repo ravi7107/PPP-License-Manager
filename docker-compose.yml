@@ -32,6 +32,11 @@ services:
       # deployment's current address, but can be overridden without a
       # code change via APP_PUBLIC_BASE_URL in .env if the domain changes.
       App__PublicBaseUrl: ${APP_PUBLIC_BASE_URL:-http://98.93.56.145:3000}
+      # This API's own public address (not the frontend's) - used to build
+      # vendor-quotation attachment links on the Finance verification
+      # email/landing page. Override via APP_PUBLIC_API_BASE_URL in .env
+      # if the domain changes.
+      App__PublicApiBaseUrl: ${APP_PUBLIC_API_BASE_URL:-http://98.93.56.145:8080}
     depends_on:
       postgres:
         condition: service_healthy

@@ -52,6 +52,18 @@ public class PurchaseRequisitionResponse
     public string? PdfPath { get; set; }
     public DateTime? PdfGeneratedAt { get; set; }
 
+    // Set once Finance uploads a PO copy via the emailed Finance link
+    // (see PurchaseRequisitionService.UploadPoByTokenAsync) - null until
+    // then. PoUploadedByUserName is always null today since Finance acts
+    // through that link, not an in-app account (see
+    // PurchaseRequisition.PoUploadedByUserId's model comment); kept as a
+    // nullable field rather than removed so an authenticated upload path
+    // added later doesn't need another response-shape change.
+    public string? PoNumber { get; set; }
+    public string? PoDocumentPath { get; set; }
+    public DateTime? PoUploadedAt { get; set; }
+    public string? PoUploadedByUserName { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

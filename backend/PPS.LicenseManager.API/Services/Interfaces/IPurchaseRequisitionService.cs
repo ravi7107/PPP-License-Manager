@@ -101,4 +101,36 @@ public interface IPurchaseRequisitionService
         int requestingUserId,
         bool isPrivileged,
         string pdfStorageRootPath);
+
+
+    // =========================================================
+    // FINANCE ACTION LINK (Phase 7)
+    // =========================================================
+
+    // GET-safe, side-effect-free lookup for the unauthenticated Finance
+    // landing page. Returns null only when the token doesn't exist at all
+    // - an expired token still returns a response with IsExpired = true.
+    Task<PublicPurchaseRequisitionFinanceResponse?> GetPublicFinanceViewAsync(
+        string rawToken);
+
+    // Records Finance's PO upload via the secure link - deliberately
+    // re-callable (see PurchaseRequisitionFinanceNotification.TokenHash's
+    // comment), so a second call simply overwrites the PO details and
+    // re-sends the requester their "PO ready" email. Returns null only
+    // when the token doesn't exist; throws InvalidOperationException for
+    // an expired token, a PR that isn't Approved, or a rejected upload.
+    Task<PublicPurchaseRequisitionFinanceResponse?> UploadPoByTokenAsync(
+        string rawToken,
+        IFormFile file,
+        string? poNumber,
+        string pdfStorageRootPath);
+
+    // Authenticated in-app download of whatever PO document Finance most
+    // recently uploaded - same access rule as GetPdfFileAsync. Returns
+    // null if none has been uploaded yet.
+    Task<(string PhysicalPath, string FileName)?> GetPoDocumentFileAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath);
 }
