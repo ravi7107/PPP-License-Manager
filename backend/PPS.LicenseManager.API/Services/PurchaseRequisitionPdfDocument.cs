@@ -108,7 +108,27 @@ public class PurchaseRequisitionPdfDocument : IDocument
         {
             column.Item().Row(row =>
             {
-                row.ConstantItem(140).Height(45).Image(LogoBytes).FitArea();
+                // Letterhead block: logo, then the issuing entity's
+                // Address/GSTIN stacked below it - only when the Company
+                // record actually has them set (see AddIfPresent's
+                // comment: an empty field is omitted, never shown as
+                // "Not Specified").
+                row.ConstantItem(170).Column(entityColumn =>
+                {
+                    entityColumn.Item().Height(45).Image(LogoBytes).FitArea();
+
+                    if (!string.IsNullOrWhiteSpace(_pr.Company?.Address))
+                    {
+                        entityColumn.Item().PaddingTop(3)
+                            .Text(_pr.Company!.Address).FontSize(6.5f).FontColor(MutedColor);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(_pr.Company?.GSTNumber))
+                    {
+                        entityColumn.Item().PaddingTop(1)
+                            .Text($"GSTIN: {_pr.Company!.GSTNumber}").FontSize(6.5f).FontColor(MutedColor);
+                    }
+                });
 
                 row.RelativeItem();
 
@@ -233,6 +253,19 @@ public class PurchaseRequisitionPdfDocument : IDocument
     private static string OrNotSpecified(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "Not Specified" : value;
 
+    // Per feedback on the first deployed version: an unset field should
+    // simply not appear on the document rather than print as literal
+    // "Not Specified" - so field-grid rows now use this instead of
+    // OrNotSpecified() wherever the field is genuinely optional (has no
+    // guaranteed source, unlike e.g. Requested By or Entity).
+    private static void AddIfPresent(List<(string Label, string Value)> fields, string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            fields.Add((label, value!));
+        }
+    }
+
 
     // =========================================================
     // 1. REQUEST INFORMATION
@@ -246,26 +279,28 @@ public class PurchaseRequisitionPdfDocument : IDocument
                 ? _pr.RequestedByUser.FullName
                 : $"{_pr.RequestedByUser.FullName} ({_pr.RequestedByUser.EmployeeCode})";
 
-        var fields = new[]
+        // Purchase Type/Priority/Required-By-Date/Cost Center/Project are
+        // intentionally not listed here - this module has no backing field
+        // for any of them yet, and per feedback an unavailable field is
+        // omitted rather than printed as "Not Specified" (see
+        // AddIfPresent's comment).
+        var fields = new List<(string Label, string Value)>
         {
             ("Requested By", requestedByName),
-            ("Department", OrNotSpecified(_pr.Department?.DepartmentName)),
-            ("Entity", _pr.Company?.Name ?? "-"),
-            ("Purchase Type (CAPEX / OPEX)", "Not Specified"),
-            ("Priority", "Not Specified"),
-            ("Required By Date", "Not Specified"),
-            ("Cost Center", "Not Specified"),
-            ("Project / Business Unit", "Not Specified"),
-            ("Request Date", _pr.CreatedAt.ToString("d MMM yyyy")),
-            ("Submitted Date", _pr.SubmittedAt?.ToString("d MMM yyyy") ?? "-"),
         };
+
+        AddIfPresent(fields, "Department", _pr.Department?.DepartmentName);
+
+        fields.Add(("Entity", _pr.Company?.Name ?? "-"));
+        fields.Add(("Request Date", _pr.CreatedAt.ToString("d MMM yyyy")));
+        fields.Add(("Submitted Date", _pr.SubmittedAt?.ToString("d MMM yyyy") ?? "-"));
 
         if (_pr.InitiatedByContact != null)
         {
-            fields = fields.Append(("Initiated By", _pr.InitiatedByContact.FullName)).ToArray();
+            fields.Add(("Initiated By", _pr.InitiatedByContact.FullName));
         }
 
-        ComposeFieldGrid(container, fields, columnsPerRow: 3);
+        ComposeFieldGrid(container, fields.ToArray(), columnsPerRow: 3);
     }
 
     private static void ComposeFieldGrid(
@@ -430,24 +465,22 @@ public class PurchaseRequisitionPdfDocument : IDocument
             return;
         }
 
-        var fields = new[]
+        // Quotation Number/Date/Validity and Payment/Delivery
+        // Terms/Warranty are intentionally not listed - no backing field
+        // exists for any of them yet (see AddIfPresent's comment).
+        var fields = new List<(string Label, string Value)>
         {
             ("Vendor Name", vendor.VendorName),
             ("Vendor Code", vendor.VendorCode),
-            ("GSTIN", OrNotSpecified(vendor.GSTIN)),
-            ("Contact Person", OrNotSpecified(vendor.ContactPerson)),
-            ("Email", OrNotSpecified(vendor.Email)),
-            ("Phone", OrNotSpecified(vendor.Phone)),
-            ("Address", OrNotSpecified(vendor.Address)),
-            ("Quotation Number", "Not Specified"),
-            ("Quotation Date", "Not Specified"),
-            ("Quotation Validity", "Not Specified"),
-            ("Payment Terms", "Not Specified"),
-            ("Delivery Terms", "Not Specified"),
-            ("Warranty", "Not Specified"),
         };
 
-        container.Background(PanelBg).Padding(8).Element(c => ComposeFieldGrid(c, fields, columnsPerRow: 3));
+        AddIfPresent(fields, "GSTIN", vendor.GSTIN);
+        AddIfPresent(fields, "Contact Person", vendor.ContactPerson);
+        AddIfPresent(fields, "Email", vendor.Email);
+        AddIfPresent(fields, "Phone", vendor.Phone);
+        AddIfPresent(fields, "Address", vendor.Address);
+
+        container.Background(PanelBg).Padding(8).Element(c => ComposeFieldGrid(c, fields.ToArray(), columnsPerRow: 3));
     }
 
 
@@ -591,22 +624,24 @@ public class PurchaseRequisitionPdfDocument : IDocument
     // this change.
     private void ComposeFinanceAction(IContainer container)
     {
-        var fields = new[]
+        // PO Required/Quotation Reference/Cost Center are intentionally
+        // not listed - no backing field exists for any of them yet (see
+        // AddIfPresent's comment).
+        var fields = new List<(string Label, string Value)>
         {
             ("PR Approved", _pr.Status == "Approved" ? "Yes" : "No"),
             ("Approved PR Value", _pr.Status == "Approved"
                 ? CurrencyInWordsFormatter.FormatCurrency(_pr.TotalAmount, _pr.Currency)
                 : "-"),
-            ("Vendor", OrNotSpecified(_pr.Vendor?.VendorName)),
-            ("PO Required", "Not Specified"),
-            ("Quotation Reference", "Not Specified"),
-            ("Cost Center", "Not Specified"),
-            ("PO Number", OrNotSpecified(_pr.PoNumber) == "Not Specified" ? "Pending" : _pr.PoNumber!),
-            ("PO Date", _pr.PoUploadedAt?.ToString("d MMM yyyy") ?? "Pending"),
-            ("Processed By", _pr.PoUploadedByUser?.FullName ?? "Pending"),
         };
 
-        ComposeFieldGrid(container, fields, columnsPerRow: 3);
+        AddIfPresent(fields, "Vendor", _pr.Vendor?.VendorName);
+
+        fields.Add(("PO Number", string.IsNullOrWhiteSpace(_pr.PoNumber) ? "Pending" : _pr.PoNumber!));
+        fields.Add(("PO Date", _pr.PoUploadedAt?.ToString("d MMM yyyy") ?? "Pending"));
+        fields.Add(("Processed By", _pr.PoUploadedByUser?.FullName ?? "Pending"));
+
+        ComposeFieldGrid(container, fields.ToArray(), columnsPerRow: 3);
     }
 
 
