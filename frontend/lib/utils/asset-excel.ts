@@ -65,6 +65,11 @@ export function exportAssetsToExcel(assets: ExportableAsset[], fileName = 'asset
   XLSX.writeFile(workbook, fileName);
 }
 
+// The fixed set the Asset form itself uses (asset-form-dialog.tsx's
+// assetFormSchema) - CreateAssetRequest.AssetType has no backend lookup
+// endpoint, so this list is duplicated here the same way it is there.
+export const IMPORT_ASSET_TYPES = ['Desktop', 'Laptop', 'Workstation', 'Server'] as const;
+
 export interface ImportedAssetRow {
   assetTag: string;
   assetName: string;
@@ -118,8 +123,6 @@ const IMPORT_HEADER_MAP: Record<string, keyof ImportedAssetRow> = {
   'Rental End Date': 'rentalEndDate',
   'Dual Monitor': 'dualMonitor',
 };
-
-export const IMPORT_ASSET_TYPES = ['Desktop', 'Laptop', 'Workstation', 'Server'] as const;
 
 // Trims stray whitespace and ignores case, so a header like " ownership
 // type " or "OWNERSHIP TYPE" (someone re-typing headers by hand instead

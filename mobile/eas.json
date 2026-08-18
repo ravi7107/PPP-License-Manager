@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": ">= 5.9.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.1.100:8080/api",
+        "EXPO_PUBLIC_API_ENV_NAME": "Development"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging.your-domain.example/api",
+        "EXPO_PUBLIC_API_ENV_NAME": "Staging"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ppsl.net.in/api",
+        "EXPO_PUBLIC_API_ENV_NAME": "Production"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
