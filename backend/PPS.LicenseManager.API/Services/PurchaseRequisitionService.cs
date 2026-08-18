@@ -102,7 +102,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.ApprovalSteps)
                 .ThenInclude(x => x.AssignedApproverUser)
             .Include(x => x.ApprovalSteps)
-                .ThenInclude(x => x.AssignedApproverContact);
+                .ThenInclude(x => x.AssignedApproverContact)
+            .Include(x => x.PreviousRevision)
+            .Include(x => x.PoUploadedByUser);
     }
 
     private static PurchaseRequisitionResponse Map(
@@ -189,24 +191,29 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
             ApprovalSteps = r.ApprovalSteps
                 .OrderBy(s => s.StepOrder)
-                .Select(s => new PurchaseRequisitionApprovalStepResponse
+                .Select(s =>
                 {
-                    Id = s.Id,
-                    StepOrder = s.StepOrder,
-                    AssignedApproverUserId = s.AssignedApproverUserId,
-                    AssignedApproverContactId = s.AssignedApproverContactId,
-                    ApproverType = s.AssignedApproverContactId.HasValue ? "Contact" : "User",
-                    AssignedApproverUserName = s.AssignedApproverContactId.HasValue
-                        ? (s.AssignedApproverContact?.FullName ?? string.Empty)
-                        : (s.AssignedApproverUser?.FullName ?? string.Empty),
-                    AssignedApproverEmail = s.AssignedApproverContactId.HasValue
-                        ? s.AssignedApproverContact?.Email
-                        : s.AssignedApproverUser?.Email,
-                    Status = s.Status,
-                    DecidedAt = s.DecidedAt,
-                    Remarks = s.Remarks
+                    var approver = PurchaseRequisitionApproverDisplay.Resolve(s);
+
+                    return new PurchaseRequisitionApprovalStepResponse
+                    {
+                        Id = s.Id,
+                        StepOrder = s.StepOrder,
+                        AssignedApproverUserId = s.AssignedApproverUserId,
+                        AssignedApproverContactId = s.AssignedApproverContactId,
+                        ApproverType = approver.ApproverType,
+                        AssignedApproverUserName = approver.Name,
+                        AssignedApproverEmail = approver.Email,
+                        Status = s.Status,
+                        DecidedAt = s.DecidedAt,
+                        Remarks = s.Remarks
+                    };
                 })
-                .ToList()
+                .ToList(),
+
+            RevisionNumber = r.RevisionNumber,
+            PreviousRevisionId = r.PreviousRevisionId,
+            PreviousPrNumber = r.PreviousRevision?.PrNumber
         };
     }
 
@@ -886,6 +893,133 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         await IssueTokenAndSendApprovalRequestEmailAsync(record, firstStep, createdSteps);
 
         return await GetByIdAsync(record.Id, requestedByUserId, isPrivileged: false);
+    }
+
+
+    // =========================================================
+    // REVISIONS
+    // =========================================================
+
+    /*
+     * Clones an Approved purchase requisition into a brand-new Draft that
+     * links back to it (PreviousRevisionId), rather than ever mutating
+     * the approved row - the immutability trigger would block that
+     * anyway (see PurchaseRequisition.cs's class comment), and "never
+     * overwrite the previous approved version" is the whole point of a
+     * revision. The new Draft then goes through the exact same, entirely
+     * unmodified Draft -> Submit -> Approve pipeline as any other PR -
+     * there is no separate revision approval flow, no new state machine.
+     * Line items are recomputed via ValidateAndComputeAsync (the same
+     * helper CreateDraftAsync/UpdateDraftAsync use), never copied
+     * directly, so a revision's LineTotal/SubtotalAmount/TaxAmount/
+     * TotalAmount hold the exact same server-computed-only invariant as
+     * any freshly-created draft.
+     */
+    public async Task<PurchaseRequisitionResponse> CreateRevisionAsync(
+        int approvedPrId,
+        int requestedByUserId)
+    {
+        var original = await _context.PurchaseRequisitions
+            .Include(x => x.Company)
+            .Include(x => x.Vendor)
+            .Include(x => x.LineItems)
+            .FirstOrDefaultAsync(x => x.Id == approvedPrId);
+
+        if (original == null)
+            throw new InvalidOperationException(
+                "Purchase requisition not found.");
+
+        // Owner-only, same rule as Submit/Update/Delete on a Draft - the
+        // Status == "Approved" check below is the real business gate;
+        // this just decides who's allowed to ask for a revision at all.
+        if (original.RequestedByUserId != requestedByUserId)
+            throw new UnauthorizedAccessException(
+                "You can only create a revision of your own purchase requisitions.");
+
+        if (original.Status != "Approved")
+            throw new InvalidOperationException(
+                "Only an approved purchase requisition can be revised.");
+
+        var requestedBy = await _context.Users
+            .FirstOrDefaultAsync(x => x.Id == requestedByUserId);
+
+        if (requestedBy == null || !requestedBy.IsActive)
+            throw new InvalidOperationException(
+                "Requesting user not found or inactive.");
+
+        var saveRequest = new SavePurchaseRequisitionRequest
+        {
+            CompanyId = original.CompanyId,
+            VendorId = original.VendorId,
+            Title = original.Title,
+            Justification = original.Justification,
+            Currency = original.Currency,
+            CgstPercent = original.CgstPercent,
+            SgstPercent = original.SgstPercent,
+            InitiatedByContactId = original.InitiatedByContactId,
+            LineItems = original.LineItems
+                .OrderBy(li => li.LineNumber)
+                .Select(li => new PurchaseRequisitionLineItemRequest
+                {
+                    ItemDescription = li.ItemDescription,
+                    Category = li.Category,
+                    Quantity = li.Quantity,
+                    UnitOfMeasure = li.UnitOfMeasure,
+                    UnitPrice = li.UnitPrice,
+                    Notes = li.Notes
+                })
+                .ToList()
+        };
+
+        var lineItems = new List<PurchaseRequisitionLineItem>();
+
+        // Re-validates Company/Vendor are still active the same way a
+        // manual save would - if either has since been deactivated, this
+        // fails loudly here instead of silently cloning a now-invalid
+        // reference into the new revision.
+        var (company, vendor, subtotal, cgstPercent, sgstPercent, tax, total) =
+            await ValidateAndComputeAsync(saveRequest, lineItems);
+
+        var initiatedByContactId =
+            await ValidateInitiatorContactAsync(saveRequest.InitiatedByContactId);
+
+        var revision = new Models.PurchaseRequisition
+        {
+            CompanyId = company.Id,
+            VendorId = vendor?.Id,
+            RequestedByUserId = requestedByUserId,
+            InitiatedByContactId = initiatedByContactId,
+            Title = original.Title,
+            Justification = original.Justification,
+            Status = "Draft",
+            Currency = original.Currency,
+            SubtotalAmount = subtotal,
+            CgstPercent = cgstPercent,
+            SgstPercent = sgstPercent,
+            TaxAmount = tax,
+            TotalAmount = total,
+            RevisionNumber = original.RevisionNumber + 1,
+            PreviousRevisionId = original.Id,
+            CreatedAt = DateTime.UtcNow,
+            LineItems = lineItems
+        };
+
+        _context.PurchaseRequisitions.Add(revision);
+
+        await _context.SaveChangesAsync();
+
+        var originalLabel = original.PrNumber ?? $"#{original.Id}";
+
+        AddAuditLog(revision.Id, "RevisionCreated", requestedByUserId,
+            $"Revision {revision.RevisionNumber:D2} of {originalLabel}.");
+        AddAuditLog(original.Id, "RevisionCreated", requestedByUserId,
+            $"Revision {revision.RevisionNumber:D2} created as Draft #{revision.Id}.");
+
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(revision.Id, requestedByUserId, isPrivileged: false)
+            ?? throw new InvalidOperationException(
+                "Unable to load the newly created revision.");
     }
 
     private async Task<string> GenerateUniquePrNumberAsync(Models.PurchaseRequisition record)

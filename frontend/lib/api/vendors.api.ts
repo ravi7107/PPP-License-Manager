@@ -8,6 +8,9 @@ export interface Vendor {
   email: string | null;
   phone: string | null;
   address: string | null;
+  // GST Identification Number - optional, shown on the Purchase
+  // Requisition PDF's Vendor Information section when set.
+  gstin: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -19,6 +22,7 @@ export interface CreateVendorRequest {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  gstin?: string | null;
   isActive: boolean;
 }
 

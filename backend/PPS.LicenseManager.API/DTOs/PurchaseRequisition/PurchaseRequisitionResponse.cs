@@ -59,6 +59,13 @@ public class PurchaseRequisitionResponse
     // shows (Edit/Submit/Delete are owner-only, and only while Draft).
     public bool IsOwner { get; set; }
 
+    // 0 for every PR created the normal way ("Rev 00"). Only > 0 on a
+    // Draft/PR created by CreateRevisionAsync from a previously Approved
+    // one - see PurchaseRequisition.RevisionNumber's model comment.
+    public int RevisionNumber { get; set; }
+    public int? PreviousRevisionId { get; set; }
+    public string? PreviousPrNumber { get; set; }
+
     public List<PurchaseRequisitionLineItemResponse> LineItems { get; set; } = new();
     public List<PurchaseRequisitionAttachmentResponse> Attachments { get; set; } = new();
     public List<PurchaseRequisitionApprovalStepResponse> ApprovalSteps { get; set; } = new();

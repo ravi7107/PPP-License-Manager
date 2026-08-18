@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PPS.LicenseManager.API.DTOs.Vendor;
 
 public class VendorResponse
@@ -15,6 +17,12 @@ public class VendorResponse
     public string? Phone { get; set; }
 
     public string? Address { get; set; }
+
+    // Explicit JSON name - System.Text.Json's camelCase policy handling
+    // of an all-caps acronym like "GSTIN" isn't worth leaving implicit;
+    // this pins the wire format to "gstin" regardless.
+    [JsonPropertyName("gstin")]
+    public string? GSTIN { get; set; }
 
     public bool IsActive { get; set; }
 

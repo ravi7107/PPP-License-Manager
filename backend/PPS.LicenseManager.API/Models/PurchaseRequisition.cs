@@ -75,6 +75,27 @@ public class PurchaseRequisition
     // through (1-3).
     public int RequiredApprovalStageCount { get; set; } = 1;
 
+    // 0 for every PR created the normal way ("Rev 00" on the PDF).
+    // Incremented only by CreateRevisionAsync, which clones an Approved PR
+    // into a brand-new linked Draft rather than ever mutating the
+    // approved row (the immutability trigger would block that anyway) -
+    // see PreviousRevisionId below and PurchaseRequisitionService.
+    // CreateRevisionAsync's own comment for the full mechanism.
+    public int RevisionNumber { get; set; } = 0;
+
+    // Set only on a revision row (RevisionNumber > 0), pointing back at
+    // the Approved PR it was cloned from. Self-referencing FK, Restrict
+    // on delete - matches this codebase's existing self-reference
+    // precedent (User.ReportsToUserId/ReportsToUser).
+    public int? PreviousRevisionId { get; set; }
+
+    public PurchaseRequisition? PreviousRevision { get; set; }
+
+    // Inverse of PreviousRevision - every later revision cloned from this
+    // row, if any.
+    public ICollection<PurchaseRequisition> Revisions { get; set; } =
+        new List<PurchaseRequisition>();
+
     // Which stage is currently awaiting a decision. Null before submit and
     // after the PR reaches a terminal state (Approved/Rejected).
     public int? CurrentApprovalStepOrder { get; set; }

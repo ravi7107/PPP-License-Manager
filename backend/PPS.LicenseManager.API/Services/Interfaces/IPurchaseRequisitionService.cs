@@ -45,6 +45,15 @@ public interface IPurchaseRequisitionService
         SubmitPurchaseRequisitionRequest request,
         int requestedByUserId);
 
+    // Clones an Approved purchase requisition into a new, linked Draft
+    // (RevisionNumber + PreviousRevisionId) - see
+    // PurchaseRequisitionService.CreateRevisionAsync's comment. Throws
+    // InvalidOperationException if the source PR isn't found or isn't
+    // Approved.
+    Task<PurchaseRequisitionResponse> CreateRevisionAsync(
+        int approvedPrId,
+        int requestedByUserId);
+
     Task<IEnumerable<PurchaseRequisitionApproverCandidateResponse>>
         GetApproverCandidatesAsync(int purchaseRequisitionId, int requestingUserId);
 

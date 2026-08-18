@@ -99,6 +99,7 @@ export default function VendorsPage() {
       email: values.email.trim() || null,
       phone: values.phone.trim() || null,
       address: values.address.trim() || null,
+      gstin: values.gstin.trim() || null,
       isActive: values.status === 'Active',
     };
 

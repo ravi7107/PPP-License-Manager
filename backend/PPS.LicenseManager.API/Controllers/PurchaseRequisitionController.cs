@@ -394,4 +394,37 @@ public class PurchaseRequisitionController : BaseController
             return BadRequestResponse(ex.Message);
         }
     }
+
+
+    // =========================================================
+    // REVISIONS
+    // =========================================================
+
+    // Owner-only, same style as Submit/Update/Delete above - the service
+    // layer's own check (Status == "Approved") is the real gate; ownership
+    // just decides who's allowed to ask for one.
+    [HttpPost("{id:int}/revise")]
+    public async Task<IActionResult> CreateRevision(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.CreateRevisionAsync(id, currentUserId);
+
+            return CreatedResponse(
+                nameof(GetById),
+                new { id = result.Id },
+                result,
+                "Revision created as a new draft.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace PPS.LicenseManager.API.DTOs.Vendor;
 
@@ -20,6 +21,13 @@ public class CreateVendorRequest
     public string? Phone { get; set; }
 
     public string? Address { get; set; }
+
+    // Optional - shown on the Purchase Requisition PDF's Vendor
+    // Information section when set (see Vendor.GSTIN's model comment).
+    // Explicit JSON name, see VendorResponse.GSTIN's comment.
+    [MaxLength(20)]
+    [JsonPropertyName("gstin")]
+    public string? GSTIN { get; set; }
 
     public bool IsActive { get; set; } = true;
 }

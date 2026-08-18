@@ -46,6 +46,7 @@ public class VendorService : IVendorService
             Email = Normalize(request.Email),
             Phone = Normalize(request.Phone),
             Address = Normalize(request.Address),
+            GSTIN = Normalize(request.GSTIN),
             IsActive = request.IsActive,
             CreatedAt = DateTime.UtcNow
         };
@@ -77,6 +78,7 @@ public class VendorService : IVendorService
         vendor.Email = Normalize(request.Email);
         vendor.Phone = Normalize(request.Phone);
         vendor.Address = Normalize(request.Address);
+        vendor.GSTIN = Normalize(request.GSTIN);
         vendor.IsActive = request.IsActive;
         vendor.UpdatedAt = DateTime.UtcNow;
 
@@ -118,6 +120,7 @@ public class VendorService : IVendorService
         Email = vendor.Email,
         Phone = vendor.Phone,
         Address = vendor.Address,
+        GSTIN = vendor.GSTIN,
         IsActive = vendor.IsActive,
         CreatedAt = vendor.CreatedAt
     };

@@ -20,6 +20,7 @@ import { Vendor, getVendors } from '@/lib/api/vendors.api';
 import {
   AttachmentType,
   createPurchaseRequisitionDraft,
+  createPurchaseRequisitionRevision,
   deletePurchaseRequisitionAttachment,
   deletePurchaseRequisitionDraft,
   getApproverCandidates,
@@ -83,6 +84,9 @@ export default function PurchaseRequisitionsPage() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [revising, setRevising] = useState(false);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
 
   const [pageError, setPageError] = useState<string | null>(null);
 
@@ -153,6 +157,7 @@ export default function PurchaseRequisitionsPage() {
       const full = await getPurchaseRequisition(row.id);
       setDetailPr(full);
       setUploadError(null);
+      setRevisionError(null);
       setDetailOpen(true);
     } catch (err: any) {
       setPageError(err?.response?.data?.message ?? 'Failed to load purchase requisition.');
@@ -231,6 +236,30 @@ export default function PurchaseRequisitionsPage() {
       setUploadError(
         err?.response?.data?.message ?? 'Failed to load approver candidates.'
       );
+    }
+  };
+
+  // Clones an Approved PR into a new, linked Draft, then drops the user
+  // straight into editing it - same "open in edit" flow as clicking Edit
+  // on any other Draft (openEdit above), just seeded from the new
+  // revision's id instead of an existing row's.
+  const handleCreateRevision = async () => {
+    if (!detailPr) return;
+    setRevising(true);
+    setRevisionError(null);
+    try {
+      const revision = await createPurchaseRequisitionRevision(detailPr.id);
+      setDetailOpen(false);
+      await loadList();
+      setEditingPr(revision);
+      setFormError(null);
+      setFormOpen(true);
+    } catch (err: any) {
+      setRevisionError(
+        err?.response?.data?.message ?? err?.message ?? 'Failed to create a revision.'
+      );
+    } finally {
+      setRevising(false);
     }
   };
 
@@ -411,6 +440,9 @@ export default function PurchaseRequisitionsPage() {
         onUploadAttachment={handleUploadAttachment}
         onDeleteAttachment={handleDeleteAttachment}
         onOpenSubmit={openSubmitDialog}
+        revising={revising}
+        revisionError={revisionError}
+        onCreateRevision={handleCreateRevision}
       />
 
       <SubmitPrDialog

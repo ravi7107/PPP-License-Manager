@@ -95,6 +95,12 @@ export interface PurchaseRequisition {
   createdAt: string;
   updatedAt: string | null;
   isOwner: boolean;
+  // 0 for every PR created the normal way ("Rev 00"). Only > 0 on a
+  // Draft created by createPurchaseRequisitionRevision from a
+  // previously Approved one.
+  revisionNumber: number;
+  previousRevisionId: number | null;
+  previousPrNumber: string | null;
   lineItems: PurchaseRequisitionLineItem[];
   attachments: PurchaseRequisitionAttachment[];
   approvalSteps: PurchaseRequisitionApprovalStep[];
@@ -320,6 +326,22 @@ export async function decidePurchaseRequisitionStep(
   const response = await api.post<ApiResponse<PurchaseRequisition>>(
     `/PurchaseRequisition/${id}/decision`,
     request
+  );
+
+  return response.data.data;
+}
+
+// Clones an Approved PR into a new, linked Draft (RevisionNumber + 1,
+// PreviousRevisionId set) - only the owner can call this, and only while
+// the source PR is Approved (both enforced server-side). The new draft
+// then goes through the exact same create/edit/submit flow as any other
+// Draft - this call just creates it, same shape as
+// createPurchaseRequisitionDraft's return.
+export async function createPurchaseRequisitionRevision(
+  approvedPrId: number
+): Promise<PurchaseRequisition> {
+  const response = await api.post<ApiResponse<PurchaseRequisition>>(
+    `/PurchaseRequisition/${approvedPrId}/revise`
   );
 
   return response.data.data;

@@ -47,6 +47,7 @@ const schema = z.object({
     ),
   phone: z.string(),
   address: z.string(),
+  gstin: z.string(),
   status: z.enum(['Active', 'Inactive']),
 });
 
@@ -59,6 +60,7 @@ const EMPTY: VendorFormValues = {
   email: '',
   phone: '',
   address: '',
+  gstin: '',
   status: 'Active',
 };
 
@@ -93,6 +95,7 @@ export function VendorFormDialog({
         email: vendor.email ?? '',
         phone: vendor.phone ?? '',
         address: vendor.address ?? '',
+        gstin: vendor.gstin ?? '',
         status: vendor.isActive ? 'Active' : 'Inactive',
       });
     } else {
@@ -211,6 +214,25 @@ export function VendorFormDialog({
                   <FormControl>
                     <Textarea
                       placeholder="Vendor's registered/billing address - shown on the PR PDF"
+                      {...field}
+                    />
+                  </FormControl>
+
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="gstin"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GSTIN (optional)</FormLabel>
+
+                  <FormControl>
+                    <Input
+                      placeholder="22AAAAA0000A1Z5 - shown on the PR PDF"
                       {...field}
                     />
                   </FormControl>

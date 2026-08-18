@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace PPS.LicenseManager.API.DTOs.Vendor;
 
@@ -20,6 +21,10 @@ public class UpdateVendorRequest
     public string? Phone { get; set; }
 
     public string? Address { get; set; }
+
+    [MaxLength(20)]
+    [JsonPropertyName("gstin")]
+    public string? GSTIN { get; set; }
 
     public bool IsActive { get; set; }
 }
