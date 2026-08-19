@@ -747,7 +747,7 @@ public class PurchaseRequisitionPdfDocument : IDocument
                 {
                     t.Span("Generated ").FontSize(7).FontColor(MutedColor);
                     t.Span(DateTime.UtcNow.ToString("d MMM yyyy, HH:mm 'UTC'")).FontSize(7).FontColor(MutedColor);
-                    t.Span("   ·   Source: PPS License Manager").FontSize(7).FontColor(MutedColor);
+                    t.Span("   ·   Source: PPS SmartAsset").FontSize(7).FontColor(MutedColor);
                 });
 
                 row.RelativeItem().AlignRight()

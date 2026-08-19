@@ -95,7 +95,7 @@ export default function PrPublicFinancePage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <div className="w-full max-w-2xl space-y-4">
         <h1 className="text-center text-xl font-bold text-slate-800">
-          PPS License Manager
+          PPS SmartAsset
         </h1>
 
         {loading ? (

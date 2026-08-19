@@ -12,7 +12,7 @@ public class HealthController : ControllerBase
         return Ok(new
         {
             Status = "Healthy",
-            Application = "PPS License Manager API",
+            Application = "PPS SmartAsset API",
             Version = "1.0.0",
             Time = DateTime.UtcNow
         });

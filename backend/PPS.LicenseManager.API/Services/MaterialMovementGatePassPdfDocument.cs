@@ -153,7 +153,7 @@ public class MaterialMovementGatePassPdfDocument : IDocument
                     else
                     {
                         c.Item().PaddingTop(2)
-                            .Text("PPS License Manager").FontSize(12).Bold();
+                            .Text("PPS SmartAsset").FontSize(12).Bold();
                     }
                 });
 

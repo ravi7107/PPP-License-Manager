@@ -55,7 +55,7 @@ public class SmtpEmailService : IEmailService
         username = section["Username"] ?? string.Empty;
         password = section["Password"] ?? string.Empty;
         fromAddress = section["FromAddress"] ?? string.Empty;
-        fromName = section["FromName"] ?? "PPS License Manager";
+        fromName = section["FromName"] ?? "PPS SmartAsset";
 
         return !string.IsNullOrWhiteSpace(host)
             && !string.IsNullOrWhiteSpace(username)

@@ -409,7 +409,7 @@ export default function UsersPage() {
         <div>
           <h1 className="nova-cmdbar-title">User Management</h1>
           <p className="nova-cmdbar-desc">
-            Create and manage PPS License Manager users, roles and
+            Create and manage PPS SmartAsset users, roles and
             account status.
           </p>
         </div>
@@ -642,7 +642,7 @@ export default function UsersPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   {selectedUser
                     ? 'Update user account information, role and status.'
-                    : 'Create a new PPS License Manager user account.'}
+                    : 'Create a new PPS SmartAsset user account.'}
                 </p>
               </div>
 

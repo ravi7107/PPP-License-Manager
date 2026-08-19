@@ -1863,7 +1863,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailBrandColor + ";line-height:44px;\">PPS</span>");
         sb.Append("</td>");
         sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
         sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION APPROVAL</div>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
@@ -1991,7 +1991,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + accentColor + ";line-height:44px;\">PPS</span>");
         sb.Append("</td>");
         sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
         sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION " + statusWord + "</div>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
@@ -2023,7 +2023,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
         sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
-        sb.Append("Sign in to PPS License Manager to view the full details" + (approved ? " or download the PDF copy." : "."));
+        sb.Append("Sign in to PPS SmartAsset to view the full details" + (approved ? " or download the PDF copy." : "."));
         sb.Append("</p>");
         sb.Append("</td></tr>");
 
@@ -2475,7 +2475,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailApproveColor + ";line-height:44px;\">PPS</span>");
         sb.Append("</td>");
         sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
         sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">APPROVED — FINANCE ACTION NEEDED</div>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
@@ -2567,7 +2567,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailBrandColor + ";line-height:44px;\">PPS</span>");
         sb.Append("</td>");
         sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS License Manager</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
         sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">PURCHASE ORDER READY</div>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
@@ -2592,7 +2592,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
         sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
-        sb.Append("Sign in to PPS License Manager to view the full purchase requisition details.");
+        sb.Append("Sign in to PPS SmartAsset to view the full purchase requisition details.");
         sb.Append("</p>");
         sb.Append("</td></tr>");
 
