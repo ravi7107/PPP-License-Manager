@@ -11,23 +11,28 @@ interface HeroVisualProps {
 }
 
 // - "full" serves frontend/public/login-hero.webp, the complete banner
-//   the user supplied. It already bakes in the PPS logo, the
-//   "One Platform / Complete Visibility" headline and subtitle, and the
-//   office/seat-locator illustration with feature badges and the
-//   floor-map widget. Because all of that branding and copy now lives
-//   inside the artwork itself, the separate BrandHeader/headline block
-//   that used to sit next to the form was dropped from the desktop
-//   layout in login-page.tsx (kept only for mobile - see there) to
-//   avoid showing the same message twice.
+//   the user supplied. It already bakes in the "PPS SmartAsset"
+//   wordmark, the "One Platform. Complete Visibility. Total Control."
+//   headline and subtitle, and the office/seat-locator illustration
+//   with feature badges (User Seat Locator, PR Initiation, IT Asset
+//   Inventory, Reports & Analytics, PR Inledger, Deployment/Checkout),
+//   the inward/outward flow graphic and the floor-map widget. Because
+//   all of that branding and copy now lives inside the artwork itself,
+//   the separate BrandHeader/headline block that used to sit next to
+//   the form was dropped from the desktop layout in login-page.tsx
+//   (kept only as a small repeat mark - see there) to avoid showing
+//   the same message twice.
 //
 // - "minimal" serves frontend/public/login-hero-mobile.webp, a crop of
-//   the same source image with the logo/headline/subtitle portion cut
-//   away, keeping only the illustration + badges + floor-map widget.
-//   The full banner's baked-in text is sized for a ~700-900px-wide
-//   desktop panel; scaled down to phone width it would become
-//   illegibly small, so mobile instead pairs this illustration-only
-//   crop with the small standalone BrandHeader mark and real,
-//   independently-sized headline text.
+//   the same source image with just the "PPS SmartAsset" wordmark cut
+//   off the top. Unlike the previous artwork, this one weaves the
+//   feature badges through the same vertical band as the headline/
+//   subtitle text, so there's no clean illustration-only region left
+//   to crop to once the wordmark is removed - the headline/subtitle
+//   comes along with it. login-page.tsx's mobile layout no longer
+//   renders a separate HTML headline for that reason (it would just
+//   repeat what's now baked into this crop); it keeps only the small
+//   standalone BrandHeader mark next to the form.
 export function HeroVisual({ variant = 'full', className }: HeroVisualProps) {
   const minimal = variant === 'minimal';
 

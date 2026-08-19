@@ -81,29 +81,12 @@ export default function LoginPage() {
               repeat mark right next to the form is standard practice
               for split-screen login pages (keeps the form panel
               self-identifying even if the hero side scrolls out of view
-              on a short viewport). On mobile it's the only branding,
-              since the mobile hero crop below has its text cut off. */}
+              on a short viewport). On mobile it's a repeat mark too -
+              the illustration below now bakes in its own headline/
+              subtitle text (see HeroVisual's "minimal" comment), so
+              there's no separate HTML headline here any more. */}
           <div className="animate-in fade-in-0 duration-500 fill-mode-both">
             <BrandHeader compact />
-          </div>
-
-          {/* Headline/subtitle - mobile only. The full hero banner
-              shown from md up already bakes this exact message into
-              the image, so repeating it as text there would just show
-              it twice. Below md, the banner is swapped for the
-              illustration-only crop (its baked-in text would be
-              illegible at phone width), so the message needs to exist
-              here as real, independently-sized text instead. */}
-          <div className="animate-in fade-in-0 duration-500 fill-mode-both [animation-delay:80ms] md:hidden">
-            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              One Platform,{" "}
-              <span className="text-primary">Complete Visibility</span>
-            </h2>
-
-            <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-              Manage people, assets, procurement and workspace — all in
-              one intelligent platform.
-            </p>
           </div>
 
           <div className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 fill-mode-both [animation-delay:120ms]">
