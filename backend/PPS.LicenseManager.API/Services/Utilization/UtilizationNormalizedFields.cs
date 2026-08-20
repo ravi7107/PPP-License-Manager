@@ -57,10 +57,17 @@ public static class UtilizationNormalizedFields
 
     private static readonly Dictionary<string, string[]> Synonyms = new()
     {
+        // Deliberately excludes vendor-internal/hashed ID columns (e.g.
+        // Autodesk's own "autodesk_id"/"hashed_autodesk_id") even though
+        // they uniquely identify a user in the vendor's system - they
+        // can never be matched against this app's own Users.Email or
+        // Users.FullName (see UtilizationUploadService's reconciliation
+        // logic), so suggesting one here would just produce a
+        // confidently-wrong mapping instead of an honest "unmapped".
         [RawUserIdentifier] = new[]
         {
             "email", "user", "username", "user name", "user id", "userid",
-            "assigned to", "autodesk_id", "autodeskid", "hashed_autodesk_id",
+            "assigned to",
         },
         [RawUserDisplayName] = new[]
         {
@@ -151,9 +158,17 @@ public static class UtilizationNormalizedFields
                 continue;
             }
 
+            // Synonyms are written in their natural vendor-column spelling
+            // (e.g. "offering_name") for readability, not pre-normalized -
+            // normalize each one here so an underscore/space/case variant
+            // in the synonym list still matches a header normalized the
+            // same way "offering_name" -> "offering name" is. Without
+            // this, any synonym containing an underscore or mixed case
+            // would silently never match, since Normalize() never
+            // produces underscores or capitals for it to equal against.
             var match = columns.FirstOrDefault(c =>
                 !claimedColumns.Contains(c) &&
-                synonyms.Contains(normalizedColumns[c]));
+                synonyms.Any(s => Normalize(s) == normalizedColumns[c]));
 
             if (match != null)
             {
