@@ -37,6 +37,32 @@ import {
 type WizardStep = 'upload' | 'map' | 'done';
 
 /*
+ * Human-friendly labels for the normalized field keys the backend sends
+ * (UtilizationNormalizedFields' constant names, e.g. "RawSoftwareText") -
+ * those are internal C# identifiers, not something an admin mapping
+ * columns should have to decode. Falls back to the raw key itself if a
+ * new normalized field is ever added here without updating this map, so
+ * nothing silently disappears from the mapping UI.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  RawUserIdentifier: 'User (email or username)',
+  RawUserDisplayName: 'User Display Name',
+  RawSoftwareText: 'Software / Product',
+  RawDepartmentText: 'Department / Team',
+  RawLocationText: 'Location',
+  LastUsedDate: 'Last Used Date',
+  DaysUsedInPeriod: 'Days Used (in period)',
+  MonthlyAverageUsage: 'Monthly Average Usage',
+  VersionUsed: 'Version Used',
+  AssignedFlag: 'Seat Assignment Status',
+  RawStatusText: 'Status / Activity',
+};
+
+function fieldLabel(normalizedField: string): string {
+  return FIELD_LABELS[normalizedField] ?? normalizedField;
+}
+
+/*
  * Pass-1 upload flow: Upload -> Preview/Map Columns -> Process. Modeled
  * as sequential steps within one flat route (no nested-route pattern
  * exists anywhere in this app's routing - see the module's plan) rather
@@ -159,7 +185,7 @@ export default function UtilizationUploadPage() {
     if (missingRequired.length > 0) {
       setError(
         `Map the required field${missingRequired.length === 1 ? '' : 's'}: ${missingRequired
-          .map((f) => f.normalizedField)
+          .map((f) => fieldLabel(f.normalizedField))
           .join(', ')}.`
       );
       return;
@@ -355,7 +381,7 @@ export default function UtilizationUploadPage() {
             {preview.suggestions.map((s) => (
               <div key={s.normalizedField} className="space-y-1.5">
                 <Label>
-                  {s.normalizedField}
+                  {fieldLabel(s.normalizedField)}
                   {s.isRequired && <span className="text-destructive"> *</span>}
                 </Label>
                 <Select
