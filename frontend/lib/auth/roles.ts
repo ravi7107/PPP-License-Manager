@@ -32,7 +32,10 @@ export type ModuleKey =
   | 'materialCostCenters'
   | 'materialTransporters'
   | 'materialApprovalWorkflows'
-  | 'materialMovements';
+  | 'materialMovements'
+  | 'utilizationUpload'
+  | 'utilizationDashboard'
+  | 'utilizationSettings';
 
 /*
  * Default module permissions.
@@ -222,6 +225,28 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'Team Lead',
     'Manager',
     'Employee',
+  ],
+
+  // Software License Utilization & Analytics module - same audience as
+  // Licenses/Executive Dashboard (cost/strategy data, not day-to-day
+  // operations) - Team Lead/Employee don't get this. Uploading a report
+  // is further restricted to Super Admin/IT Admin at the API layer (see
+  // UtilizationUploadController); Manager gets read-only dashboard
+  // access here.
+  utilizationUpload: [
+    'Super Admin',
+    'IT Admin',
+  ],
+
+  utilizationDashboard: [
+    'Super Admin',
+    'IT Admin',
+    'Manager',
+  ],
+
+  utilizationSettings: [
+    'Super Admin',
+    'IT Admin',
   ],
 };
 

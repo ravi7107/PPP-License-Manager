@@ -235,6 +235,19 @@ builder.Services.AddScoped<
     IPurchaseRequisitionSettingsService,
     PurchaseRequisitionSettingsService>();
 
+// Software License Utilization & Analytics module
+builder.Services.AddScoped<
+    IUtilizationUploadService,
+    UtilizationUploadService>();
+
+builder.Services.AddScoped<
+    IUtilizationAnalysisService,
+    UtilizationAnalysisService>();
+
+builder.Services.AddScoped<
+    IUtilizationTierSettingsService,
+    UtilizationTierSettingsService>();
+
 // Real SMTP sender (see SmtpEmailService's comment) - falls back to
 // logging if the Smtp config section is incomplete, so this is safe to
 // register even before real credentials are filled in. LogOnlyEmailService

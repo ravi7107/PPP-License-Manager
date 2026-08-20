@@ -87,6 +87,25 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<RoleModuleAccess> RoleModuleAccess =>
         Set<RoleModuleAccess>();
 
+    // Software License Utilization & Analytics module
+    public DbSet<UtilizationUploadBatch> UtilizationUploadBatches =>
+        Set<UtilizationUploadBatch>();
+
+    public DbSet<UtilizationRawRow> UtilizationRawRows =>
+        Set<UtilizationRawRow>();
+
+    public DbSet<UtilizationFact> UtilizationFacts =>
+        Set<UtilizationFact>();
+
+    public DbSet<UtilizationMappingProfile> UtilizationMappingProfiles =>
+        Set<UtilizationMappingProfile>();
+
+    public DbSet<UtilizationTierSettings> UtilizationTierSettings =>
+        Set<UtilizationTierSettings>();
+
+    public DbSet<UtilizationUploadAuditLog> UtilizationUploadAuditLogs =>
+        Set<UtilizationUploadAuditLog>();
+
     // Material Movement Management module
     public DbSet<MaterialItemCategory> MaterialItemCategories =>
         Set<MaterialItemCategory>();
@@ -886,6 +905,189 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .HasForeignKey(x => x.UpdatedByUserId)
                   .OnDelete(DeleteBehavior.Restrict)
                   .IsRequired(false);
+        });
+
+        // ------------------------------------------------------------------
+        // Software License Utilization & Analytics module
+        // ------------------------------------------------------------------
+
+        modelBuilder.Entity<UtilizationUploadBatch>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.VendorSourceName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.OriginalFileName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.StoredPath).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FileHash).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ConfirmedMappingJson).HasColumnType("jsonb");
+            entity.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("Uploaded").IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.SoftwareId);
+            entity.HasIndex(x => x.MappingProfileId);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.DepartmentId);
+            entity.HasIndex(x => x.UploadedByUserId);
+            entity.HasIndex(x => x.FileHash);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasOne(x => x.Software)
+                  .WithMany()
+                  .HasForeignKey(x => x.SoftwareId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MappingProfile)
+                  .WithMany()
+                  .HasForeignKey(x => x.MappingProfileId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Department)
+                  .WithMany()
+                  .HasForeignKey(x => x.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UtilizationRawRow>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.RawDataJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.RowHash).HasMaxLength(64).IsRequired();
+
+            entity.HasIndex(x => x.UploadBatchId);
+            entity.HasIndex(x => x.RowHash);
+
+            entity.HasOne(x => x.UploadBatch)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadBatchId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UtilizationFact>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.RawSoftwareText).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RawUserIdentifier).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RawUserDisplayName).HasMaxLength(200);
+            entity.Property(x => x.RawDepartmentText).HasMaxLength(150);
+            entity.Property(x => x.RawLocationText).HasMaxLength(150);
+            entity.Property(x => x.VersionUsed).HasMaxLength(100);
+            entity.Property(x => x.RawStatusText).HasMaxLength(30);
+            entity.Property(x => x.DataQualityFlags).HasMaxLength(300);
+            entity.Property(x => x.MonthlyAverageUsage).HasPrecision(10, 2);
+
+            entity.HasIndex(x => x.UploadBatchId);
+            entity.HasIndex(x => x.RawRowId);
+            entity.HasIndex(x => x.SoftwareId);
+            entity.HasIndex(x => x.MatchedUserId);
+            entity.HasIndex(x => x.MatchedDepartmentId);
+            entity.HasIndex(x => x.IsUsableForCalculation);
+
+            entity.HasOne(x => x.UploadBatch)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadBatchId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.RawRow)
+                  .WithMany()
+                  .HasForeignKey(x => x.RawRowId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Software)
+                  .WithMany()
+                  .HasForeignKey(x => x.SoftwareId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MatchedUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.MatchedUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MatchedDepartment)
+                  .WithMany()
+                  .HasForeignKey(x => x.MatchedDepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UtilizationMappingProfile>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.VendorSourceName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.FileFormat).HasMaxLength(10).HasDefaultValue("Excel").IsRequired();
+            entity.Property(x => x.ColumnMappingsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => new { x.VendorSourceName, x.FileFormat });
+            entity.HasIndex(x => x.SoftwareId);
+            entity.HasIndex(x => x.CreatedByUserId);
+
+            entity.HasOne(x => x.Software)
+                  .WithMany()
+                  .HasForeignKey(x => x.SoftwareId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UtilizationTierSettings>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.HeavyMinPct).HasPrecision(5, 2).HasDefaultValue(60m);
+            entity.Property(x => x.RegularMinPct).HasPrecision(5, 2).HasDefaultValue(30m);
+            entity.Property(x => x.OccasionalMinPct).HasPrecision(5, 2).HasDefaultValue(10m);
+            entity.Property(x => x.LowMinPct).HasPrecision(5, 2).HasDefaultValue(1m);
+
+            entity.HasIndex(x => x.CompanyId).IsUnique();
+
+            entity.HasOne(x => x.Company)
+                  .WithMany()
+                  .HasForeignKey(x => x.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UpdatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UpdatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UtilizationUploadAuditLog>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Action).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Details).HasColumnType("text");
+
+            entity.HasIndex(x => x.UploadBatchId);
+            entity.HasIndex(x => x.CreatedAt);
+
+            entity.HasOne(x => x.UploadBatch)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadBatchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PerformedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.PerformedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ------------------------------------------------------------------

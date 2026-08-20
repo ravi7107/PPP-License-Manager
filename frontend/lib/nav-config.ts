@@ -14,7 +14,7 @@ import {
   Landmark,
   Briefcase,
   ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight,
-  Contact, Settings
+  Contact, Settings, UploadCloud, PieChart, SlidersHorizontal
 } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
@@ -49,6 +49,14 @@ export const navItems: NavItem[] = [
   { key: 'materialCostCenters', label: 'Material Cost Centers', path: '/material-cost-centers', icon: Wallet },
   { key: 'materialTransporters', label: 'Material Transporters', path: '/material-transporters', icon: Truck },
   { key: 'materialApprovalWorkflows', label: 'Approval Workflows', path: '/material-approval-workflows', icon: GitBranch },
+  // Order matters: app-layout.tsx resolves the "current" nav item via
+  // navItems.find(item => pathname.startsWith(item.path)), so the more
+  // specific /utilization/... paths must be listed BEFORE the bare
+  // /utilization dashboard path - otherwise the dashboard's shorter path
+  // would wrongly "win" the prefix match for the upload/settings pages.
+  { key: 'utilizationUpload', label: 'Upload Usage Report', path: '/utilization/upload', icon: UploadCloud },
+  { key: 'utilizationSettings', label: 'Utilization Settings', path: '/utilization/settings', icon: SlidersHorizontal },
+  { key: 'utilizationDashboard', label: 'License Utilization', path: '/utilization', icon: PieChart },
   { key: 'officeLocations', label: 'Office Locations', path: '/office-locations', icon: MapPinned },
   { key: 'accessManagement', label: 'Access Management', path: '/access-management', icon: ShieldCheck },
   { key: 'search', label: 'Global Search', path: '/search', icon: Search },
@@ -67,6 +75,10 @@ export const navItems: NavItem[] = [
 export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
   { label: 'Overview', keys: ['dashboard', 'executive'] },
   { label: 'Assets', keys: ['hardware', 'licenses', 'allocations'] },
+  {
+    label: 'Utilization Analytics',
+    keys: ['utilizationDashboard', 'utilizationUpload', 'utilizationSettings'],
+  },
   {
     label: 'Procurement',
     keys: [

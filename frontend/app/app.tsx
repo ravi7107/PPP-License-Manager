@@ -36,6 +36,9 @@ import MaterialCostCentersPage from '@/app/pages/material-movement/masters/mater
 import MaterialTransportersPage from '@/app/pages/material-movement/masters/material-transporters-page';
 import MaterialApprovalWorkflowsPage from '@/app/pages/material-movement/masters/material-approval-workflows-page';
 import MaterialMovementsPage from '@/app/pages/material-movement/movements/material-movements-page';
+import UtilizationDashboardPage from '@/app/pages/utilization/dashboard/utilization-dashboard-page';
+import UtilizationUploadPage from '@/app/pages/utilization/upload/utilization-upload-page';
+import UtilizationTierSettingsPage from '@/app/pages/utilization/settings/utilization-tier-settings-page';
 
 function App() {
   return (
@@ -94,6 +97,9 @@ function App() {
           <Route path="material-cost-centers" element={<MaterialCostCentersPage />} />
           <Route path="material-transporters" element={<MaterialTransportersPage />} />
           <Route path="material-approval-workflows" element={<MaterialApprovalWorkflowsPage />} />
+          <Route path="utilization" element={<UtilizationDashboardPage />} />
+          <Route path="utilization/upload" element={<UtilizationUploadPage />} />
+          <Route path="utilization/settings" element={<UtilizationTierSettingsPage />} />
         </Route>
 
       </Routes>
