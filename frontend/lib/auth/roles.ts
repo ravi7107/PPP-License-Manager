@@ -302,7 +302,14 @@ export type RoleModuleAccessRow = {
 export function buildAccessOverride(
   rows: RoleModuleAccessRow[] | undefined | null
 ): Record<string, AppRole[]> | null {
-  if (!rows || rows.length === 0) {
+  // Array.isArray guard (not just a truthy/length check) because the
+  // Access Management page's data loader can currently hand this a
+  // non-array value (see access-management-page.tsx) - without this,
+  // `rows.length === 0` is false for a non-array object (length is
+  // undefined, not 0), so execution fell through to `for (const row of
+  // rows)` below and threw "TypeError: rows is not iterable", crashing
+  // the whole page on load.
+  if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
 

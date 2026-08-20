@@ -15,13 +15,19 @@ import {
 import loadRoleModuleAccess from '@/actions/access/loadRoleModuleAccess';
 import upsertRoleModuleAccess from '@/actions/access/upsertRoleModuleAccess';
 
-const ALL_ROLES: AppRole[] = ['Super Administrator', 'IT Administrator', 'Team Leader', 'Management'];
+// These four must match the real backend role names (see the comment on
+// AppRole in roles.ts) - this list previously used display-style names
+// ("Super Administrator", "IT Administrator", "Team Leader",
+// "Management") that never match an actual logged-in user's role, so
+// `isSuperAdmin` below was always false and this page silently told
+// every Super Admin they weren't one.
+const ALL_ROLES: AppRole[] = ['Super Admin', 'IT Admin', 'Team Lead', 'Manager'];
 
 export default function AccessManagementPage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
   const user = useUser();
   const actorName = user?.name ?? 'System';
-  const isSuperAdmin = roles.includes('Super Administrator');
+  const isSuperAdmin = roles.includes('Super Admin');
 
   const [rows, loading, , reload]: [RoleModuleAccessRow[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(loadRoleModuleAccess, [], {});
@@ -81,6 +87,32 @@ export default function AccessManagementPage() {
         <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
           <ShieldCheck className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Only Super Administrators can manage role access.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // loadRoleModuleAccess/upsertRoleModuleAccess (frontend/actions/access/)
+  // are leftover UI-Bakery-migration scaffolding - lib/uibakery's action()
+  // helper just returns a query descriptor object, it never actually calls
+  // the backend, so `rows` here is never a real array. Rather than let
+  // buildAccessOverride try to iterate that object (which is what used to
+  // crash this page - see the Array.isArray guard added to
+  // buildAccessOverride in roles.ts) or silently show a matrix of toggles
+  // that appear to save but don't persist anything, tell the admin plainly
+  // that this isn't wired up yet. Every role's module access is governed
+  // entirely by the defaults in frontend/lib/auth/roles.ts until a real
+  // role_module_access backend endpoint exists.
+  if (!loading && !Array.isArray(rows)) {
+    return (
+      <div className="nova-panel">
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+          <AlertCircle className="h-8 w-8 text-muted-foreground" />
+          <p className="max-w-md text-sm text-muted-foreground">
+            The role/module access matrix isn&apos;t connected to a live data
+            source yet, so it can&apos;t be edited here. Every role&apos;s
+            module access currently follows the built-in defaults.
+          </p>
         </div>
       </div>
     );
