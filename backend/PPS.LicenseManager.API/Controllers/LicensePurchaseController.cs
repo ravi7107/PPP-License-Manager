@@ -47,6 +47,10 @@ public class LicensePurchaseController : ControllerBase
         return Ok(purchase);
     }
 
+    // Purchase records live inside the Software Licenses module
+    // (frontend/lib/auth/roles.ts MODULE_ACCESS.licenses) - Super Admin,
+    // IT Admin, Manager.
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpPost]
     public async Task<IActionResult> Create(
         CreateLicensePurchaseRequest request)
@@ -60,6 +64,7 @@ public class LicensePurchaseController : ControllerBase
             purchase);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
         int id,
@@ -74,6 +79,7 @@ public class LicensePurchaseController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

@@ -42,6 +42,12 @@ public class LicenseController : ControllerBase
         return Ok(license);
     }
 
+    // Reads stay open to any authenticated user (license counts also feed
+    // Dashboard/Reports for roles outside the Licenses module). Mutations
+    // are restricted to the Software Licenses module's own audience
+    // (frontend/lib/auth/roles.ts MODULE_ACCESS.licenses) - Super Admin,
+    // IT Admin, Manager.
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpPost]
     public async Task<IActionResult> Create(CreateLicenseRequest request)
     {
@@ -53,6 +59,7 @@ public class LicenseController : ControllerBase
             license);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, UpdateLicenseRequest request)
     {
@@ -64,6 +71,7 @@ public class LicenseController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {

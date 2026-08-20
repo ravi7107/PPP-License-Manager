@@ -10,7 +10,18 @@ public interface IUserService
 
     Task<UserResponse?> GetByIdAsync(int id);
 
-    Task<UserResponse> CreateAsync(CreateUserRequest request);
-    Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request);
-    Task ResetPasswordAsync(int id, ResetPasswordRequest request);
+    // callerIsSuperAdmin distinguishes a Super Admin caller from an IT
+    // Admin caller - both roles pass the controller's [Authorize(Roles=
+    // "Super Admin,IT Admin")] gate, but only a Super Admin may grant the
+    // Super Admin role to someone else or modify/reset the password of an
+    // existing Super Admin account. callerUserId is used separately to
+    // block a caller from changing their own role (self-escalation).
+    Task<UserResponse> CreateAsync(
+        CreateUserRequest request, bool callerIsSuperAdmin);
+
+    Task<UserResponse> UpdateAsync(
+        int id, UpdateUserRequest request, int callerUserId, bool callerIsSuperAdmin);
+
+    Task ResetPasswordAsync(
+        int id, ResetPasswordRequest request, int callerUserId, bool callerIsSuperAdmin);
 }

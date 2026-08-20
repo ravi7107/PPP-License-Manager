@@ -21,25 +21,23 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
-        Console.WriteLine($"Login attempt: {request.Email}");
-
+        // Deliberately quiet on the happy/expected-failure paths - this
+        // used to Console.WriteLine the attempted email, whether it
+        // matched a user, the resolved role, IsActive, and a
+        // password-verify boolean on every single login attempt (success
+        // or failure), which is far more detail than a production log
+        // should carry for an auth endpoint. Only genuine, unexpected
+        // exceptions (bcrypt/JWT failures below) are still logged, since
+        // those indicate a real bug rather than an ordinary bad password.
         var user = await _userRepository.GetByEmailAsync(request.Email);
-
-        Console.WriteLine($"User Found: {user != null}");
 
         if (user == null)
         {
-            Console.WriteLine("Login failed: user not found.");
             throw new InvalidOperationException("Invalid email or password.");
         }
 
-        Console.WriteLine($"DB Email: {user.Email}");
-        Console.WriteLine($"Role: {user.Role?.Name ?? "NULL"}");
-        Console.WriteLine($"Is Active: {user.IsActive}");
-
         if (!user.IsActive)
         {
-            Console.WriteLine("Login failed: account inactive.");
             throw new InvalidOperationException("User account is inactive.");
         }
 
@@ -59,8 +57,6 @@ public class AuthService : IAuthService
             throw;
         }
 
-        Console.WriteLine($"Password Verify: {passwordValid}");
-
         if (!passwordValid)
         {
             throw new InvalidOperationException(
@@ -68,14 +64,11 @@ public class AuthService : IAuthService
             );
         }
 
-        Console.WriteLine("Generating JWT...");
-
         string token;
 
         try
         {
             token = _jwtService.GenerateToken(user);
-            Console.WriteLine("JWT generated successfully.");
         }
         catch (Exception ex)
         {
@@ -83,8 +76,6 @@ public class AuthService : IAuthService
             Console.WriteLine(ex.ToString());
             throw;
         }
-
-        Console.WriteLine("Building login response...");
 
         var response = new LoginResponse
         {
@@ -97,10 +88,6 @@ public class AuthService : IAuthService
             CompanyId = user.CompanyId,
             CompanyName = user.Company?.Name
         };
-
-        Console.WriteLine(
-            $"Login successful: {user.Email} / {response.Role}"
-        );
 
         return response;
     }

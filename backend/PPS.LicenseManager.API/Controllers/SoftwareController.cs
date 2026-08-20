@@ -36,6 +36,12 @@ public class SoftwareController : ControllerBase
         return Ok(software);
     }
 
+    // This software catalog is shared by both the Hardware Assets page
+    // (installed-software picker) and the Software Licenses page, so
+    // mutations are restricted to the union of both modules' allowed
+    // roles (frontend/lib/auth/roles.ts MODULE_ACCESS.hardware +
+    // MODULE_ACCESS.licenses) rather than either one alone.
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead,Manager")]
     [HttpPost]
     public async Task<IActionResult> Create(CreateSoftwareRequest request)
     {
@@ -43,6 +49,7 @@ public class SoftwareController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = software.Id }, software);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead,Manager")]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, UpdateSoftwareRequest request)
     {
@@ -54,6 +61,7 @@ public class SoftwareController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead,Manager")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {

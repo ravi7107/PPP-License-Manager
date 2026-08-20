@@ -53,7 +53,7 @@ public class UserService : IUserService
     }
 
     public async Task<UserResponse> CreateAsync(
-        CreateUserRequest request)
+        CreateUserRequest request, bool callerIsSuperAdmin)
     {
         if (await _userRepository.GetByEmailAsync(
                 request.Email.Trim()) != null)
@@ -74,6 +74,17 @@ public class UserService : IUserService
             request.DepartmentId);
 
         await ValidateRoleAsync(request.RoleId);
+
+        // Only a Super Admin may grant the Super Admin role. Without this,
+        // an IT Admin (who also passes the controller's role gate) could
+        // create a brand-new Super Admin account for themselves or anyone
+        // else - a straightforward privilege-escalation path.
+        if (!callerIsSuperAdmin &&
+            await IsSuperAdminRoleAsync(request.RoleId))
+        {
+            throw new UnauthorizedAccessException(
+                "Only a Super Admin can assign the Super Admin role.");
+        }
 
         await ValidateReportsToUserAsync(
             request.ReportsToUserId);
@@ -104,13 +115,51 @@ public class UserService : IUserService
 
     public async Task<UserResponse> UpdateAsync(
         int id,
-        UpdateUserRequest request)
+        UpdateUserRequest request,
+        int callerUserId,
+        bool callerIsSuperAdmin)
     {
         var user = await _userRepository.GetByIdAsync(id);
 
         if (user == null)
             throw new InvalidOperationException(
                 "User not found.");
+
+        // A caller can never change their own role, regardless of
+        // privilege level - otherwise a Super Admin/IT Admin editing their
+        // own account through this same endpoint could hand themselves a
+        // higher role than they were actually granted. Every other field
+        // on a caller's own account remains editable here.
+        if (id == callerUserId && request.RoleId != user.RoleId)
+        {
+            throw new InvalidOperationException(
+                "You cannot change your own role.");
+        }
+
+        var targetIsCurrentlySuperAdmin = string.Equals(
+            user.Role?.Name,
+            "Super Admin",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!callerIsSuperAdmin)
+        {
+            // Only a Super Admin may modify another Super Admin's
+            // account at all - an IT Admin could otherwise strip a Super
+            // Admin's role, deactivate the account, or move it to a
+            // different entity/department.
+            if (targetIsCurrentlySuperAdmin)
+            {
+                throw new UnauthorizedAccessException(
+                    "Only a Super Admin can modify another Super Admin's account.");
+            }
+
+            // ...and only a Super Admin may promote anyone into the role.
+            if (await IsSuperAdminRoleAsync(request.RoleId))
+            {
+                throw new UnauthorizedAccessException(
+                    "Only a Super Admin can assign the Super Admin role.");
+            }
+        }
 
         var email = request.Email.Trim();
         var employeeCode = request.EmployeeCode.Trim();
@@ -167,13 +216,30 @@ public class UserService : IUserService
 
     public async Task ResetPasswordAsync(
         int id,
-        ResetPasswordRequest request)
+        ResetPasswordRequest request,
+        int callerUserId,
+        bool callerIsSuperAdmin)
     {
         var user = await _userRepository.GetByIdAsync(id);
 
         if (user == null)
             throw new KeyNotFoundException(
                 "User not found.");
+
+        // Resetting your own password is fine (no escalation risk); the
+        // restriction is specifically about an IT Admin resetting a
+        // *different* Super Admin's password, which would let them lock
+        // out or take over that account.
+        if (id != callerUserId &&
+            !callerIsSuperAdmin &&
+            string.Equals(
+                user.Role?.Name,
+                "Super Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                "Only a Super Admin can reset another Super Admin's password.");
+        }
 
         user.PasswordHash =
             BCrypt.Net.BCrypt.HashPassword(
@@ -302,6 +368,15 @@ public class UserService : IUserService
             throw new InvalidOperationException(
                 "Selected role does not exist or is inactive.");
         }
+    }
+
+    private async Task<bool> IsSuperAdminRoleAsync(int roleId)
+    {
+        return await _context.Roles
+            .AsNoTracking()
+            .AnyAsync(r =>
+                r.Id == roleId &&
+                r.Name == "Super Admin");
     }
 
     private static UserResponse MapUser(User user)

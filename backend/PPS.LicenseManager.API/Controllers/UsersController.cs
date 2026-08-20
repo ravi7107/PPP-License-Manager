@@ -17,6 +17,26 @@ public class UsersController : BaseController
         _userService = userService;
     }
 
+    // Both Super Admin and IT Admin pass the controller-level [Authorize]
+    // gate above, but a handful of actions below need to tell the two
+    // apart - an IT Admin must not be able to grant, modify, or reset the
+    // password of a Super Admin account, or change their own role.
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrWhiteSpace(value) || !int.TryParse(value, out var userId))
+            throw new UnauthorizedAccessException(
+                "Authenticated user ID is missing from the token.");
+
+        return userId;
+    }
+
+    private bool IsSuperAdmin()
+    {
+        return User.IsInRole("Super Admin");
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] UserSearchRequest request)
     {
@@ -44,15 +64,41 @@ public class UsersController : BaseController
     [HttpPost]
     public async Task<IActionResult> Create(CreateUserRequest request)
     {
-        var user = await _userService.CreateAsync(request);
-        return Success(user, "User created successfully.");
+        try
+        {
+            var user = await _userService.CreateAsync(request, IsSuperAdmin());
+            return Success(user, "User created successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, UpdateUserRequest request)
     {
-        var user = await _userService.UpdateAsync(id, request);
-        return Success(user, "User updated successfully.");
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var user = await _userService.UpdateAsync(
+                id, request, currentUserId, IsSuperAdmin());
+
+            return Success(user, "User updated successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
     }
 
     [HttpPost("{id}/reset-password")]
@@ -60,8 +106,22 @@ public class UsersController : BaseController
         int id,
         [FromBody] ResetPasswordRequest request)
     {
-        await _userService.ResetPasswordAsync(id, request);
+        try
+        {
+            var currentUserId = GetCurrentUserId();
 
-        return Success<object?>(null, "Password reset successfully.");
+            await _userService.ResetPasswordAsync(
+                id, request, currentUserId, IsSuperAdmin());
+
+            return Success<object?>(null, "Password reset successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFoundResponse(ex.Message);
+        }
     }
 }

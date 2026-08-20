@@ -5,7 +5,9 @@ using PPS.LicenseManager.API.Services.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-[Authorize]
+// Material Movement master data - Super Admin/IT Admin only, matching
+// frontend/lib/auth/roles.ts MODULE_ACCESS.materialItems.
+[Authorize(Roles = "Super Admin,IT Admin")]
 [ApiController]
 [Route("api/[controller]")]
 public class MaterialItemController : BaseController

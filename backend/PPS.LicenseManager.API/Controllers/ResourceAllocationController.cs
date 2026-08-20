@@ -48,6 +48,11 @@ public class ResourceAllocationController : ControllerBase
         return Ok(allocation);
     }
 
+// Allocate/transfer/release/create/update/delete are all restricted to
+// the Allocations module's own audience (frontend/lib/auth/roles.ts
+// MODULE_ACCESS.allocations) - Super Admin, IT Admin, Team Lead. Reads
+// above stay open to any authenticated user.
+[Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
 [HttpPost("{id}/transfer")]
 public async Task<IActionResult> Transfer(
     int id,
@@ -64,6 +69,7 @@ public async Task<IActionResult> Transfer(
     return Ok(allocation);
 }
 
+[Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
 [HttpPost("{id}/release")]
 public async Task<IActionResult> Release(int id, ReleaseResourceAllocationRequest request)
 {
@@ -79,6 +85,7 @@ public async Task<IActionResult> Release(int id, ReleaseResourceAllocationReques
     });
 }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPost]
     public async Task<IActionResult> Create(CreateResourceAllocationRequest request)
     {
@@ -89,6 +96,7 @@ public async Task<IActionResult> Release(int id, ReleaseResourceAllocationReques
             allocation);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, UpdateResourceAllocationRequest request)
     {
@@ -100,6 +108,7 @@ public async Task<IActionResult> Release(int id, ReleaseResourceAllocationReques
         return Ok(allocation);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {

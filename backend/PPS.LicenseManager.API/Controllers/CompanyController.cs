@@ -5,7 +5,12 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-[Authorize]
+// "Entities" module in the frontend (frontend/lib/auth/roles.ts
+// MODULE_ACCESS.entities) - Super Admin/IT Admin only, matching every
+// other Directory admin module. Was bare [Authorize], letting any
+// authenticated user (Team Lead, Manager, Employee) read/create/edit/
+// delete company records the UI never even shows them.
+[Authorize(Roles = "Super Admin,IT Admin")]
 [ApiController]
 [Route("api/[controller]")]
 public class CompanyController : BaseController

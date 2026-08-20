@@ -47,6 +47,10 @@ public class AssetSoftwareController : ControllerBase
     }
 
     // POST: api/AssetSoftware
+    // Software-to-asset assignment lives inside the Hardware Assets page
+    // (frontend/lib/auth/roles.ts MODULE_ACCESS.hardware) - Super Admin,
+    // IT Admin, Team Lead.
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPost]
     public async Task<ActionResult<AssetSoftwareResponse>> Create(CreateAssetSoftwareRequest request)
     {
@@ -59,6 +63,7 @@ public class AssetSoftwareController : ControllerBase
     }
 
     // PUT: api/AssetSoftware/5
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPut("{id:int}")]
     public async Task<ActionResult<AssetSoftwareResponse>> Update(
         int id,
@@ -73,6 +78,7 @@ public class AssetSoftwareController : ControllerBase
     }
 
     // DELETE: api/AssetSoftware/5
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

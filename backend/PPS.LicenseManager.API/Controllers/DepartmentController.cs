@@ -5,7 +5,9 @@ using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-[Authorize]
+// "Departments" module - Super Admin/IT Admin only, matching
+// frontend/lib/auth/roles.ts MODULE_ACCESS.departments.
+[Authorize(Roles = "Super Admin,IT Admin")]
 [ApiController]
 [Route("api/[controller]")]
 public class DepartmentController : BaseController

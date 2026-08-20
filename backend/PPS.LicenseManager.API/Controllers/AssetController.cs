@@ -140,6 +140,13 @@ public async Task<IActionResult> Dashboard()
         return Ok(ApiResponse<AssetFullDetailResponse>.SuccessResponse(detail));
     }
 
+    // Reads above stay open to any authenticated user - AssetController's
+    // GET/dashboard endpoints are shared across several frontend modules
+    // (Dashboard, Executive Dashboard, Search) with different role sets,
+    // not just the "hardware" module below. Mutations, however, are
+    // specific to the Hardware Assets module (frontend/lib/auth/roles.ts
+    // MODULE_ACCESS.hardware) - Super Admin, IT Admin, Team Lead.
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPost]
     public async Task<IActionResult> Create(CreateAssetRequest request)
     {
@@ -147,6 +154,7 @@ public async Task<IActionResult> Dashboard()
         return CreatedAtAction(nameof(GetById), new { id = asset.Id }, asset);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, UpdateAssetRequest request)
     {
@@ -158,6 +166,7 @@ public async Task<IActionResult> Dashboard()
         return Ok(asset);
     }
 
+    [Authorize(Roles = "Super Admin,IT Admin,Team Lead")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
