@@ -278,6 +278,50 @@ public class UtilizationAnalysisService : IUtilizationAnalysisService
         .ToList();
     }
 
+    public async Task<List<UtilizationProductUsageRow>> GetProductUsageAsync(
+        int? softwareId, int? uploadBatchId)
+    {
+        var facts = (await LoadFactsAsync(softwareId, uploadBatchId, usableOnly: true))
+            .Where(IsAssigned)
+            .ToList();
+
+        if (facts.Count == 0) return new List<UtilizationProductUsageRow>();
+
+        string LabelFor(UtilizationFact f) => f.Software?.Name
+            ?? (string.IsNullOrWhiteSpace(f.RawSoftwareText) ? "Unknown Product" : f.RawSoftwareText!);
+
+        // Grouped by product, not department/tier - a user assigned to
+        // two products (e.g. AEC Collection + Forma, common in the real
+        // Autodesk export this was built against) is counted once per
+        // product they're actually assigned to, since "assigned seats"
+        // is inherently a per-product concept.
+        return facts
+            .GroupBy(f => (Label: LabelFor(f), Matched: f.SoftwareId.HasValue))
+            .Select(g =>
+            {
+                var assignedSeats = g.Select(UserKey).Distinct().Count();
+                var usedSeats = g.Where(HasUsageEvidence).Select(UserKey).Distinct().Count();
+
+                return new UtilizationProductUsageRow
+                {
+                    SoftwareLabel = g.Key.Label,
+                    IsMatchedToSoftwareMaster = g.Key.Matched,
+                    AssignedSeats = assignedSeats,
+                    UsedSeats = usedSeats,
+                    UnusedSeats = Math.Max(0, assignedSeats - usedSeats),
+                    UtilizationPct = assignedSeats > 0
+                        ? Math.Round((decimal)usedSeats / assignedSeats * 100, 1)
+                        : null,
+                };
+            })
+            // Worst-utilized product first - same "actionable, not vanity"
+            // ordering as GetLeastUsedUsersAsync, so the products most
+            // worth reviewing for reclaiming/downsizing surface first.
+            .OrderBy(r => r.UtilizationPct ?? 0)
+            .ThenByDescending(r => r.AssignedSeats)
+            .ToList();
+    }
+
     public async Task<List<UtilizationLeastUsedUserRow>> GetLeastUsedUsersAsync(
         int? softwareId, int? uploadBatchId, int take)
     {

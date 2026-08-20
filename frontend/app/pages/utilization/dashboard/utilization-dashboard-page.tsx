@@ -26,27 +26,37 @@ import {
   getUtilizationOverview,
   getUtilizationTierDistribution,
   getUtilizationDepartmentConcentration,
+  getUtilizationProductUsage,
   getUtilizationLeastUsedUsers,
   getUtilizationUsageDistribution,
   UtilizationOverview,
   UtilizationTierDistributionRow,
   UtilizationDepartmentConcentrationRow,
+  UtilizationProductUsageRow,
   UtilizationLeastUsedUserRow,
   UtilizationUsageDistributionBucket,
 } from '@/lib/api/utilization.api';
 
 import { TierDistributionChart } from './components/tier-distribution-chart';
 import { DepartmentConcentrationChart } from './components/department-concentration-chart';
+import { ProductUsageChart } from './components/product-usage-chart';
 import { LeastUsedUsersChart } from './components/least-used-users-chart';
 import { UsageDistributionChart } from './components/usage-distribution-chart';
 
 /*
  * Pass-1 Executive Dashboard for the Software License Utilization &
- * Analytics module - see the module's plan for why exactly these 4
+ * Analytics module - see the module's plan for why exactly these
  * charts + KPI row were chosen ("every visualization needs a business
  * purpose"). Every number here traces back to real uploaded/processed
  * data (see UtilizationAnalysisService) - reasons for an unavailable
  * KPI are shown as a hint rather than silently defaulting to 0/blank.
+ *
+ * Usage by Product is given its own full-width row above the rest -
+ * on real-world vendor exports, activity/access-option fields are
+ * often flat (e.g. every row "active"/"Subscription") and department
+ * fields are often noisy vendor-internal labels, which leaves the
+ * tier/department charts below with comparatively little to show;
+ * product is usually the one dimension with clean, real spread.
  */
 export default function UtilizationDashboardPage() {
   const [softwareList, setSoftwareList] = useState<Software[]>([]);
@@ -55,6 +65,7 @@ export default function UtilizationDashboardPage() {
   const [overview, setOverview] = useState<UtilizationOverview | null>(null);
   const [tiers, setTiers] = useState<UtilizationTierDistributionRow[]>([]);
   const [departments, setDepartments] = useState<UtilizationDepartmentConcentrationRow[]>([]);
+  const [products, setProducts] = useState<UtilizationProductUsageRow[]>([]);
   const [leastUsed, setLeastUsed] = useState<UtilizationLeastUsedUserRow[]>([]);
   const [usageDistribution, setUsageDistribution] = useState<UtilizationUsageDistributionBucket[]>([]);
 
@@ -76,14 +87,16 @@ export default function UtilizationDashboardPage() {
       getUtilizationOverview(softwareId),
       getUtilizationTierDistribution(softwareId),
       getUtilizationDepartmentConcentration(softwareId),
+      getUtilizationProductUsage(softwareId),
       getUtilizationLeastUsedUsers(softwareId, null, 15),
       getUtilizationUsageDistribution(softwareId),
     ])
-      .then(([o, t, d, l, u]) => {
+      .then(([o, t, d, p, l, u]) => {
         if (cancelled) return;
         setOverview(o);
         setTiers(t);
         setDepartments(d);
+        setProducts(p);
         setLeastUsed(l);
         setUsageDistribution(u);
       })
@@ -212,6 +225,10 @@ export default function UtilizationDashboardPage() {
               icon={UserX}
               tone={overview && overview.neverUsedUserCount > 0 ? 'danger' : 'default'}
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <ProductUsageChart rows={products} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

@@ -37,6 +37,12 @@ public class UtilizationAnalysisController : ControllerBase
         return Ok(await _service.GetDepartmentConcentrationAsync(softwareId, uploadBatchId));
     }
 
+    [HttpGet("product-usage")]
+    public async Task<IActionResult> GetProductUsage([FromQuery] int? softwareId, [FromQuery] int? uploadBatchId)
+    {
+        return Ok(await _service.GetProductUsageAsync(softwareId, uploadBatchId));
+    }
+
     [HttpGet("least-used-users")]
     public async Task<IActionResult> GetLeastUsedUsers(
         [FromQuery] int? softwareId, [FromQuery] int? uploadBatchId, [FromQuery] int take = 15)

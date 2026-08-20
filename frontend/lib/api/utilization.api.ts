@@ -112,6 +112,15 @@ export interface UtilizationDepartmentConcentrationRow {
   totalCount: number;
 }
 
+export interface UtilizationProductUsageRow {
+  softwareLabel: string;
+  isMatchedToSoftwareMaster: boolean;
+  assignedSeats: number;
+  usedSeats: number;
+  unusedSeats: number;
+  utilizationPct: number | null;
+}
+
 export interface UtilizationLeastUsedUserRow {
   displayName: string;
   rawUserIdentifier: string;
@@ -241,6 +250,15 @@ export async function getUtilizationDepartmentConcentration(
 ): Promise<UtilizationDepartmentConcentrationRow[]> {
   const response = await api.get(
     `/UtilizationAnalysis/department-concentration${toQuery({ softwareId, uploadBatchId })}`
+  );
+  return response.data;
+}
+
+export async function getUtilizationProductUsage(
+  softwareId?: number | null, uploadBatchId?: number | null
+): Promise<UtilizationProductUsageRow[]> {
+  const response = await api.get(
+    `/UtilizationAnalysis/product-usage${toQuery({ softwareId, uploadBatchId })}`
   );
   return response.data;
 }

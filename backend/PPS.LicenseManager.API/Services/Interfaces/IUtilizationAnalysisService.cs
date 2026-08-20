@@ -10,6 +10,8 @@ public interface IUtilizationAnalysisService
 
     Task<List<UtilizationDepartmentConcentrationRow>> GetDepartmentConcentrationAsync(int? softwareId, int? uploadBatchId);
 
+    Task<List<UtilizationProductUsageRow>> GetProductUsageAsync(int? softwareId, int? uploadBatchId);
+
     Task<List<UtilizationLeastUsedUserRow>> GetLeastUsedUsersAsync(int? softwareId, int? uploadBatchId, int take);
 
     Task<List<UtilizationUsageDistributionBucket>> GetUsageDistributionAsync(int? softwareId, int? uploadBatchId);
