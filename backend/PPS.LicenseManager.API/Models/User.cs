@@ -42,6 +42,17 @@ public class User
 
     public bool IsActive { get; set; } = true;
 
+    // Forces the frontend to redirect the user to a "set a new password"
+    // screen before granting access to anything else, instead of letting
+    // them use whatever password they were created/reset with
+    // indefinitely. Set true by DbSeeder for the auto-seeded default
+    // admin account (see DbSeeder.SeedAsync) and cleared once
+    // AuthService.ChangeOwnPasswordAsync succeeds. Not currently set
+    // anywhere else (e.g. an admin-driven password reset doesn't force
+    // this today), but the flag/flow exists so that can be added later
+    // without another migration.
+    public bool MustChangePassword { get; set; } = false;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

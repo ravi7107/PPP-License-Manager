@@ -3,6 +3,7 @@ export interface UserInfo {
   fullName: string;
   email: string;
   role: string;
+  mustChangePassword?: boolean;
 }
 
 const TOKEN_KEY = "erip_token";
@@ -20,6 +21,13 @@ export const AuthStorage = {
 
   set(token: string, user: UserInfo) {
     localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
+
+  // Updates just the stored user object (e.g. after the forced
+  // change-password flow clears mustChangePassword) without touching the
+  // token.
+  updateUser(user: UserInfo) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   },
 

@@ -12,6 +12,7 @@ export interface LoginResponse {
   fullName: string;
   email: string;
   role: string;
+  mustChangePassword: boolean;
   companyId: number | null;
   companyName: string | null;
 }
@@ -29,4 +30,14 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
   );
 
   return response.data.data;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  await api.post("/auth/change-password", {
+    currentPassword,
+    newPassword,
+  });
 }

@@ -14,6 +14,7 @@ interface User {
   fullName: string;
   email: string;
   role: string;
+  mustChangePassword: boolean;
   companyId: number | null;
   companyName: string | null;
 }
@@ -24,6 +25,10 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+  // Called after the forced change-password flow succeeds, so the rest
+  // of the app (which is gated on user.mustChangePassword - see
+  // ProtectedRoute) unblocks immediately without requiring a re-login.
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +46,13 @@ export function AuthProvider({
       const existingUser = AuthStorage.getUser();
 
       if (existingUser) {
-        setUser(existingUser);
+        // mustChangePassword is optional on the stored type since a
+        // session saved before this field existed won't have it -
+        // default to false (not blocked) rather than undefined.
+        setUser({
+          ...existingUser,
+          mustChangePassword: existingUser.mustChangePassword ?? false,
+        });
       }
     } catch (error) {
       console.error("Failed to restore authentication:", error);
@@ -65,6 +76,7 @@ export function AuthProvider({
       fullName: response.fullName,
       email: response.email,
       role: response.role,
+      mustChangePassword: response.mustChangePassword,
       companyId: response.companyId,
       companyName: response.companyName,
     };
@@ -82,6 +94,18 @@ export function AuthProvider({
     setUser(null);
   }
 
+  function clearMustChangePassword() {
+    setUser((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const updated = { ...current, mustChangePassword: false };
+      AuthStorage.updateUser(updated);
+      return updated;
+    });
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -90,6 +114,7 @@ export function AuthProvider({
         login,
         logout,
         isAuthenticated: user !== null,
+        clearMustChangePassword,
       }}
     >
       {children}

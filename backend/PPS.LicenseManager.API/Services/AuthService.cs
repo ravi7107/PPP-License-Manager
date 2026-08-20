@@ -85,10 +85,40 @@ public class AuthService : IAuthService
             FullName = user.FullName,
             Email = user.Email,
             Role = user.Role?.Name ?? string.Empty,
+            MustChangePassword = user.MustChangePassword,
             CompanyId = user.CompanyId,
             CompanyName = user.Company?.Name
         };
 
         return response;
+    }
+
+    public async Task ChangeOwnPasswordAsync(
+        int userId,
+        ChangeOwnPasswordRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+
+        if (user == null)
+            throw new InvalidOperationException("User not found.");
+
+        var currentPasswordValid = BCrypt.Net.BCrypt.Verify(
+            request.CurrentPassword,
+            user.PasswordHash);
+
+        if (!currentPasswordValid)
+        {
+            throw new InvalidOperationException(
+                "Current password is incorrect.");
+        }
+
+        user.PasswordHash =
+            BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+
+        user.MustChangePassword = false;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
     }
 }
