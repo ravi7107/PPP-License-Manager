@@ -18,6 +18,8 @@ import {
 
 import { navItems, getNavGroupLabel } from '@/lib/nav-config';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useLoadAction } from '@/lib/uibakery';
+import loadRoleModuleAccess from '@/actions/access/loadRoleModuleAccess';
 
 export function AppLayout() {
   const { user } = useAuth();
@@ -37,10 +39,15 @@ export function AppLayout() {
   );
 
   /*
-   * DB-driven module permissions can be connected later.
-   * For now roles.ts provides the default module permissions.
+   * Per-role module visibility overrides, set via the Access Management
+   * page and persisted through RoleModuleAccessController. While this is
+   * still loading (or if the fetch fails), accessRows stays [] -
+   * buildAccessOverride([]) returns null, and canAccessModule falls back
+   * to roles.ts's hardcoded MODULE_ACCESS defaults for that window, so
+   * there's no broken/empty-sidebar flash on first paint.
    */
-  const accessRows: RoleModuleAccessRow[] = [];
+  const [accessRows]: [RoleModuleAccessRow[], boolean, Error | null, () => Promise<void>] =
+    useLoadAction(loadRoleModuleAccess, [], {});
 
   const accessOverride = buildAccessOverride(accessRows);
 

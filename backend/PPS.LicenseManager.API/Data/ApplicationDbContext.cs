@@ -84,6 +84,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<PurchaseRequisitionSettings> PurchaseRequisitionSettings =>
         Set<PurchaseRequisitionSettings>();
 
+    public DbSet<RoleModuleAccess> RoleModuleAccess =>
+        Set<RoleModuleAccess>();
+
     // Material Movement Management module
     public DbSet<MaterialItemCategory> MaterialItemCategories =>
         Set<MaterialItemCategory>();
@@ -862,6 +865,27 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(x => x.UpdatedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RoleModuleAccess>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.RoleName).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ModuleKey).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(x => new { x.RoleName, x.ModuleKey }).IsUnique();
+
+            entity.HasOne(x => x.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UpdatedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UpdatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .IsRequired(false);
         });
 
         // ------------------------------------------------------------------

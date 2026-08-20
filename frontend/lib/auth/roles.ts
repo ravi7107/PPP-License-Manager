@@ -288,13 +288,14 @@ export function hasAnyRole(
 }
 
 export type RoleModuleAccessRow = {
-  role_name: string;
-  module_key: string;
-  is_allowed: boolean;
+  roleName: string;
+  moduleKey: string;
+  isAllowed: boolean;
 };
 
 /*
- * Build role/module permissions returned by the database.
+ * Build role/module permissions returned by the database (via
+ * RoleModuleAccessController - see loadRoleModuleAccess.ts).
  *
  * Legacy role names are normalized so older DB rows don't immediately
  * break authorization during migration.
@@ -303,12 +304,14 @@ export function buildAccessOverride(
   rows: RoleModuleAccessRow[] | undefined | null
 ): Record<string, AppRole[]> | null {
   // Array.isArray guard (not just a truthy/length check) because the
-  // Access Management page's data loader can currently hand this a
+  // Access Management page's data loader could previously hand this a
   // non-array value (see access-management-page.tsx) - without this,
   // `rows.length === 0` is false for a non-array object (length is
   // undefined, not 0), so execution fell through to `for (const row of
   // rows)` below and threw "TypeError: rows is not iterable", crashing
-  // the whole page on load.
+  // the whole page on load. Kept now that the data source is real, since a
+  // failed/loading fetch can still hand this something other than an
+  // array.
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
@@ -316,22 +319,22 @@ export function buildAccessOverride(
   const map: Record<string, AppRole[]> = {};
 
   for (const row of rows) {
-    if (!row.is_allowed) {
+    if (!row.isAllowed) {
       continue;
     }
 
-    const role = normalizeRole(row.role_name);
+    const role = normalizeRole(row.roleName);
 
     if (!role) {
       continue;
     }
 
-    if (!map[row.module_key]) {
-      map[row.module_key] = [];
+    if (!map[row.moduleKey]) {
+      map[row.moduleKey] = [];
     }
 
-    if (!map[row.module_key].includes(role)) {
-      map[row.module_key].push(role);
+    if (!map[row.moduleKey].includes(role)) {
+      map[row.moduleKey].push(role);
     }
   }
 

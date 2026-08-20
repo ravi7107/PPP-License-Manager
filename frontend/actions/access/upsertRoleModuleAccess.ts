@@ -1,16 +1,20 @@
-import { action } from '@/lib/uibakery';
+import { upsertRoleModuleAccess as upsertRoleModuleAccessApi } from '@/lib/api/role-module-access.api';
 
-// Toggles a single role/module cell. Uses upsert so newly-added modules/roles
-// do not require a migration before they can be granted.
-function upsertRoleModuleAccess() {
-  return action('upsertRoleModuleAccess', 'SQL', {
-    datasourceName: 'PPS License Asset DB',
-    query: `
-      INSERT INTO role_module_access (role_name, module_key, is_allowed, created_by, updated_by)
-      VALUES ({{params.roleName}}, {{params.moduleKey}}, {{params.isAllowed}}::boolean, {{params.actorName}}, {{params.actorName}})
-      ON CONFLICT (role_name, module_key)
-      DO UPDATE SET is_allowed = EXCLUDED.is_allowed, updated_by = EXCLUDED.updated_by, updated_at = NOW();
-    `,
+// Previously leftover UI-Bakery-migration scaffolding that returned a raw
+// SQL query descriptor and never actually called anything - see
+// loadRoleModuleAccess.ts. actorName is no longer accepted as a parameter:
+// the backend derives the acting user from the authenticated JWT
+// (RoleModuleAccessController.GetCurrentUserId), so it can't be spoofed by
+// whatever the caller happens to pass here.
+async function upsertRoleModuleAccess(params: {
+  roleName: string;
+  moduleKey: string;
+  isAllowed: boolean;
+}) {
+  return upsertRoleModuleAccessApi({
+    roleName: params.roleName,
+    moduleKey: params.moduleKey,
+    isAllowed: params.isAllowed,
   });
 }
 

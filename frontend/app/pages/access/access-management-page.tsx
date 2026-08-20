@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
+import { useLoadAction, useMutateAction } from '@/lib/uibakery';
 import { ShieldCheck, RotateCcw, AlertCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -25,11 +25,9 @@ const ALL_ROLES: AppRole[] = ['Super Admin', 'IT Admin', 'Team Lead', 'Manager']
 
 export default function AccessManagementPage() {
   const { roles } = useOutletContext<{ roles: AppRole[] }>();
-  const user = useUser();
-  const actorName = user?.name ?? 'System';
   const isSuperAdmin = roles.includes('Super Admin');
 
-  const [rows, loading, , reload]: [RoleModuleAccessRow[], boolean, Error | null, () => Promise<void>] =
+  const [rows, loading, loadError, reload]: [RoleModuleAccessRow[], boolean, Error | null, () => Promise<void>] =
     useLoadAction(loadRoleModuleAccess, [], {});
   const [saveCell, saving] = useMutateAction(upsertRoleModuleAccess);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -49,7 +47,7 @@ export default function AccessManagementPage() {
     setPendingKey(cellKey);
     setErrorMsg(null);
     try {
-      await saveCell({ roleName: role, moduleKey, isAllowed: next, actorName });
+      await saveCell({ roleName: role, moduleKey, isAllowed: next });
       await reload();
     } catch (err) {
       setErrorMsg('Failed to update access: ' + String(err));
@@ -68,7 +66,7 @@ export default function AccessManagementPage() {
           const allowedByDefault = hasAnyRole([role], defaults[item.key] ?? []);
           const allowedNow = isAllowed(item.key, role);
           if (allowedByDefault !== allowedNow) {
-            await saveCell({ roleName: role, moduleKey: item.key, isAllowed: allowedByDefault, actorName });
+            await saveCell({ roleName: role, moduleKey: item.key, isAllowed: allowedByDefault });
           }
         }
       }
@@ -92,27 +90,26 @@ export default function AccessManagementPage() {
     );
   }
 
-  // loadRoleModuleAccess/upsertRoleModuleAccess (frontend/actions/access/)
-  // are leftover UI-Bakery-migration scaffolding - lib/uibakery's action()
-  // helper just returns a query descriptor object, it never actually calls
-  // the backend, so `rows` here is never a real array. Rather than let
-  // buildAccessOverride try to iterate that object (which is what used to
-  // crash this page - see the Array.isArray guard added to
-  // buildAccessOverride in roles.ts) or silently show a matrix of toggles
-  // that appear to save but don't persist anything, tell the admin plainly
-  // that this isn't wired up yet. Every role's module access is governed
-  // entirely by the defaults in frontend/lib/auth/roles.ts until a real
-  // role_module_access backend endpoint exists.
-  if (!loading && !Array.isArray(rows)) {
+  // loadRoleModuleAccess (frontend/actions/access/) now calls the real
+  // RoleModuleAccessController. useLoadAction never sets `rows` to
+  // anything other than an array (it stays at the [] default on a failed
+  // fetch - see lib/uibakery's useLoadAction), so a genuine fetch failure
+  // shows up as `loadError`, not as a non-array `rows` value the way the
+  // old dead scaffolding did.
+  if (!loading && loadError) {
     return (
       <div className="nova-panel">
         <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
           <AlertCircle className="h-8 w-8 text-muted-foreground" />
           <p className="max-w-md text-sm text-muted-foreground">
-            The role/module access matrix isn&apos;t connected to a live data
-            source yet, so it can&apos;t be edited here. Every role&apos;s
-            module access currently follows the built-in defaults.
+            Couldn&apos;t load the role/module access matrix. Every
+            role&apos;s module access is currently following the built-in
+            defaults.
           </p>
+          <Button variant="outline" size="sm" onClick={() => reload()}>
+            <RotateCcw className="mr-1.5 h-4 w-4" />
+            Retry
+          </Button>
         </div>
       </div>
     );
