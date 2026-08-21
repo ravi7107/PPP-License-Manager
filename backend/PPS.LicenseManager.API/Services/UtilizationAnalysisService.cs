@@ -290,6 +290,15 @@ public class UtilizationAnalysisService : IUtilizationAnalysisService
         string LabelFor(UtilizationFact f) => f.Software?.Name
             ?? (string.IsNullOrWhiteSpace(f.RawSoftwareText) ? "Unknown Product" : f.RawSoftwareText!);
 
+        // The account identifier is the email (or vendor username) the
+        // report is keyed on - a real Users.Email when matched, otherwise
+        // exactly what the vendor reported (RawUserIdentifier), never a
+        // hashed/internal vendor ID (see UtilizationNormalizedFields -
+        // those are deliberately excluded from ever being suggested as
+        // the identifier column in the first place).
+        string EmailFor(UtilizationFact f) => f.MatchedUser?.Email ?? f.RawUserIdentifier;
+        string? DisplayNameFor(UtilizationFact f) => f.MatchedUser?.FullName ?? f.RawUserDisplayName;
+
         // Grouped by product, not department/tier - a user assigned to
         // two products (e.g. AEC Collection + Forma, common in the real
         // Autodesk export this was built against) is counted once per
@@ -302,6 +311,19 @@ public class UtilizationAnalysisService : IUtilizationAnalysisService
                 var assignedSeats = g.Select(UserKey).Distinct().Count();
                 var usedSeats = g.Where(HasUsageEvidence).Select(UserKey).Distinct().Count();
 
+                // Only rank rows with a known DaysUsedInPeriod - a row
+                // with no usage detail at all isn't "least used", it's
+                // "unknown", and surfacing it as the least-used email
+                // would be exactly the kind of fabricated-from-missing-
+                // data claim the module's rules rule out.
+                var ranked = g.Where(f => f.DaysUsedInPeriod.HasValue).ToList();
+                var least = ranked.Count > 0
+                    ? ranked.OrderBy(f => f.DaysUsedInPeriod!.Value).First()
+                    : null;
+                var most = ranked.Count > 0
+                    ? ranked.OrderByDescending(f => f.DaysUsedInPeriod!.Value).First()
+                    : null;
+
                 return new UtilizationProductUsageRow
                 {
                     SoftwareLabel = g.Key.Label,
@@ -312,6 +334,12 @@ public class UtilizationAnalysisService : IUtilizationAnalysisService
                     UtilizationPct = assignedSeats > 0
                         ? Math.Round((decimal)usedSeats / assignedSeats * 100, 1)
                         : null,
+                    LeastUsedEmail = least != null ? EmailFor(least) : null,
+                    LeastUsedDisplayName = least != null ? DisplayNameFor(least) : null,
+                    LeastUsedDaysUsed = least?.DaysUsedInPeriod,
+                    MostUsedEmail = most != null ? EmailFor(most) : null,
+                    MostUsedDisplayName = most != null ? DisplayNameFor(most) : null,
+                    MostUsedDaysUsed = most?.DaysUsedInPeriod,
                 };
             })
             // Worst-utilized product first - same "actionable, not vanity"

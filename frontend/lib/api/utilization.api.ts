@@ -119,6 +119,12 @@ export interface UtilizationProductUsageRow {
   usedSeats: number;
   unusedSeats: number;
   utilizationPct: number | null;
+  leastUsedEmail: string | null;
+  leastUsedDisplayName: string | null;
+  leastUsedDaysUsed: number | null;
+  mostUsedEmail: string | null;
+  mostUsedDisplayName: string | null;
+  mostUsedDaysUsed: number | null;
 }
 
 export interface UtilizationLeastUsedUserRow {

@@ -40,6 +40,7 @@ import {
 import { TierDistributionChart } from './components/tier-distribution-chart';
 import { DepartmentConcentrationChart } from './components/department-concentration-chart';
 import { ProductUsageChart } from './components/product-usage-chart';
+import { ProductUsageExtremesTable } from './components/product-usage-extremes-table';
 import { LeastUsedUsersChart } from './components/least-used-users-chart';
 import { UsageDistributionChart } from './components/usage-distribution-chart';
 
@@ -227,8 +228,9 @@ export default function UtilizationDashboardPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <ProductUsageChart rows={products} />
+            <ProductUsageExtremesTable rows={products} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

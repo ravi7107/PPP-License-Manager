@@ -25,4 +25,18 @@ public class UtilizationProductUsageRow
     // Null (not 0) when there are no assigned seats for this product to
     // divide by - never fabricate a 0% where the real answer is "no data."
     public decimal? UtilizationPct { get; set; }
+
+    // The specific person behind the extremes, not just the count - the
+    // whole point of a per-product breakdown is being able to act on it
+    // (reach out to LeastUsedEmail about reclaiming a seat, or ask
+    // MostUsedEmail how they're using it so heavily). Both are null only
+    // when nobody in this product group has a known DaysUsedInPeriod -
+    // never fabricated from an unusable/unknown row.
+    public string? LeastUsedEmail { get; set; }
+    public string? LeastUsedDisplayName { get; set; }
+    public int? LeastUsedDaysUsed { get; set; }
+
+    public string? MostUsedEmail { get; set; }
+    public string? MostUsedDisplayName { get; set; }
+    public int? MostUsedDaysUsed { get; set; }
 }
