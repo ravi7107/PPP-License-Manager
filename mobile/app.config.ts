@@ -8,6 +8,18 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 const apiEnvName = process.env.EXPO_PUBLIC_API_ENV_NAME ?? 'Development';
 
+// Both platforms block plain-HTTP network calls by default in a real
+// (non-Expo-Go) build - iOS via App Transport Security, Android via
+// its cleartext-traffic policy on API 28+. Expo Go itself is exempt
+// from both, which is why an http:// backend "just works" there but
+// silently fails every request in an EAS/standalone build without
+// this. Deriving the exception from the URL itself (rather than a
+// separate on/off flag) means it can never drift out of sync: point
+// EXPO_PUBLIC_API_URL at an https:// address (e.g. once ppsl.net.in
+// is actually serving TLS) and this turns itself off on the next
+// build - nobody has to remember to remove it.
+const usesPlainHttp = apiUrl.startsWith('http://');
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'PPS Asset Scanner',
@@ -30,6 +42,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       NSCameraUsageDescription:
         'PPS Asset Scanner uses the camera to scan asset QR/barcode labels.',
+      // See the usesPlainHttp comment above - only applied while the
+      // configured backend is genuine http://, e.g. the staff/preview
+      // build hitting the server's public IP directly.
+      ...(usesPlainHttp
+        ? { NSAppTransportSecurity: { NSAllowsArbitraryLoads: true } }
+        : {}),
     },
     bundleIdentifier: 'in.ppspl.assetscanner',
   },
@@ -48,6 +66,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         cameraPermission:
           'PPS Asset Scanner uses the camera to scan asset QR/barcode labels.',
+      },
+    ],
+    [
+      'expo-build-properties',
+      {
+        // Android counterpart of the iOS ATS exception above - same
+        // usesPlainHttp condition, same reasoning.
+        android: {
+          usesCleartextTraffic: usesPlainHttp,
+        },
       },
     ],
   ],

@@ -12,6 +12,13 @@
         "EXPO_PUBLIC_API_ENV_NAME": "Development"
       }
     },
+    "staff": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://98.93.56.145:8080/api",
+        "EXPO_PUBLIC_API_ENV_NAME": "Staff"
+      }
+    },
     "staging": {
       "distribution": "internal",
       "env": {

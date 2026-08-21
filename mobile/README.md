@@ -381,20 +381,44 @@ real PPS brand assets before shipping a build to a store or to end users.
 
 ## Building
 
-For a store-distributable build (or a custom dev client with native
-camera/secure-storage modules that Expo Go alone won't cover), use
+For a store-distributable build, or an installable app to hand directly
+to staff without going through an app store at all, use
 [EAS Build](https://docs.expo.dev/build/introduction/):
 
 ```bash
 npm install -g eas-cli
+npx expo install expo-build-properties   # one-time, adds it to package.json at the right version for this Expo SDK
 eas login
 eas build:configure
-eas build --platform android --profile production
+eas build --platform android --profile staff   # or --platform ios, or --platform all
 ```
 
 Set `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_API_ENV_NAME` for each EAS Build
 profile (`eas.json`) rather than relying on a local `.env` file, so a
 Production build can never accidentally point at a Development backend.
+
+### The `staff` profile (installable app, no app store)
+
+`eas.json`'s `staff` profile builds with `"distribution": "internal"`,
+which for Android produces a directly-installable `.apk` (not the
+Play-Store-only `.aab` the `production`/store profile produces) and for
+iOS produces an ad-hoc build. When the build finishes, `eas build` prints
+a shareable link (and QR code) — anyone with an Android phone can open
+that link and tap through the "install unknown app" prompt with no Play
+Store account needed at all. **iOS is different**: Apple requires the
+specific iPhones that will install it to be pre-registered (their
+device's UDID) before that build is even signed, via `eas device:create`
+run once per new tester, and you need a paid Apple Developer Program
+membership for this to work — plan on doing device registration before
+the build, not after.
+
+`staff` points at the server's plain public IP over HTTP (see
+`app.config.ts`'s `usesPlainHttp` — it opts both platforms out of their
+default HTTPS-only network policy for exactly that reason, automatically,
+based on whether the configured URL is `http://` or `https://`). Once
+`https://ppsl.net.in` is confirmed actually serving the app over TLS,
+switch the `staff` profile's `EXPO_PUBLIC_API_URL` to that address and
+rebuild — the HTTP exception then turns itself off with no further edits.
 
 ## Troubleshooting
 
