@@ -23,6 +23,11 @@
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- Asset QR labels (see AssetQrCodeGenerator/AssetQrLabelPdfDocument) -
+         pure managed .NET, no native/unmanaged dependencies for net5.0+
+         (confirmed on nuget.org before pinning), so it carries much less
+         build risk than a package needing platform-specific binaries. -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
   <ItemGroup>

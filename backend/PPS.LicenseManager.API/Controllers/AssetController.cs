@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.Asset;
 using PPS.LicenseManager.API.Interfaces;
 using PPS.LicenseManager.API.Common;
+using PPS.LicenseManager.API.Services;
+using QuestPDF.Fluent;
 
 namespace PPS.LicenseManager.API.Controllers;
 
@@ -96,6 +98,29 @@ public async Task<IActionResult> Dashboard()
             return NotFound();
 
         return Ok(asset);
+    }
+
+    // A printable physical-asset label (QR code + AssetTag + identity),
+    // generated fresh from the asset's current fields on every request -
+    // never persisted to disk, so it always reflects the latest AssetTag
+    // even if a correction was made after the sticker was first printed.
+    // Encodes exactly what GetByCode above already resolves an asset
+    // from, so a label printed here is immediately scannable by the
+    // existing PPS Asset Scanner mobile app with no changes to that
+    // app's own scan-to-lookup flow. Reprintable at any point in the
+    // asset's life, not just at registration - see
+    // AssetQrLabelPdfDocument's own comment.
+    [HttpGet("{id:int}/qr-label")]
+    public async Task<IActionResult> GetQrLabel(int id)
+    {
+        var asset = await _assetService.GetByIdAsync(id);
+
+        if (asset == null)
+            return NotFound();
+
+        var pdfBytes = new AssetQrLabelPdfDocument(asset).GeneratePdf();
+
+        return File(pdfBytes, "application/pdf", $"{asset.AssetTag}-label.pdf");
     }
 
     // Aggregated system + current holder/seat + installed software view,

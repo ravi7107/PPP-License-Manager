@@ -141,3 +141,27 @@ export async function deleteAsset(
 ): Promise<void> {
   await api.delete(`/Asset/${id}`);
 }
+
+// Same "authenticated file, not a static path" reasoning as
+// downloadPurchaseRequisitionPdf in purchase-requisitions.api.ts - the
+// label PDF is generated fresh on every request (see
+// AssetController.GetQrLabel), so it can't be a plain <a href> either.
+// Reusable at any point in the asset's life, not just right after
+// registration - a lost/damaged sticker or an AssetTag correction can
+// both be handled by calling this again.
+export async function downloadAssetQrLabel(
+  id: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(`/Asset/${id}/qr-label`, {
+    responseType: 'blob',
+  });
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `asset-${id}-label.pdf`,
+  };
+}

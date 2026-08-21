@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   Dialog,
   DialogContent,
@@ -7,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -26,9 +29,11 @@ import {
   Tag,
   Cpu,
   MapPin,
+  QrCode,
 } from "lucide-react";
 
 import { AssetRecord } from "@/app/pages/hardware/types";
+import { downloadAssetQrLabel } from "@/lib/api/assets.api";
 
 type ViewableAssetRecord = AssetRecord & {
   assignedUserName?: string | null;
@@ -150,7 +155,31 @@ export function AssetViewDialog({
   onOpenChange,
   asset,
 }: AssetViewDialogProps) {
+  const [downloadingLabel, setDownloadingLabel] = useState(false);
+  const [labelError, setLabelError] = useState<string | null>(null);
+
   if (!asset) return null;
+
+  const handlePrintQrLabel = async () => {
+    setDownloadingLabel(true);
+    setLabelError(null);
+
+    try {
+      const { blob, fileName } = await downloadAssetQrLabel(asset.id);
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch {
+      setLabelError("Could not generate the QR label. Please try again.");
+    } finally {
+      setDownloadingLabel(false);
+    }
+  };
 
   return (
     <Dialog
@@ -199,7 +228,21 @@ export function AssetViewDialog({
 
             </div>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handlePrintQrLabel()}
+              disabled={downloadingLabel}
+            >
+              <QrCode className="mr-1.5 h-4 w-4" />
+              {downloadingLabel ? "Generating…" : "Print QR Label"}
+            </Button>
+
           </div>
+
+          {labelError && (
+            <p className="mt-2 text-sm text-destructive">{labelError}</p>
+          )}
 
         </DialogHeader>
 
