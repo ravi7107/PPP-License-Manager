@@ -63,6 +63,11 @@ public class SmtpEmailService : IEmailService
             && !string.IsNullOrWhiteSpace(fromAddress);
     }
 
+    // Exposed so EmailServiceRouter can check configuration completeness
+    // up front without duplicating this logic or attempting a send.
+    public bool IsConfigured => TryGetSmtpConfig(
+        out _, out _, out _, out _, out _, out _, out _);
+
     public async Task SendAsync(
         string toEmail,
         string toName,

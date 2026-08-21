@@ -248,11 +248,17 @@ builder.Services.AddScoped<
     IUtilizationTierSettingsService,
     UtilizationTierSettingsService>();
 
-// Real SMTP sender (see SmtpEmailService's comment) - falls back to
-// logging if the Smtp config section is incomplete, so this is safe to
-// register even before real credentials are filled in. LogOnlyEmailService
-// itself is left in place, unregistered, in case it's ever needed again.
-builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+// Real email transports, both registered as themselves (not as
+// IEmailService directly) so EmailServiceRouter can pick between them at
+// call time - Graph preferred, Smtp as fallback, LogOnlyEmailService if
+// neither is configured. AddHttpClient() is what GraphEmailService's
+// IHttpClientFactory dependency needs; it's part of the ASP.NET Core
+// shared framework already, no new PackageReference required.
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<GraphEmailService>();
+builder.Services.AddScoped<SmtpEmailService>();
+builder.Services.AddScoped<LogOnlyEmailService>();
+builder.Services.AddScoped<IEmailService, EmailServiceRouter>();
 
 var app = builder.Build();
 
