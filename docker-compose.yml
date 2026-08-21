@@ -37,6 +37,36 @@ services:
       # email/landing page. Override via APP_PUBLIC_API_BASE_URL in .env
       # if the domain changes.
       App__PublicApiBaseUrl: ${APP_PUBLIC_API_BASE_URL:-http://98.93.56.145:8080}
+      # PR approval notification emails - two possible transports, both
+      # deliberately OPTIONAL here (empty-string defaults, never :? - the
+      # container must still start cleanly with neither filled in yet).
+      # EmailServiceRouter picks whichever is actually configured at
+      # runtime: GraphMail (Microsoft Graph, OAuth2) preferred if present,
+      # else Smtp (Basic Auth) as a fallback, else every send just logs
+      # instead of throwing. Real secrets belong only in .env (gitignored),
+      # never hardcoded here.
+      #
+      # Microsoft Graph - the primary path, sending as the shared mailbox
+      # approvals@ppspl.in via an Exchange Online Application Access
+      # Policy scoped to that one address (see the deploy notes for the
+      # exact PowerShell). Get TenantId/ClientId/ClientSecret from the
+      # app registration's Overview + Certificates & secrets pages in
+      # Entra admin center.
+      GraphMail__TenantId: ${GRAPH_TENANT_ID:-}
+      GraphMail__ClientId: ${GRAPH_CLIENT_ID:-}
+      GraphMail__ClientSecret: ${GRAPH_CLIENT_SECRET:-}
+      GraphMail__SenderAddress: ${GRAPH_SENDER_ADDRESS:-}
+      # SMTP - kept as a working fallback (e.g. during any window before
+      # Graph is fully set up, or if Graph ever needs troubleshooting).
+      # Host/Port/EnableSsl default to Microsoft 365's SMTP AUTH client
+      # submission endpoint since that's the provider in use.
+      Smtp__Host: ${SMTP_HOST:-smtp.office365.com}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-true}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__FromAddress: ${SMTP_FROM_ADDRESS:-}
+      Smtp__FromName: ${SMTP_FROM_NAME:-PPS SmartAsset}
     depends_on:
       postgres:
         condition: service_healthy
