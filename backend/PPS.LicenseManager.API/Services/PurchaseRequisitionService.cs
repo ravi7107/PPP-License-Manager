@@ -1971,11 +1971,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     {
         // CIRCLE_PX must match the actual box drawn by Circle() below -
         // used only for the connector arrow's vertical-centering math.
-        const int circlePx = 32;
+        // Per feedback: a smaller circle than the original 32px.
+        const int circlePx = 24;
         string Circle(string content, string bg, string textColor, string extraStyle = "") =>
             "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
             "<td style=\"width:" + circlePx + "px;height:" + circlePx + "px;border-radius:" + (circlePx / 2) + "px;background-color:" + bg + ";" + extraStyle + "text-align:center;\">" +
-            "<span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + textColor + ";line-height:" + circlePx + "px;\">" + content + "</span>" +
+            "<span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:" + textColor + ";line-height:" + circlePx + "px;\">" + content + "</span>" +
             "</td></tr></table>";
 
         var ordered = allSteps.OrderBy(s => s.StepOrder).ToList();
@@ -2191,13 +2192,30 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
      */
     private static string BuildApprovalRequestEmailHtml(
         Models.PurchaseRequisition record,
-        PurchaseRequisitionApprovalStep step,
+        PurchaseRequisitionApprovalStep? step,
         IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
         string approverDisplayName,
         string reviewLink,
         DateTime tokenExpiresAt,
-        string publicApiBaseUrl)
+        string publicApiBaseUrl,
+        // The CTA text differs for the one non-approver recipient of this
+        // same template - Finance, once a PR is fully approved (see
+        // BuildFinanceNotificationEmailHtml below, which calls this method
+        // with step: null and its own CTA copy) - everyone else gets the
+        // defaults below. Keeping this one template for both, rather than
+        // a separate simpler one for Finance, is deliberate: per feedback,
+        // every recipient (each approver, and Finance) should see the same
+        // header/metadata/justification/documents/line-items+GST/stepper
+        // layout, not a cut-down version for Finance.
+        string ctaBadgeText = "YOUR ACTION IS REQUIRED",
+        string ctaBodyText = "Please review the details and record your decision on the PPS SmartAsset portal.",
+        string ctaButtonLabel = "REVIEW & APPROVE",
+        string ctaFooterText = "This will redirect you to the PPS SmartAsset portal<br/>to record your decision securely.")
     {
+        // step is null only for the Finance recipient - by the time Finance
+        // is notified every approval step is already Approved, so there is
+        // no "current step" to highlight or report a stage number for.
+        var isFinanceMode = step is null;
         string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
         string Icon(string fileName) => BrandingAssetUrl(publicApiBaseUrl, fileName);
 
@@ -2221,10 +2239,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         const int maxAttachmentsShown = 4;
         var shownAttachments = attachmentsOrdered.Take(maxAttachmentsShown).ToList();
         var remainingAttachmentCount = attachmentsOrdered.Count - shownAttachments.Count;
-        var preheader =
-            prLabel + ": " + record.Title + " — " + record.Currency + " " +
-            record.TotalAmount.ToString("N2") + " is waiting on your approval " +
-            "(stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount + ").";
+        var preheader = isFinanceMode
+            ? prLabel + ": " + record.Title + " — " + record.Currency + " " +
+              record.TotalAmount.ToString("N2") + " has been fully approved and is awaiting PO issuance."
+            : prLabel + ": " + record.Title + " — " + record.Currency + " " +
+              record.TotalAmount.ToString("N2") + " is waiting on your approval " +
+              "(stage " + step!.StepOrder + " of " + record.RequiredApprovalStageCount + ").";
 
         var sb = new StringBuilder();
 
@@ -2306,6 +2326,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var pendingSub = pendingDays >= 1
             ? "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailRejectColor + ";font-weight:600;margin-top:1px;\">Pending " + pendingDays + (pendingDays == 1 ? " day" : " days") + "</div>"
             : "";
+        // "Awaiting Finance" mirrors the exact wording the workflow
+        // stepper already uses for this same state (see the Finance
+        // circle's status in BuildApprovalWorkflowHorizontalHtml) - same
+        // amber color/icon as an approver's "Awaiting Your Decision", no
+        // new color introduced.
+        var statusValueText = isFinanceMode ? "Awaiting Finance" : "Awaiting Your Decision";
+        var statusSubText = isFinanceMode ? "" : ("Stage " + step!.StepOrder + " of " + record.RequiredApprovalStageCount);
 
         sb.Append("<tr><td class=\"desktop-only\" style=\"background-color:#ffffff;border-bottom:1px solid " + EmailBorderColor + ";\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
@@ -2313,7 +2340,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<td style=\"width:1px;background-color:" + EmailBorderColor + ";font-size:0;line-height:0;\">&nbsp;</td>");
         sb.Append(MetaCard(Icon("icon-calendar-navy.png"), EmailIconBlueBg, "Submitted On", submittedLabel, "", "", EmailSlateStrong));
         sb.Append("<td style=\"width:1px;background-color:" + EmailBorderColor + ";font-size:0;line-height:0;\">&nbsp;</td>");
-        sb.Append(MetaCard(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", "Awaiting Your Decision", "Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount, pendingSub, EmailAmberColor));
+        sb.Append(MetaCard(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", statusValueText, statusSubText, pendingSub, EmailAmberColor));
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
@@ -2321,13 +2348,16 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<table role=\"presentation\" class=\"mobile-only\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
         sb.Append(MobileMetaRow(Icon("icon-document-navy.png"), EmailIconBlueBg, "PR Number", Enc(prLabel), "", "", EmailSlateStrong, true));
         sb.Append(MobileMetaRow(Icon("icon-calendar-navy.png"), EmailIconBlueBg, "Submitted On", submittedLabel, "", "", EmailSlateStrong, true));
-        sb.Append(MobileMetaRow(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", "Awaiting Your Decision", "Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount, pendingSub, EmailAmberColor, false));
+        sb.Append(MobileMetaRow(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", statusValueText, statusSubText, pendingSub, EmailAmberColor, false));
         sb.Append("</table>");
         sb.Append("</td></tr>");
 
         // ===== TITLE + REVISION + SUBMITTED-BY/DEPARTMENT/VENDOR LINE =====
+        var titleBadgeText = isFinanceMode
+            ? "All Approvals Complete &middot; Finance Action Required"
+            : "Approval Requested &middot; Stage " + step!.StepOrder + " of " + record.RequiredApprovalStageCount;
         sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
-        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:8px;\">Approval Requested &middot; Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount + "</div>");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:8px;\">" + titleBadgeText + "</div>");
         sb.Append("<h1 style=\"margin:0 0 8px;font-size:23px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
         sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
         if (isRevision)
@@ -2468,30 +2498,34 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailIconBlueBg + ";border:1px solid #DCE7FA;\"><tr>");
         sb.Append("<td align=\"center\" style=\"padding:22px 24px;\">");
-        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;letter-spacing:0.02em;\">YOUR ACTION IS REQUIRED</span>");
-        sb.Append("<p style=\"margin:8px 0 18px;font-size:13px;color:" + EmailSlateText + ";\">Please review the details and record your decision on the PPS SmartAsset portal.</p>");
+        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;letter-spacing:0.02em;\">" + ctaBadgeText + "</span>");
+        sb.Append("<p style=\"margin:8px 0 18px;font-size:13px;color:" + EmailSlateText + ";\">" + ctaBodyText + "</p>");
 
         sb.Append("<!--[if mso]>");
         sb.Append("<v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" href=\"" + reviewLink + "\" style=\"height:46px;v-text-anchor:middle;width:320px;\" arcsize=\"12%\" stroke=\"f\" fillcolor=\"" + EmailBrandColor + "\">");
-        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:16px;font-weight:bold;\">REVIEW &amp; APPROVE &#8594;</center>");
+        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:16px;font-weight:bold;\">" + ctaButtonLabel + " &#8594;</center>");
         sb.Append("</v:roundrect>");
         sb.Append("<![endif]-->");
         sb.Append("<!--[if !mso]><!-- -->");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
         sb.Append("<td align=\"center\" style=\"border-radius:6px;background-color:" + EmailBrandColor + ";\">");
-        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;max-width:400px;padding:15px 32px;font-family:" + EmailFontStack + ";font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;letter-spacing:0.02em;\">REVIEW &amp; APPROVE &#8594;</a>");
+        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;max-width:400px;padding:15px 32px;font-family:" + EmailFontStack + ";font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;letter-spacing:0.02em;\">" + ctaButtonLabel + " &#8594;</a>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("<!--<![endif]-->");
 
-        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;line-height:1.6;color:" + EmailMutedText + ";\">This will redirect you to the PPS SmartAsset portal<br/>to record your decision securely.</p>");
+        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;line-height:1.6;color:" + EmailMutedText + ";\">" + ctaFooterText + "</p>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
         // ===== APPROVAL WORKFLOW ===== responsive horizontal/vertical
         // stepper (see BuildApprovalWorkflowHorizontalHtml's comment).
-        sb.Append(BuildApprovalWorkflowHorizontalHtml(record, allSteps, step.Id));
+        // step?.Id is null in Finance mode - nothing needs highlighting
+        // there since every approval step is already Approved (green tick)
+        // and the Finance circle itself already renders amber/"current" on
+        // its own, per that method's existing status logic.
+        sb.Append(BuildApprovalWorkflowHorizontalHtml(record, allSteps, step?.Id));
 
         // ===== FOOTER =====
         sb.Append("<tr><td style=\"padding:14px 28px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";\" class=\"px-mobile\">");
@@ -2760,16 +2794,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 }
             }
 
-            var quotationAttachments = record.Attachments
-                .Where(a => a.AttachmentType == "VendorQuotation")
-                .OrderBy(a => a.UploadedAt)
-                .ToList();
-
             var subject =
                 $"Purchase Requisition Approved — {prLabel}: verify and issue PO " +
                 $"({record.Currency} {record.TotalAmount:N2})";
 
-            var body = BuildFinanceNotificationEmailHtml(record, quotationAttachments, link);
+            // Same allSteps shape IssueTokenAndSendApprovalRequestEmailAsync
+            // builds for the approver email - record.ApprovalSteps is
+            // already loaded (DecideStepCoreAsync reads it a few lines
+            // before calling this method), so this is no extra query.
+            var allSteps = record.ApprovalSteps
+                .OrderBy(s => s.StepOrder)
+                .ToList();
+
+            var body = BuildFinanceNotificationEmailHtml(
+                record, allSteps, link, notification.ExpiresAt, _publicApiBaseUrl);
 
             await _emailService.SendWithAttachmentsAsync(
                 financeEmail, "Finance", subject, body, attachments);
@@ -3059,100 +3097,40 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         }
     }
 
+    /*
+     * Finance's email for the fully-approved PR - per direct feedback,
+     * this now reuses the exact same rich template every approver sees
+     * (BuildApprovalRequestEmailHtml: header, metadata strip, requested-
+     * by/entity, business justification, supporting documents - including
+     * the vendor quotation files, already labelled "Vendor Quotation" by
+     * FriendlyAttachmentType, so no separate quotation-only list is needed
+     * - the full line-items + GST + Grand Total table, and the Approval
+     * Workflow stepper) rather than the separate, much lighter template
+     * (vendor/total summary strip only, no line-items table, no stepper)
+     * this used to have. Only the CTA copy changes, since Finance's action
+     * is "verify & upload PO copy" rather than "approve/reject". The full
+     * PR PDF is still attached separately by the caller
+     * (IssueFinanceTokenAndSendNotificationAsync), unrelated to this HTML.
+     */
     private static string BuildFinanceNotificationEmailHtml(
         Models.PurchaseRequisition record,
-        IReadOnlyList<PurchaseRequisitionAttachment> quotationAttachments,
-        string reviewLink)
+        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
+        string reviewLink,
+        DateTime tokenExpiresAt,
+        string publicApiBaseUrl)
     {
-        string Enc(string? value) => System.Net.WebUtility.HtmlEncode(value) ?? string.Empty;
-
-        var prLabel = record.PrNumber ?? $"#{record.Id}";
-        var requesterName = record.RequestedByUser?.FullName ?? "A colleague";
-        var vendorName = record.Vendor?.VendorName;
-
-        var sb = new StringBuilder();
-
-        sb.Append("<!DOCTYPE html>");
-        sb.Append("<html><head><meta charset=\"utf-8\" />");
-        sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />");
-        sb.Append("<title></title></head>");
-        sb.Append("<body style=\"margin:0;padding:0;background-color:" + EmailPageBg + ";\">");
-
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailPageBg + ";padding:32px 16px;\">");
-        sb.Append("<tr><td align=\"center\">");
-        sb.Append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;\">");
-
-        sb.Append("<tr><td style=\"background-color:" + EmailApproveColor + ";padding:24px 32px;border-radius:12px 12px 0 0;\">");
-        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
-        sb.Append("<td style=\"width:44px;height:44px;background-color:#ffffff;border-radius:9px;text-align:center;vertical-align:middle;\">");
-        sb.Append("<span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailApproveColor + ";line-height:44px;\">PPS</span>");
-        sb.Append("</td>");
-        sb.Append("<td style=\"padding-left:14px;vertical-align:middle;\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:rgba(255,255,255,0.78);letter-spacing:0.05em;margin-top:2px;\">APPROVED — FINANCE ACTION NEEDED</div>");
-        sb.Append("</td>");
-        sb.Append("</tr></table>");
-        sb.Append("</td></tr>");
-
-        sb.Append("<tr><td style=\"padding:32px;font-family:" + EmailFontStack + ";\">");
-
-        sb.Append("<h1 style=\"margin:0 0 16px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
-        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
-        sb.Append("</h1>");
-
-        sb.Append("<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:" + EmailSlateText + ";\">");
-        sb.Append("This purchase requisition, raised by <strong>" + Enc(requesterName) + "</strong>, has been fully approved. Please verify the request and the attached quotation, then issue the PO and upload a copy using the secure link below.");
-        sb.Append("</p>");
-
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:22px;background-color:" + EmailPanelBg + ";border:1px solid " + EmailBorderColor + ";border-radius:8px;\">");
-        sb.Append("<tr>");
-        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
-        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Vendor</div>");
-        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:3px;\">" + (string.IsNullOrWhiteSpace(vendorName) ? "Not selected" : Enc(vendorName)) + "</div>");
-        sb.Append("</td>");
-        sb.Append("<td style=\"padding:14px 18px;width:50%;border-bottom:1px solid " + EmailBorderColor + ";\">");
-        sb.Append("<div style=\"font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">Total Amount</div>");
-        sb.Append("<div style=\"font-size:15px;color:" + EmailSlateStrong + ";font-weight:700;margin-top:3px;\">" + Enc(record.Currency) + " " + record.TotalAmount.ToString("N2") + "</div>");
-        sb.Append("</td>");
-        sb.Append("</tr>");
-        sb.Append("</table>");
-
-        if (quotationAttachments.Count > 0)
-        {
-            sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.05em;color:" + EmailSlateText + ";text-transform:uppercase;margin-bottom:8px;\">Vendor Quotation</div>");
-            sb.Append("<ul style=\"margin:0 0 22px;padding-left:18px;\">");
-            foreach (var attachment in quotationAttachments)
-            {
-                sb.Append("<li style=\"font-size:13px;color:" + EmailSlateText + ";margin-bottom:4px;\">" + Enc(attachment.FileName) + "</li>");
-            }
-            sb.Append("</ul>");
-        }
-
-        sb.Append("<p style=\"margin:0 0 8px;font-size:13px;color:" + EmailSlateText + ";\">The full purchase requisition PDF is attached to this email.</p>");
-
-        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:16px 0 10px;\"><tr>");
-        sb.Append("<td style=\"border-radius:8px;background-color:" + EmailApproveColor + ";\">");
-        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;padding:13px 32px;font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;\">Verify &amp; Upload PO Copy</a>");
-        sb.Append("</td>");
-        sb.Append("</tr></table>");
-
-        sb.Append("<p style=\"margin:10px 0 0;font-size:11.5px;line-height:1.6;color:" + EmailFaintText + ";\">");
-        sb.Append("Link not working? Paste this into your browser: <a href=\"" + reviewLink + "\" style=\"color:" + EmailBrandColor + ";\">" + reviewLink + "</a>. This link stays usable for " + FinanceTokenValidityDays + " days, and can be revisited if the PO copy or number needs correcting.");
-        sb.Append("</p>");
-
-        sb.Append("</td></tr>");
-
-        sb.Append("<tr><td style=\"padding:20px 32px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";border-radius:0 0 12px 12px;\">");
-        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailFaintText + ";line-height:1.6;font-family:" + EmailFontStack + ";\">");
-        sb.Append("Once a PO copy is uploaded, " + Enc(requesterName) + " will automatically receive an email with the PO copy attached.");
-        sb.Append("</p>");
-        sb.Append("</td></tr>");
-
-        sb.Append("</table>");
-        sb.Append("</td></tr></table>");
-        sb.Append("</body></html>");
-
-        return sb.ToString();
+        return BuildApprovalRequestEmailHtml(
+            record,
+            step: null,
+            allSteps,
+            approverDisplayName: "Finance",
+            reviewLink,
+            tokenExpiresAt,
+            publicApiBaseUrl,
+            ctaBadgeText: "YOUR ACTION IS REQUIRED",
+            ctaBodyText: "Please verify the request and the attached quotation, then issue the PO and upload a copy on the PPS SmartAsset portal.",
+            ctaButtonLabel: "VERIFY & UPLOAD PO COPY",
+            ctaFooterText: "This will redirect you to the PPS SmartAsset portal<br/>to verify and upload the PO copy securely.");
     }
 
     private static string BuildPoReadyEmailHtml(Models.PurchaseRequisition record)
