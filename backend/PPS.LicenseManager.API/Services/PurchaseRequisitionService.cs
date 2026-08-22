@@ -2054,7 +2054,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             financeStatus = "Not Started";
             financeColor = EmailFaintText;
         }
-        stages.Add((financeCircle, "Finance", "PO Issuance", financeStatus, financeColor, "", false));
+        stages.Add((financeCircle, "Finance", "Finance", financeStatus, financeColor, "", false));
 
         var n = stages.Count;
         // Content width the stepper table actually renders at: the 640px
@@ -2101,14 +2101,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 var arrowColor = st.Done ? EmailApproveColor : EmailFaintText;
                 circlesRow.Append("<td align=\"center\" style=\"width:" + connectorPx + "px;height:" + circlePx + "px;line-height:" + circlePx + "px;font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:" + arrowColor + ";\" valign=\"middle\">&#8594;</td>");
             }
-            var subHtml = string.IsNullOrEmpty(st.Sub)
-                ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
+            // Per feedback on the live email: keep the circle/arrow exactly
+            // as they are (green filled + tick once Approved, arrow
+            // forwarding to the next stage) but drop everything under the
+            // circle except the approver's name - no "Stage N" label, no
+            // status text, no "(You are here)"/decided-date sub-line. The
+            // circle's own color/fill already communicates status.
             labelsRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + stagePctStr + "%;padding-top:9px;\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + EmailSlateText + ";margin-top:2px;\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
-                subHtml + "</td>");
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
+                "</td>");
             if (i < n - 1) labelsRow.Append("<td></td>");
         }
         circlesRow.Append("</tr>");
@@ -2122,16 +2123,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             var connectorColor = st.Done ? EmailApproveColor : EmailBorderColor;
             var connector = isLast ? "" :
                 "<div style=\"width:2px;height:22px;background-color:" + connectorColor + ";margin:2px 0 2px " + (circlePx / 2 - 1) + "px;\"></div>";
-            var subHtml = string.IsNullOrEmpty(st.Sub)
-                ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
+            // Same simplification as the desktop labels row above - name
+            // only, no status text/sub-line.
             mobileRows.Append("<tr><td style=\"padding:0 20px;\">" +
                 "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
                 "<td valign=\"top\">" + st.Circle + "</td>" +
-                "<td style=\"padding-left:12px;\" valign=\"top\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + ": " + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
-                subHtml + "</td></tr></table>" + connector + "</td></tr>");
+                "<td style=\"padding-left:12px;\" valign=\"middle\">" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailSlateStrong + ";\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
+                "</td></tr></table>" + connector + "</td></tr>");
         }
 
         var sb = new StringBuilder();
