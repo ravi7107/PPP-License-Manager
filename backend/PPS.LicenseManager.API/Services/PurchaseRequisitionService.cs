@@ -1969,14 +1969,17 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
         int? highlightStepId)
     {
+        // CIRCLE_PX must match the actual box drawn by Circle() below -
+        // used only for the connector arrow's vertical-centering math.
+        const int circlePx = 32;
         string Circle(string content, string bg, string textColor, string extraStyle = "") =>
             "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-            "<td style=\"width:30px;height:30px;border-radius:15px;background-color:" + bg + ";" + extraStyle + "text-align:center;\">" +
-            "<span style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + textColor + ";line-height:30px;\">" + content + "</span>" +
+            "<td style=\"width:" + circlePx + "px;height:" + circlePx + "px;border-radius:" + (circlePx / 2) + "px;background-color:" + bg + ";" + extraStyle + "text-align:center;\">" +
+            "<span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + textColor + ";line-height:" + circlePx + "px;\">" + content + "</span>" +
             "</td></tr></table>";
 
         var ordered = allSteps.OrderBy(s => s.StepOrder).ToList();
-        var stages = new List<(string Circle, string TopLabel, string Name, string Status, string StatusColor, string Sub)>();
+        var stages = new List<(string Circle, string TopLabel, string Name, string Status, string StatusColor, string Sub, bool Done)>();
 
         foreach (var s in ordered)
         {
@@ -2019,7 +2022,11 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 statusColor = EmailFaintText;
             }
 
-            stages.Add((circle, "Stage " + s.StepOrder, approverName, statusLabel, statusColor, sub));
+            // "done" drives the connector AFTER this stage: green once
+            // this stage has actually been decided (Approved), neutral
+            // gray otherwise - an amber "awaiting decision" stage hasn't
+            // forwarded anything yet, so its outgoing connector stays gray.
+            stages.Add((circle, "Stage " + s.StepOrder, approverName, statusLabel, statusColor, sub, s.Status == "Approved"));
         }
 
         string financeCircle, financeStatus, financeColor;
@@ -2047,38 +2054,60 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             financeStatus = "Not Started";
             financeColor = EmailFaintText;
         }
-        stages.Add((financeCircle, "Finance", "PO Issuance", financeStatus, financeColor, ""));
+        stages.Add((financeCircle, "Finance", "PO Issuance", financeStatus, financeColor, "", false));
 
         var n = stages.Count;
-        var colWidth = 100 / n;
+        // Content width the stepper table actually renders at: the 640px
+        // email container minus this section's own 28px+28px side padding
+        // (see the "APPROVAL WORKFLOW" <td> below).
+        const int contentPx = 640 - 28 - 28;
+        // Fixed pixel width per connector column. The previous version
+        // gave connector columns NO explicit width while stage columns
+        // claimed 100%/n each - with only 2 stage columns (a single-
+        // approval-stage PR + Finance, e.g. one real production PR) that
+        // leaves nothing for the connector column to render in, and
+        // different email clients resolved the resulting over-100% table
+        // to different (often near-0px) widths for it - real inboxes
+        // collapsed it to an invisible sliver, which is why a live
+        // approval email showed a bare gap between the two stage circles
+        // with no line at all. A small FIXED connector width, with stage
+        // columns sized off the remainder, keeps every column honest
+        // regardless of how many approval stages a PR has.
+        const int connectorPx = 44;
+        var nConnectors = n - 1;
+        var stagePct = (contentPx - connectorPx * nConnectors) / (double)contentPx * 100.0 / n;
+        var stagePctStr = stagePct.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
         var circlesRow = new StringBuilder("<tr>");
         var labelsRow = new StringBuilder("<tr>");
         for (var i = 0; i < n; i++)
         {
             var st = stages[i];
-            circlesRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + colWidth + "%;\">" + st.Circle + "</td>");
+            circlesRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + stagePctStr + "%;\">" + st.Circle + "</td>");
             if (i < n - 1)
             {
-                // See BuildApprovalWorkflowHorizontalHtml's own commit history
-                // for why this is a spacer+line mini-table rather than a plain
-                // border-top on an empty <td>: a bare border-top rendered near
-                // the cell's top edge instead of centered on the 30px circle
-                // next to it during this template's own visual QA pass. A 14px
-                // spacer above a 2px line lands the line at exactly the
-                // circle's vertical center (30px tall -> center at 15px).
-                circlesRow.Append("<td style=\"padding:0 4px;\" valign=\"top\">" +
-                    "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">" +
-                    "<tr><td style=\"height:14px;line-height:14px;font-size:1px;\">&nbsp;</td></tr>" +
-                    "<tr><td style=\"height:2px;line-height:2px;font-size:1px;background-color:" + EmailBorderColor + ";\">&nbsp;</td></tr>" +
-                    "</table></td>");
+                // Connector = a right-pointing arrow glyph, vertically
+                // centered on the circle row via a fixed-height/matching
+                // line-height cell - the same reliable email-safe
+                // centering technique the circles themselves use. Reads
+                // unambiguously as "forwarding to the next approval stage"
+                // without relying on background-color line rendering
+                // (which real clients collapsed away entirely - see
+                // connectorPx's comment above) or negative-margin tricks,
+                // both unreliable across real email clients. Green once
+                // the stage to its left is actually Approved; neutral gray
+                // otherwise (including the currently-awaiting amber stage,
+                // which hasn't forwarded anything yet).
+                var arrowColor = st.Done ? EmailApproveColor : EmailFaintText;
+                circlesRow.Append("<td align=\"center\" style=\"width:" + connectorPx + "px;height:" + circlePx + "px;line-height:" + circlePx + "px;font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:" + arrowColor + ";\" valign=\"middle\">&#8594;</td>");
             }
             var subHtml = string.IsNullOrEmpty(st.Sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:10px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
-            labelsRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + colWidth + "%;padding-top:8px;\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailSlateText + ";margin-top:2px;\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
+            labelsRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + stagePctStr + "%;padding-top:9px;\">" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + EmailSlateText + ";margin-top:2px;\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
                 subHtml + "</td>");
             if (i < n - 1) labelsRow.Append("<td></td>");
         }
@@ -2090,23 +2119,24 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         {
             var st = stages[i];
             var isLast = i == n - 1;
+            var connectorColor = st.Done ? EmailApproveColor : EmailBorderColor;
             var connector = isLast ? "" :
-                "<div style=\"width:2px;height:22px;background-color:" + EmailBorderColor + ";margin:2px 0 2px 14px;\"></div>";
+                "<div style=\"width:2px;height:22px;background-color:" + connectorColor + ";margin:2px 0 2px " + (circlePx / 2 - 1) + "px;\"></div>";
             var subHtml = string.IsNullOrEmpty(st.Sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";margin-top:1px;\">" + st.Sub + "</div>";
             mobileRows.Append("<tr><td style=\"padding:0 20px;\">" +
                 "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
                 "<td valign=\"top\">" + st.Circle + "</td>" +
                 "<td style=\"padding-left:12px;\" valign=\"top\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:12.5px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + ": " + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + st.TopLabel + ": " + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + st.StatusColor + ";font-weight:600;margin-top:2px;\">" + st.Status + "</div>" +
                 subHtml + "</td></tr></table>" + connector + "</td></tr>");
         }
 
         var sb = new StringBuilder();
         sb.Append("<tr><td class=\"desktop-only\" style=\"padding:26px 28px 28px;\">");
-        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:16px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:16px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
         sb.Append(circlesRow.ToString());
         sb.Append(labelsRow.ToString());
@@ -2116,7 +2146,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<tr><td style=\"padding:0;\">");
         sb.Append("<table role=\"presentation\" class=\"mobile-only\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
         sb.Append("<tr><td style=\"padding:26px 20px 16px;\">");
-        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
         sb.Append("</td></tr>");
         sb.Append(mobileRows.ToString());
         sb.Append("<tr><td style=\"height:12px;line-height:12px;font-size:1px;\">&nbsp;</td></tr>");
@@ -2224,6 +2254,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("@media only screen and (max-width:640px){");
         sb.Append(".email-container{width:100% !important;}");
         sb.Append(".stack-col{display:block !important;width:100% !important;}");
+        // Business Justification / Supporting Documents: side-by-side on
+        // desktop via padding-left/right:14px on each column - once
+        // stacked on mobile that same padding just reads as a stray left
+        // indent on the second column, with no matching visual gap above
+        // it. Reset the horizontal padding and swap in a real vertical
+        // gap instead.
+        sb.Append(".stack-col-a{padding-right:0 !important;}");
+        sb.Append(".stack-col-b{padding-left:0 !important;padding-top:20px !important;}");
         sb.Append(".px-mobile{padding-left:20px !important;padding-right:20px !important;}");
         sb.Append(".desktop-only{display:none !important;}");
         sb.Append("table.mobile-only{display:table !important;}");
@@ -2252,13 +2290,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<img src=\"" + Icon("logo.jpg") + "\" width=\"46\" height=\"46\" alt=\"PPS\" style=\"display:block;border:0;width:46px;height:46px;border-radius:8px;\" />");
         sb.Append("</td>");
         sb.Append("<td style=\"padding-left:12px;\" valign=\"middle\">");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:18px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
-        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:" + EmailGoldAccent + ";letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION APPROVAL</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:19px;font-weight:700;color:#ffffff;\">PPS SmartAsset</div>");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;font-weight:700;color:" + EmailGoldAccent + ";letter-spacing:0.05em;margin-top:2px;\">PURCHASE REQUISITION APPROVAL</div>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("</td>");
         sb.Append("<td align=\"right\" valign=\"middle\" style=\"white-space:nowrap;\">");
-        sb.Append("<img src=\"" + Icon("icon-shield-white.png") + "\" width=\"13\" height=\"13\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:13px;height:13px;margin-right:5px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailHeaderMutedText + ";vertical-align:middle;\">Secure &middot; Confidential &middot; Automated</span>");
+        sb.Append("<img src=\"" + Icon("icon-shield-white.png") + "\" width=\"13\" height=\"13\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:13px;height:13px;margin-right:5px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailHeaderMutedText + ";vertical-align:middle;\">Secure &middot; Confidential &middot; Automated</span>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
@@ -2267,7 +2305,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // with a small icon - desktop as 3 columns side by side, mobile as
         // stacked rows (see the .mobile-only/.desktop-only style above). =====
         var pendingSub = pendingDays >= 1
-            ? "<div style=\"font-family:" + EmailFontStack + ";font-size:10px;color:" + EmailRejectColor + ";font-weight:600;margin-top:1px;\">Pending " + pendingDays + (pendingDays == 1 ? " day" : " days") + "</div>"
+            ? "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailRejectColor + ";font-weight:600;margin-top:1px;\">Pending " + pendingDays + (pendingDays == 1 ? " day" : " days") + "</div>"
             : "";
 
         sb.Append("<tr><td class=\"desktop-only\" style=\"background-color:#ffffff;border-bottom:1px solid " + EmailBorderColor + ";\">");
@@ -2290,12 +2328,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         // ===== TITLE + REVISION + SUBMITTED-BY/DEPARTMENT/VENDOR LINE =====
         sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
-        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:8px;\">Approval Requested &middot; Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount + "</div>");
-        sb.Append("<h1 style=\"margin:0 0 8px;font-size:21px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:8px;\">Approval Requested &middot; Stage " + step.StepOrder + " of " + record.RequiredApprovalStageCount + "</div>");
+        sb.Append("<h1 style=\"margin:0 0 8px;font-size:23px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
         sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
         if (isRevision)
         {
-            sb.Append("<span style=\"display:inline-block;margin-left:6px;padding:2px 8px;font-size:11px;font-weight:700;color:" + EmailBrandColor + ";background-color:#EFF6FF;border-radius:20px;vertical-align:middle;\">Rev " + record.RevisionNumber.ToString("00") + "</span>");
+            sb.Append("<span style=\"display:inline-block;margin-left:6px;padding:2px 8px;font-size:11.5px;font-weight:700;color:" + EmailBrandColor + ";background-color:#EFF6FF;border-radius:20px;vertical-align:middle;\">Rev " + record.RevisionNumber.ToString("00") + "</span>");
         }
         sb.Append("</h1>");
 
@@ -2304,7 +2342,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // this deliberately never says "rejected".
         if (isRevision && !string.IsNullOrWhiteSpace(previousPrLabel))
         {
-            sb.Append("<p style=\"margin:0 0 4px;font-size:12.5px;line-height:1.5;color:" + EmailMutedText + ";\">");
+            sb.Append("<p style=\"margin:0 0 4px;font-size:13px;line-height:1.5;color:" + EmailMutedText + ";\">");
             sb.Append("This is a revision of the previously approved <a href=\"" + reviewLink + "\" style=\"color:" + EmailBrandColor + ";text-decoration:none;font-weight:600;\">" + Enc(previousPrLabel) + "</a> &mdash; see what changed in the portal.");
             sb.Append("</p>");
         }
@@ -2318,7 +2356,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             metaLineParts.Add("Department: <strong style=\"color:" + EmailSlateStrong + ";\">" + Enc(departmentName) + "</strong>");
         if (!string.IsNullOrWhiteSpace(vendorName))
             metaLineParts.Add("Vendor: <strong style=\"color:" + EmailSlateStrong + ";\">" + Enc(vendorName) + "</strong>");
-        sb.Append("<p style=\"margin:8px 0 0;font-size:13px;color:" + EmailMutedText + ";\">" + string.Join(" &middot; ", metaLineParts) + "</p>");
+        sb.Append("<p style=\"margin:8px 0 0;font-size:13.5px;color:" + EmailMutedText + ";\">" + string.Join(" &middot; ", metaLineParts) + "</p>");
         sb.Append("</td></tr>");
 
         // ===== REQUESTED BY / ENTITY (icon rows) =====
@@ -2328,7 +2366,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             Enc(requesterName) + (string.IsNullOrWhiteSpace(employeeCode) ? "" : " <span style=\"color:" + EmailFaintText + ";font-weight:400;\">(" + Enc(employeeCode) + ")</span>")));
         sb.Append(ContextRow(Icon("icon-building-navy.png"), EmailIconBlueBg, "Entity",
             (string.IsNullOrWhiteSpace(companyName) ? "Not Specified" : Enc(companyName)) +
-            (string.IsNullOrWhiteSpace(gstin) ? "" : "<br/><span style=\"font-size:10.5px;color:" + EmailFaintText + ";font-weight:400;\">GSTIN: " + Enc(gstin) + "</span>")));
+            (string.IsNullOrWhiteSpace(gstin) ? "" : "<br/><span style=\"font-size:11px;color:" + EmailFaintText + ";font-weight:400;\">GSTIN: " + Enc(gstin) + "</span>")));
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
@@ -2336,16 +2374,16 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<tr><td style=\"padding:20px 28px 0;\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-top:1px solid " + EmailBorderColor + ";padding-top:20px;\"><tr>");
 
-        sb.Append("<td class=\"stack-col\" width=\"50%\" valign=\"top\" style=\"padding-right:14px;\">");
-        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Business Justification</div>");
-        sb.Append("<div style=\"font-size:12.5px;color:" + EmailSlateText + ";line-height:1.6;\">" + (string.IsNullOrWhiteSpace(record.Justification) ? "Not specified." : Enc(record.Justification)) + "</div>");
+        sb.Append("<td class=\"stack-col stack-col-a\" width=\"50%\" valign=\"top\" style=\"padding-right:14px;\">");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Business Justification</div>");
+        sb.Append("<div style=\"font-size:13px;color:" + EmailSlateText + ";line-height:1.6;\">" + (string.IsNullOrWhiteSpace(record.Justification) ? "Not specified." : Enc(record.Justification)) + "</div>");
         sb.Append("</td>");
 
-        sb.Append("<td class=\"stack-col\" width=\"50%\" valign=\"top\" style=\"padding-left:14px;padding-top:0;\">");
-        sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Supporting Documents (" + attachmentsOrdered.Count + ")</div>");
+        sb.Append("<td class=\"stack-col stack-col-b\" width=\"50%\" valign=\"top\" style=\"padding-left:14px;padding-top:0;\">");
+        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Supporting Documents (" + attachmentsOrdered.Count + ")</div>");
         if (attachmentsOrdered.Count == 0)
         {
-            sb.Append("<div style=\"font-size:12.5px;color:" + EmailMutedText + ";\">No supporting documents attached.</div>");
+            sb.Append("<div style=\"font-size:13px;color:" + EmailMutedText + ";\">No supporting documents attached.</div>");
         }
         else
         {
@@ -2355,15 +2393,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:12px;\"><tr>");
                 sb.Append("<td style=\"width:22px;\" valign=\"top\"><img src=\"" + Icon("icon-document-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:block;margin-top:2px;width:16px;height:16px;\" /></td>");
                 sb.Append("<td valign=\"top\">");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:12.5px;font-weight:700;color:" + EmailSlateStrong + ";line-height:1.4;\">" + Enc(a.FileName) + "</div>");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";margin-top:1px;\">" + Enc(FriendlyAttachmentType(a.AttachmentType)) + " &nbsp;&middot;&nbsp; " + AttachmentFormatLabel(a.FileName) + " &nbsp;&middot;&nbsp; <a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View</a></div>");
+                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";line-height:1.4;\">" + Enc(a.FileName) + "</div>");
+                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";margin-top:1px;\">" + Enc(FriendlyAttachmentType(a.AttachmentType)) + " &nbsp;&middot;&nbsp; " + AttachmentFormatLabel(a.FileName) + " &nbsp;&middot;&nbsp; <a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View</a></div>");
                 sb.Append("</td></tr></table>");
             }
             if (remainingAttachmentCount > 0)
             {
-                sb.Append("<p style=\"margin:0 0 8px;font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";\">+" + remainingAttachmentCount + " more attached.</p>");
+                sb.Append("<p style=\"margin:0 0 8px;font-family:" + EmailFontStack + ";font-size:12px;color:" + EmailMutedText + ";\">+" + remainingAttachmentCount + " more attached.</p>");
             }
-            sb.Append("<a href=\"" + reviewLink + "\" style=\"font-family:" + EmailFontStack + ";font-size:12px;color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View all documents &#8594;</a>");
+            sb.Append("<a href=\"" + reviewLink + "\" style=\"font-family:" + EmailFontStack + ";font-size:12.5px;color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View all documents &#8594;</a>");
         }
         sb.Append("</td>");
 
@@ -2377,15 +2415,15 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         if (lineItems.Count > 0)
         {
             sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
-            sb.Append("<div style=\"font-size:11px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;\">Item / Service Details</div>");
+            sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:10px;\">Item / Service Details</div>");
 
             sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border:1px solid " + EmailBorderColor + ";\">");
             sb.Append("<tr>");
-            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:10.5px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">#</span></td>");
-            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 14px;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:10.5px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Item / Service Description</span></td>");
-            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 8px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:10.5px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Qty</span></td>");
-            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 8px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:10.5px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Unit Price (" + Enc(record.Currency) + ")</span></td>");
-            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 14px;text-align:right;\"><span style=\"font-family:" + EmailFontStack + ";font-size:10.5px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Line Total (" + Enc(record.Currency) + ")</span></td>");
+            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">#</span></td>");
+            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 14px;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Item / Service Description</span></td>");
+            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 8px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Qty</span></td>");
+            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 8px;text-align:center;border-right:1px solid " + EmailHeaderBorderNavy + ";\"><span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Unit Price (" + Enc(record.Currency) + ")</span></td>");
+            sb.Append("<td style=\"background-color:" + EmailHeaderNavy + ";padding:10px 14px;text-align:right;\"><span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:0.03em;\">Line Total (" + Enc(record.Currency) + ")</span></td>");
             sb.Append("</tr>");
 
             for (var i = 0; i < lineItems.Count; i++)
@@ -2394,11 +2432,11 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 var rowBorder = i == lineItems.Count - 1 ? "" : "border-bottom:1px solid " + EmailBorderColor + ";";
 
                 sb.Append("<tr>");
-                sb.Append("<td style=\"padding:11px 10px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:12.5px;color:" + EmailMutedText + ";text-align:center;\">" + (i + 1) + "</td>");
-                sb.Append("<td style=\"padding:11px 14px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:12.5px;color:" + EmailSlateStrong + ";\">" + Enc(li.ItemDescription) + "</td>");
-                sb.Append("<td style=\"padding:11px 8px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:12.5px;color:" + EmailSlateText + ";text-align:center;\">" + li.Quantity.ToString("0.##") + "</td>");
-                sb.Append("<td style=\"padding:11px 8px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:12.5px;color:" + EmailSlateText + ";text-align:center;\">" + li.UnitPrice.ToString("N2") + "</td>");
-                sb.Append("<td style=\"padding:11px 14px;" + rowBorder + "font-size:12.5px;color:" + EmailSlateStrong + ";font-weight:700;text-align:right;\">" + li.LineTotal.ToString("N2") + "</td>");
+                sb.Append("<td style=\"padding:11px 10px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:13px;color:" + EmailMutedText + ";text-align:center;\">" + (i + 1) + "</td>");
+                sb.Append("<td style=\"padding:11px 14px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:13px;color:" + EmailSlateStrong + ";\">" + Enc(li.ItemDescription) + "</td>");
+                sb.Append("<td style=\"padding:11px 8px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:13px;color:" + EmailSlateText + ";text-align:center;\">" + li.Quantity.ToString("0.##") + "</td>");
+                sb.Append("<td style=\"padding:11px 8px;" + rowBorder + "border-right:1px solid " + EmailBorderColor + ";font-size:13px;color:" + EmailSlateText + ";text-align:center;\">" + li.UnitPrice.ToString("N2") + "</td>");
+                sb.Append("<td style=\"padding:11px 14px;" + rowBorder + "font-size:13px;color:" + EmailSlateStrong + ";font-weight:700;text-align:right;\">" + li.LineTotal.ToString("N2") + "</td>");
                 sb.Append("</tr>");
             }
 
@@ -2412,10 +2450,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             sb.Append("<td class=\"stack-col\" style=\"width:48%;\">&nbsp;</td>");
             sb.Append("<td class=\"stack-col\" style=\"width:100%;\">");
             sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border:1px solid " + EmailBorderColor + ";\">");
-            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12px;color:" + EmailMutedText + ";\">Subtotal</td><td style=\"padding:9px 14px;font-size:12px;color:" + EmailSlateText + ";text-align:right;\">" + Enc(record.Currency) + " " + record.SubtotalAmount.ToString("N2") + "</td></tr>");
-            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12px;color:" + EmailMutedText + ";border-top:1px solid " + EmailBorderColor + ";\">CGST (" + record.CgstPercent.ToString("0.##") + "%)</td><td style=\"padding:9px 14px;font-size:12px;color:" + EmailSlateText + ";text-align:right;border-top:1px solid " + EmailBorderColor + ";\">" + Enc(record.Currency) + " " + (record.SubtotalAmount * record.CgstPercent / 100m).ToString("N2") + "</td></tr>");
-            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12px;color:" + EmailMutedText + ";border-top:1px solid " + EmailBorderColor + ";\">SGST (" + record.SgstPercent.ToString("0.##") + "%)</td><td style=\"padding:9px 14px;font-size:12px;color:" + EmailSlateText + ";text-align:right;border-top:1px solid " + EmailBorderColor + ";\">" + Enc(record.Currency) + " " + (record.SubtotalAmount * record.SgstPercent / 100m).ToString("N2") + "</td></tr>");
-            sb.Append("<tr><td style=\"padding:13px 14px;font-size:13.5px;font-weight:700;color:" + EmailSlateStrong + ";border-top:2px solid " + EmailSlateStrong + ";\">Grand Total</td><td style=\"padding:13px 14px;font-size:16px;font-weight:700;color:" + EmailSlateStrong + ";text-align:right;border-top:2px solid " + EmailSlateStrong + ";\">" + Enc(record.Currency) + " " + record.TotalAmount.ToString("N2") + "</td></tr>");
+            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailMutedText + ";\">Subtotal</td><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailSlateText + ";text-align:right;\">" + Enc(record.Currency) + " " + record.SubtotalAmount.ToString("N2") + "</td></tr>");
+            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailMutedText + ";border-top:1px solid " + EmailBorderColor + ";\">CGST (" + record.CgstPercent.ToString("0.##") + "%)</td><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailSlateText + ";text-align:right;border-top:1px solid " + EmailBorderColor + ";\">" + Enc(record.Currency) + " " + (record.SubtotalAmount * record.CgstPercent / 100m).ToString("N2") + "</td></tr>");
+            sb.Append("<tr><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailMutedText + ";border-top:1px solid " + EmailBorderColor + ";\">SGST (" + record.SgstPercent.ToString("0.##") + "%)</td><td style=\"padding:9px 14px;font-size:12.5px;color:" + EmailSlateText + ";text-align:right;border-top:1px solid " + EmailBorderColor + ";\">" + Enc(record.Currency) + " " + (record.SubtotalAmount * record.SgstPercent / 100m).ToString("N2") + "</td></tr>");
+            sb.Append("<tr><td style=\"padding:13px 14px;font-size:14px;font-weight:700;color:" + EmailSlateStrong + ";border-top:2px solid " + EmailSlateStrong + ";\">Grand Total</td><td style=\"padding:13px 14px;font-size:17px;font-weight:700;color:" + EmailSlateStrong + ";text-align:right;border-top:2px solid " + EmailSlateStrong + ";\">" + Enc(record.Currency) + " " + record.TotalAmount.ToString("N2") + "</td></tr>");
             sb.Append("</table>");
             sb.Append("</td>");
             sb.Append("</tr></table>");
@@ -2431,23 +2469,23 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailIconBlueBg + ";border:1px solid #DCE7FA;\"><tr>");
         sb.Append("<td align=\"center\" style=\"padding:22px 24px;\">");
-        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:13.5px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;letter-spacing:0.02em;\">YOUR ACTION IS REQUIRED</span>");
-        sb.Append("<p style=\"margin:8px 0 18px;font-size:12.5px;color:" + EmailSlateText + ";\">Please review the details and record your decision on the PPS SmartAsset portal.</p>");
+        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;letter-spacing:0.02em;\">YOUR ACTION IS REQUIRED</span>");
+        sb.Append("<p style=\"margin:8px 0 18px;font-size:13px;color:" + EmailSlateText + ";\">Please review the details and record your decision on the PPS SmartAsset portal.</p>");
 
         sb.Append("<!--[if mso]>");
         sb.Append("<v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" href=\"" + reviewLink + "\" style=\"height:46px;v-text-anchor:middle;width:320px;\" arcsize=\"12%\" stroke=\"f\" fillcolor=\"" + EmailBrandColor + "\">");
-        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:15px;font-weight:bold;\">REVIEW &amp; APPROVE &#8594;</center>");
+        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:16px;font-weight:bold;\">REVIEW &amp; APPROVE &#8594;</center>");
         sb.Append("</v:roundrect>");
         sb.Append("<![endif]-->");
         sb.Append("<!--[if !mso]><!-- -->");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
         sb.Append("<td align=\"center\" style=\"border-radius:6px;background-color:" + EmailBrandColor + ";\">");
-        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;max-width:400px;padding:15px 32px;font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;letter-spacing:0.02em;\">REVIEW &amp; APPROVE &#8594;</a>");
+        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;max-width:400px;padding:15px 32px;font-family:" + EmailFontStack + ";font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;letter-spacing:0.02em;\">REVIEW &amp; APPROVE &#8594;</a>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("<!--<![endif]-->");
 
-        sb.Append("<p style=\"margin:16px 0 0;font-size:11.5px;line-height:1.6;color:" + EmailMutedText + ";\">This will redirect you to the PPS SmartAsset portal<br/>to record your decision securely.</p>");
+        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;line-height:1.6;color:" + EmailMutedText + ";\">This will redirect you to the PPS SmartAsset portal<br/>to record your decision securely.</p>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
@@ -2458,14 +2496,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         // ===== FOOTER =====
         sb.Append("<tr><td style=\"padding:14px 28px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";\" class=\"px-mobile\">");
-        sb.Append("<p style=\"margin:0;font-size:11px;color:" + EmailMutedText + ";line-height:1.6;text-align:center;font-family:" + EmailFontStack + ";\">");
+        sb.Append("<p style=\"margin:0;font-size:11.5px;color:" + EmailMutedText + ";line-height:1.6;text-align:center;font-family:" + EmailFontStack + ";\">");
         sb.Append("<img src=\"" + Icon("icon-lock-navy.png") + "\" width=\"11\" height=\"11\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:11px;height:11px;margin-right:4px;\" />Secure link expires <strong style=\"color:" + EmailSlateStrong + ";\">" + tokenExpiresAt.ToString("dd MMM yyyy") + "</strong> and can only be used once. &nbsp;|&nbsp; Please do not forward this email.");
         sb.Append("</p>");
         sb.Append("</td></tr>");
         sb.Append("<tr><td style=\"padding:14px 28px;background-color:" + EmailHeaderNavy + ";\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
-        sb.Append("<td style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailFooterMutedText + ";\">PPS SmartAsset &middot; Automated Notification</td>");
-        sb.Append("<td align=\"right\" style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailFooterMutedText + ";\">Please do not reply to this email.</td>");
+        sb.Append("<td style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailFooterMutedText + ";\">PPS SmartAsset &middot; Automated Notification</td>");
+        sb.Append("<td align=\"right\" style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailFooterMutedText + ";\">Please do not reply to this email.</td>");
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
@@ -2485,7 +2523,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         {
             var subHtml = string.IsNullOrEmpty(sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailSlateText + ";margin-top:1px;\">" + sub + "</div>";
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:1px;\">" + sub + "</div>";
             return "<td style=\"padding:14px 10px;\" align=\"center\" valign=\"top\">" +
                 "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
                 "<td style=\"width:34px;height:34px;border-radius:17px;background-color:" + bg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">" +
@@ -2493,7 +2531,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 "</td>" +
                 "<td style=\"padding-left:8px;\" valign=\"middle\" align=\"left\">" +
                 "<div style=\"font-family:" + EmailFontStack + ";font-size:9.5px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:12.5px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
                 subHtml + pendingHtml +
                 "</td></tr></table></td>";
         }
@@ -2502,7 +2540,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         {
             var subHtml = string.IsNullOrEmpty(sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:2px;\">" + sub + "</div>";
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailSlateText + ";margin-top:2px;\">" + sub + "</div>";
             var borderStyle = border ? "border-bottom:1px solid " + EmailBorderColor + ";" : "";
             return "<tr><td style=\"padding:12px 20px;" + borderStyle + "\">" +
                 "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
@@ -2510,8 +2548,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 "<img src=\"" + iconUrl + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;\" />" +
                 "</td>" +
                 "<td style=\"padding-left:10px;\" valign=\"middle\" align=\"left\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:10px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13.5px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
                 subHtml + pendingHtml +
                 "</td></tr></table></td></tr>";
         }
@@ -2523,8 +2561,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             "<img src=\"" + iconUrl + "\" width=\"18\" height=\"18\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:18px;height:18px;\" />" +
             "</td>" +
             "<td style=\"padding-left:10px;\" valign=\"middle\" align=\"left\">" +
-            "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">" + label + "</div>" +
-            "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:2px;\">" + valueHtml + "</div>" +
+            "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">" + label + "</div>" +
+            "<div style=\"font-family:" + EmailFontStack + ";font-size:13.5px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:2px;\">" + valueHtml + "</div>" +
             "</td></tr></table></td>";
     }
 
