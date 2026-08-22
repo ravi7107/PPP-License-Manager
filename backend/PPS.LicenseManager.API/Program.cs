@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using PPS.LicenseManager.API.Authentication;
 using PPS.LicenseManager.API.Common;
@@ -292,6 +293,30 @@ app.UseMiddleware<ExceptionMiddleware>();
 
 // Serve uploaded floor-plan images from wwwroot.
 app.UseStaticFiles();
+
+// Serve versioned email/branding assets (logo + icon set used in the PR
+// approval email templates) at /api/branding/* - deliberately under the
+// /api prefix, not the default wwwroot root, so the existing Cloudflare
+// Tunnel ingress rule (which only routes ^/(api|uploads)/.* to this
+// backend container; everything else goes to the frontend's nginx) picks
+// this path up automatically, with no tunnel config change needed.
+//
+// This is a *separate* physical folder from wwwroot/uploads - that one
+// is overlaid by the backend_uploads named volume in docker-compose.yml
+// (real user-uploaded files, persisted across image rebuilds), whereas
+// wwwroot/branding is plain image content, checked into git and baked
+// into the image on every build like any other file.
+//
+// Hosted HTTPS URLs (not base64 data-URI images) are required here
+// specifically because Outlook desktop's Word-based rendering engine
+// does not reliably display data:-URI <img> tags - the previous
+// approach (embedding the logo as base64) rendered fine in Gmail/Apple
+// Mail but was a known risk for Outlook/O365 recipients.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.Combine(app.Environment.WebRootPath, "branding")),
+    RequestPath = "/api/branding"
+});
 
 app.UseRouting();
 
