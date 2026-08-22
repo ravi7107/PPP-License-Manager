@@ -42,7 +42,10 @@ import {
 } from '@/lib/api/purchase-requisitions.api';
 
 const lineItemSchema = z.object({
-  itemDescription: z.string().min(1, 'Description is required'),
+  itemDescription: z
+    .string()
+    .min(1, 'Description is required')
+    .max(1000, 'Description must be 1000 characters or less'),
   category: z.string().optional(),
   quantity: z.coerce
     .number()
@@ -404,7 +407,11 @@ export function PrFormDialog({
                                 Description *
                               </FormLabel>
                               <FormControl>
-                                <Input placeholder="Item description" {...field} />
+                                <Input
+                                  placeholder="Item description"
+                                  maxLength={1000}
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

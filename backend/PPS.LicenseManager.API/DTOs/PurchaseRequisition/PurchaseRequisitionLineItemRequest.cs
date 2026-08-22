@@ -5,7 +5,7 @@ namespace PPS.LicenseManager.API.DTOs.PurchaseRequisition;
 public class PurchaseRequisitionLineItemRequest
 {
     [Required]
-    [MaxLength(300)]
+    [MaxLength(1000)]
     public string ItemDescription { get; set; } = string.Empty;
 
     [MaxLength(100)]
