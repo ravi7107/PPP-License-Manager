@@ -2768,7 +2768,12 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         {
             var rawToken = GenerateSecureToken();
             notification.TokenHash = HashToken(rawToken);
-            notification.ExpiresAt = DateTime.UtcNow.AddDays(FinanceTokenValidityDays);
+            // Kept as a separate non-nullable local (rather than reading
+            // notification.ExpiresAt back out below) because that property
+            // is a nullable DateTime? column - BuildFinanceNotificationEmailHtml
+            // needs a plain DateTime, same as the approver email builder.
+            var tokenExpiresAt = DateTime.UtcNow.AddDays(FinanceTokenValidityDays);
+            notification.ExpiresAt = tokenExpiresAt;
 
             _context.PurchaseRequisitionFinanceNotifications.Add(notification);
             await _context.SaveChangesAsync();
@@ -2807,7 +2812,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 .ToList();
 
             var body = BuildFinanceNotificationEmailHtml(
-                record, allSteps, link, notification.ExpiresAt, _publicApiBaseUrl);
+                record, allSteps, link, tokenExpiresAt, _publicApiBaseUrl);
 
             await _emailService.SendWithAttachmentsAsync(
                 financeEmail, "Finance", subject, body, attachments);
