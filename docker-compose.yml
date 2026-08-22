@@ -22,6 +22,19 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # This host has no functional outbound IPv6 route (confirmed via
+      # `ip -6 route` showing no global/default route, and `curl -6` to
+      # any internet host failing with "Network is unreachable" - Docker's
+      # own bridge network agrees, EnableIPv6: false, no IPv6Address on any
+      # container). DNS still returns AAAA records for external hosts
+      # (e.g. graph.microsoft.com) regardless, and .NET's HttpClient can
+      # pick one of those unreachable IPv6 addresses and fail outright
+      # instead of reliably falling back to IPv4 - this happened live,
+      # breaking a PR approval email send with "Network is unreachable
+      # (graph.microsoft.com:443)" after dozens of prior sends had
+      # succeeded. Disabling IPv6 at the runtime level stops .NET from
+      # ever attempting it, matching what this host can actually route.
+      DOTNET_SYSTEM_NET_DISABLEIPV6: "1"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=pps_license_manager;Username=pps_admin;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
       Jwt__Key: ${JWT_KEY:?set JWT_KEY in .env}
       Jwt__Issuer: PPS.LicenseManager.API
