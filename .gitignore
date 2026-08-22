@@ -19,3 +19,7 @@ Thumbs.db
 .env
 .env.*
 !*.env.example
+
+## Cloudflare Origin Certificate for Caddy - contains a private key,
+## lives on the server only (see Caddyfile / docker-compose.yml)
+caddy_certs/

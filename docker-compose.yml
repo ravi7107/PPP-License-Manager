@@ -108,14 +108,23 @@ services:
     ports:
       - "3000:80"
 
-  # Public HTTPS entry point for ppsl.net.in - terminates TLS with a
-  # Let's Encrypt certificate it obtains and renews automatically, then
-  # forwards everything to the frontend container's own nginx (which
-  # already proxies /api/ and /uploads/ to the backend internally, so
-  # Caddy only needs to know about one upstream). Requires a public DNS A
-  # record for ppsl.net.in pointing at this server's public IP, and ports
-  # 80/443 reaching this host (80 is needed for the ACME HTTP-01
-  # challenge, not just as an HTTP->HTTPS redirect).
+  # Public HTTPS entry point for ppsl.net.in. Since ppsl.net.in's DNS
+  # record is proxied through Cloudflare (orange-cloud), Caddy can no
+  # longer obtain its own publicly-trusted certificate here via ACME:
+  # confirmed live on this server - Caddy retried for 12+ hours, and
+  # BOTH challenge types are structurally blocked by the Cloudflare
+  # proxy sitting in front of it: http-01 gets back the frontend's own
+  # HTML instead of the challenge token (the plaintext request never
+  # reaches Caddy's solver as Cloudflare expects), and tls-alpn-01 fails
+  # outright with "Cannot negotiate ALPN protocol acme-tls/1" (Cloudflare's
+  # edge - not this origin - is what answers port 443 for the public,
+  # proxied IP, and it doesn't forward that ALPN negotiation through).
+  # So instead of automatic HTTPS, Caddy is given a static Cloudflare
+  # Origin Certificate (SSL/TLS > Origin Server > Create Certificate in
+  # the Cloudflare dashboard - no ACME challenge involved, just paste the
+  # cert/key Cloudflare hands you) - see Caddyfile for the exact paths.
+  # The cert+key live in ./caddy_certs on this server only (gitignored,
+  # same treatment as .env - the private key must never be committed).
   #
   # This does not replace the existing frontend:3000/backend:8080 direct
   # ports above - they're left in place as a plain-HTTP fallback (e.g.
@@ -130,6 +139,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
 

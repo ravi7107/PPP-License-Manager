@@ -1,25 +1,49 @@
 # Caddy reverse proxy config for ppsl.net.in.
 #
-# Caddy automatically requests and renews a free Let's Encrypt certificate
-# for every domain listed in a site block the first time it starts (and
-# on every renewal afterward) - no certbot, no manual cron job. It needs:
-#   - a public DNS A record for ppsl.net.in pointing at this server's
-#     public IP (root/apex record, host "@" at most registrars)
-#   - ports 80 and 443 reaching this host from the internet (80 is used
-#     for the ACME HTTP-01 challenge that proves domain ownership, 443
-#     for the actual HTTPS traffic afterward)
+# TLS here uses a static Cloudflare Origin Certificate, NOT Caddy's
+# automatic Let's Encrypt / ACME management. That switch was necessary
+# because ppsl.net.in's DNS record is proxied through Cloudflare
+# (orange-cloud): confirmed live on this server, Caddy's automatic HTTPS
+# retried for 12+ hours and could not succeed, because Cloudflare's edge
+# - not this origin - is what the public internet actually reaches on
+# ports 80/443 for a proxied record, which structurally blocks both ACME
+# challenge types:
+#   - http-01: the plaintext challenge request never reaches Caddy's
+#     solver the way ACME expects; Let's Encrypt's validator got back
+#     the frontend's own HTML instead of the challenge token.
+#   - tls-alpn-01: fails outright ("Cannot negotiate ALPN protocol
+#     acme-tls/1"), since Cloudflare's edge answers the TLS handshake
+#     itself and doesn't forward that negotiation through to Caddy.
+#
+# The fix: generate a Cloudflare Origin Certificate instead (Cloudflare
+# dashboard > SSL/TLS > Origin Server > Create Certificate - valid for up
+# to 15 years, no ACME challenge involved at all) and give Caddy that
+# cert/key directly. Cloudflare's edge already trusts its own Origin CA,
+# so with SSL/TLS mode set to Full (strict) in the Cloudflare dashboard,
+# every hop end-to-end (browser<->Cloudflare, Cloudflare<->this origin)
+# is a real, currently-valid certificate.
+#
+# The cert/key files themselves are NOT in this repo (see docker-compose.yml
+# - they're bind-mounted from ./caddy_certs on the server, gitignored,
+# same treatment as .env) - place them there directly on the server:
+#   caddy_certs/ppsl_net_in.pem   (the "Origin Certificate" Cloudflare gives you)
+#   caddy_certs/ppsl_net_in.key   (the "Private Key" Cloudflare gives you - keep this secret)
 #
 # Everything is forwarded to the frontend container's own nginx, which
 # already proxies /api/ and /uploads/ to the backend internally - so this
 # only needs one upstream, not one entry per service.
 ppsl.net.in {
+	tls /etc/caddy/certs/ppsl_net_in.pem /etc/caddy/certs/ppsl_net_in.key
 	reverse_proxy frontend:80
 }
 
 # Once you've also added a DNS A record for www.ppsl.net.in pointing at
 # the same IP, add this block too so www redirects to the root domain
-# instead of failing to resolve:
+# instead of failing to resolve. A Cloudflare Origin Certificate covers
+# both ppsl.net.in and *.ppsl.net.in if you included the wildcard
+# hostname when creating it, so no separate cert is needed for this:
 #
 # www.ppsl.net.in {
+# 	tls /etc/caddy/certs/ppsl_net_in.pem /etc/caddy/certs/ppsl_net_in.key
 # 	redir https://ppsl.net.in{uri} permanent
 # }
