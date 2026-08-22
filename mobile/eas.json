@@ -15,7 +15,7 @@
     "staff": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://98.93.56.145:8080/api",
+        "EXPO_PUBLIC_API_URL": "https://ppsl.net.in/api",
         "EXPO_PUBLIC_API_ENV_NAME": "Staff"
       }
     },
