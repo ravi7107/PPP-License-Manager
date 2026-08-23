@@ -528,6 +528,16 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             throw new InvalidOperationException($"Asset Tag '{request.AssetTag}' already exists.");
         }
 
+        // Only enforced when a serial number is actually provided - many
+        // existing/legacy assets have a blank SerialNumber (it's not
+        // [Required] on the model), and blanks must never collide with
+        // each other the way a real duplicate serial should.
+        if (!string.IsNullOrWhiteSpace(request.SerialNumber) &&
+            await _context.Assets.AnyAsync(a => a.SerialNumber == request.SerialNumber))
+        {
+            throw new InvalidOperationException($"Serial Number '{request.SerialNumber}' already exists.");
+        }
+
         var department = await _context.Departments
             .FirstOrDefaultAsync(d => d.Id == request.DepartmentId);
 
@@ -535,6 +545,10 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         {
             throw new InvalidOperationException("Department not found.");
         }
+
+        var prLine = await ValidatePrLineLinkAsync(
+            request.PurchaseRequisitionLineItemId,
+            excludeAssetId: null);
 
         var asset = new Asset
         {
@@ -553,6 +567,9 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             DepartmentId = request.DepartmentId,
             PurchaseDate = request.PurchaseDate,
             WarrantyExpiry = request.WarrantyExpiry,
+            PurchaseRequisitionLineItemId = prLine?.Id,
+            PurchaseRequisitionId = prLine?.PurchaseRequisitionId,
+            PurchaseCost = request.PurchaseCost,
             Remarks = request.Remarks,
             OwnershipType = string.IsNullOrWhiteSpace(request.OwnershipType) ? "Owned" : request.OwnershipType,
             VendorId = request.VendorId,
@@ -572,6 +589,59 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             ?? throw new Exception("Unable to load created asset.");
     }
 
+    // Shared by CreateAsync/UpdateAsync. Returns null (no-op) when no line
+    // is being linked. Otherwise resolves the line item fresh from the
+    // database - PurchaseRequisitionId on the asset is always taken from
+    // here, never from client input, so it can never point at a PR other
+    // than the one that actually owns this line. excludeAssetId lets
+    // UpdateAsync re-validate a link without the asset's own prior
+    // contribution to "already fulfilled" double-counting against itself;
+    // 0 is a safe sentinel for "exclude nothing" since no Asset row ever
+    // has Id 0 (Postgres identity columns here start at 1).
+    private async Task<PurchaseRequisitionLineItem?> ValidatePrLineLinkAsync(
+        int? purchaseRequisitionLineItemId,
+        int? excludeAssetId)
+    {
+        if (purchaseRequisitionLineItemId == null)
+        {
+            return null;
+        }
+
+        var line = await _context.PurchaseRequisitionLineItems
+            .Include(l => l.PurchaseRequisition)
+            .FirstOrDefaultAsync(l => l.Id == purchaseRequisitionLineItemId.Value);
+
+        if (line == null)
+        {
+            throw new InvalidOperationException(
+                "Purchase requisition line item not found.");
+        }
+
+        if (line.PurchaseRequisition.Status != "Approved")
+        {
+            throw new InvalidOperationException(
+                "Assets can only be linked to an approved purchase requisition line item.");
+        }
+
+        var assetCount = await _context.Assets.CountAsync(a =>
+            a.PurchaseRequisitionLineItemId == line.Id &&
+            a.Id != (excludeAssetId ?? 0));
+
+        var licenseQty = await _context.LicensePurchases
+            .Where(lp => lp.PurchaseRequisitionLineItemId == line.Id)
+            .SumAsync(lp => (decimal?)lp.TotalLicenses) ?? 0m;
+
+        var fulfilled = assetCount + licenseQty;
+
+        if (fulfilled + 1 > line.Quantity)
+        {
+            throw new InvalidOperationException(
+                $"Purchase requisition line '{line.ItemDescription}' has no remaining unfulfilled quantity (requested {line.Quantity}, already fulfilled {fulfilled}).");
+        }
+
+        return line;
+    }
+
     public async Task<AssetResponse?> UpdateAsync(int id, UpdateAssetRequest request)
     {
         var asset = await _context.Assets
@@ -587,12 +657,37 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
             throw new InvalidOperationException($"Asset Tag '{request.AssetTag}' already exists.");
         }
 
+        if (!string.IsNullOrWhiteSpace(request.SerialNumber) &&
+            await _context.Assets.AnyAsync(a =>
+                a.SerialNumber == request.SerialNumber &&
+                a.Id != id))
+        {
+            throw new InvalidOperationException($"Serial Number '{request.SerialNumber}' already exists.");
+        }
+
         var department = await _context.Departments
             .FirstOrDefaultAsync(d => d.Id == request.DepartmentId);
 
         if (department == null)
         {
             throw new InvalidOperationException("Department not found.");
+        }
+
+        // Only re-validate/re-resolve the PR line link when it's actually
+        // changing - an unchanged link doesn't need to re-check remaining
+        // quantity against itself, and this also lets an asset keep an
+        // existing link even if the parent PR/line has since become
+        // otherwise ineligible (e.g. no remaining quantity because of
+        // other, later fulfillments) without every unrelated edit to the
+        // asset failing.
+        if (request.PurchaseRequisitionLineItemId != asset.PurchaseRequisitionLineItemId)
+        {
+            var prLine = await ValidatePrLineLinkAsync(
+                request.PurchaseRequisitionLineItemId,
+                excludeAssetId: id);
+
+            asset.PurchaseRequisitionLineItemId = prLine?.Id;
+            asset.PurchaseRequisitionId = prLine?.PurchaseRequisitionId;
         }
 
         asset.AssetTag = request.AssetTag;
@@ -610,6 +705,7 @@ public async Task<AssetDashboardResponse> GetDashboardAsync()
         asset.DepartmentId = request.DepartmentId;
         asset.PurchaseDate = request.PurchaseDate;
         asset.WarrantyExpiry = request.WarrantyExpiry;
+        asset.PurchaseCost = request.PurchaseCost;
         asset.Remarks = request.Remarks;
         asset.Status = request.Status;
         asset.IsActive = request.IsActive;

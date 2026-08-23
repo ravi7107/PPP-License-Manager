@@ -13,6 +13,15 @@ public interface IPurchaseRequisitionService
         int requestingUserId,
         bool isPrivileged);
 
+    // Available-to-link PR lines for the Asset/License purchase creation
+    // forms' optional "link to a Purchase Requisition" picker - see
+    // PurchaseRequisitionService's own comment on the implementation.
+    Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync();
+
+    // The audit/reconciliation report - see PurchaseRequisitionService's
+    // own comment on the implementation.
+    Task<List<PurchaseRequisitionFulfillmentReportRow>> GetFulfillmentReportAsync();
+
     Task<PurchaseRequisitionResponse> CreateDraftAsync(
         SavePurchaseRequisitionRequest request,
         int requestedByUserId);

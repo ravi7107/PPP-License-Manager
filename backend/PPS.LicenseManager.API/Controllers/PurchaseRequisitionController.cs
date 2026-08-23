@@ -115,6 +115,38 @@ public class PurchaseRequisitionController : BaseController
         return Success(result, "Initiator candidates retrieved successfully.");
     }
 
+    // Feeds the Asset/License purchase creation forms' optional "link to a
+    // Purchase Requisition" picker - every line item on an Approved PR
+    // that still has remaining unfulfilled quantity. Not scoped to a
+    // specific PR id, same reasoning as initiator-candidates above; open
+    // to any authenticated user (class-level [Authorize]) rather than
+    // further role-gated, since it exposes no more than item
+    // descriptions/quantities that anyone able to create an Asset or
+    // License purchase would already need to see.
+    [HttpGet("available-lines")]
+    public async Task<IActionResult> GetAvailableLines()
+    {
+        var result = await _service.GetAvailableLinesForLinkingAsync();
+
+        return Success(result, "Available purchase requisition lines retrieved successfully.");
+    }
+
+    // Audit/reconciliation report - unlike every other endpoint in this
+    // controller, this one is explicitly role-gated (matching the
+    // frontend Reports module's own access level - see
+    // frontend/lib/auth/roles.ts's MODULE_ACCESS.reports) rather than
+    // relying on IsPrivileged()/ownership checks, since it surfaces Cost
+    // figures across every PR-linked Asset/License in the whole system,
+    // not just the caller's own records.
+    [Authorize(Roles = "Super Admin,IT Admin,Manager")]
+    [HttpGet("fulfillment-report")]
+    public async Task<IActionResult> GetFulfillmentReport()
+    {
+        var result = await _service.GetFulfillmentReportAsync();
+
+        return Success(result, "Fulfillment report retrieved successfully.");
+    }
+
 
     // =========================================================
     // GET BY ID

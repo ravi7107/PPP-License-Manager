@@ -174,8 +174,18 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Property<string>("Processor")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("PurchaseCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTime?>("PurchaseDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PurchaseRequisitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PurchaseRequisitionLineItemId")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("RamGb")
                         .HasColumnType("integer");
@@ -221,6 +231,10 @@ namespace PPS.LicenseManager.API.Migrations
                     b.HasIndex("CurrentLocationId");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("PurchaseRequisitionId");
+
+                    b.HasIndex("PurchaseRequisitionLineItemId");
 
                     b.HasIndex("VendorId");
 
@@ -1012,6 +1026,12 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Property<DateOnly>("PurchaseDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("PurchaseRequisitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PurchaseRequisitionLineItemId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PurchaseScope")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1054,6 +1074,10 @@ namespace PPS.LicenseManager.API.Migrations
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("PurchaseRequisitionId");
+
+                    b.HasIndex("PurchaseRequisitionLineItemId");
 
                     b.HasIndex("SoftwareId");
 
@@ -3649,6 +3673,16 @@ namespace PPS.LicenseManager.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisition", "PurchaseRequisition")
+                        .WithMany()
+                        .HasForeignKey("PurchaseRequisitionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisitionLineItem", "PurchaseRequisitionLineItem")
+                        .WithMany()
+                        .HasForeignKey("PurchaseRequisitionLineItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.Vendor", "Vendor")
                         .WithMany()
                         .HasForeignKey("VendorId")
@@ -3657,6 +3691,10 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("CurrentLocation");
 
                     b.Navigation("Department");
+
+                    b.Navigation("PurchaseRequisition");
+
+                    b.Navigation("PurchaseRequisitionLineItem");
 
                     b.Navigation("Vendor");
                 });
@@ -3939,6 +3977,16 @@ namespace PPS.LicenseManager.API.Migrations
                         .WithMany()
                         .HasForeignKey("DepartmentId");
 
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisition", "PurchaseRequisition")
+                        .WithMany()
+                        .HasForeignKey("PurchaseRequisitionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisitionLineItem", "PurchaseRequisitionLineItem")
+                        .WithMany()
+                        .HasForeignKey("PurchaseRequisitionLineItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.Software", "Software")
                         .WithMany()
                         .HasForeignKey("SoftwareId")
@@ -3950,6 +3998,10 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("Department");
+
+                    b.Navigation("PurchaseRequisition");
+
+                    b.Navigation("PurchaseRequisitionLineItem");
 
                     b.Navigation("Software");
                 });

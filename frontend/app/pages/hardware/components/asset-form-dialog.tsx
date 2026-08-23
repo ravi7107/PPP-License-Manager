@@ -387,59 +387,72 @@ export function AssetFormDialog({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status *</FormLabel>
+                {/*
+                 * Only shown on edit - on create, the backend always
+                 * force-sets Status = "Available" regardless of what's
+                 * sent (see AssetService.CreateAsync), so showing a picker
+                 * here was misleading UI, not a real choice. The zod
+                 * schema above still requires "status" unconditionally
+                 * (matching AssetFormValues/EMPTY_ASSET_FORM's own
+                 * pre-existing default of "Available"), so create
+                 * submissions still validate fine with the field simply
+                 * hidden rather than removed.
+                 */}
+                {isEditing && (
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status *</FormLabel>
 
-                      <Select
-                        value={field.value ?? ""}
-                        onValueChange={field.onChange}
-                        disabled={isAssigned}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                        </FormControl>
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={field.onChange}
+                          disabled={isAssigned}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                          </FormControl>
 
-                        <SelectContent>
-                          <SelectItem value="Available">
-                            Available
-                          </SelectItem>
+                          <SelectContent>
+                            <SelectItem value="Available">
+                              Available
+                            </SelectItem>
 
-                          <SelectItem value="Assigned">
-                            Assigned
-                          </SelectItem>
+                            <SelectItem value="Assigned">
+                              Assigned
+                            </SelectItem>
 
-                          <SelectItem value="Maintenance">
-                            Maintenance
-                          </SelectItem>
+                            <SelectItem value="Maintenance">
+                              Maintenance
+                            </SelectItem>
 
-                          <SelectItem value="Reserved">
-                            Reserved
-                          </SelectItem>
+                            <SelectItem value="Reserved">
+                              Reserved
+                            </SelectItem>
 
-                          <SelectItem value="Retired">
-                            Retired
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                            <SelectItem value="Retired">
+                              Retired
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
 
-                      {isAssigned ? (
-                        <p className="text-xs text-muted-foreground">
-                          This asset is currently allocated to a user, so
-                          its status is managed from the Allocate /
-                          Reassign / Return actions.
-                        </p>
-                      ) : null}
+                        {isAssigned ? (
+                          <p className="text-xs text-muted-foreground">
+                            This asset is currently allocated to a user, so
+                            its status is managed from the Allocate /
+                            Reassign / Return actions.
+                          </p>
+                        ) : null}
 
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
             </div>
 

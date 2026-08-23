@@ -175,6 +175,11 @@ public class LicensePurchaseService : ILicensePurchaseService
             request.ExpiryDate,
             request.SupportExpiryDate);
 
+        var prLine = await ValidatePrLineLinkAsync(
+            request.PurchaseRequisitionLineItemId,
+            request.TotalLicenses,
+            excludeLicensePurchaseId: null);
+
         var purchase = new LicensePurchase
         {
             SoftwareId = request.SoftwareId,
@@ -198,6 +203,8 @@ public class LicensePurchaseService : ILicensePurchaseService
             Currency = Normalize(request.Currency),
             PurchaseSource = Normalize(request.PurchaseSource),
             Remarks = Normalize(request.Remarks),
+            PurchaseRequisitionLineItemId = prLine?.Id,
+            PurchaseRequisitionId = prLine?.PurchaseRequisitionId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -209,6 +216,60 @@ public class LicensePurchaseService : ILicensePurchaseService
         return await GetByIdAsync(purchase.Id)
             ?? throw new InvalidOperationException(
                 "License purchase was created but could not be retrieved.");
+    }
+
+    // Mirrors AssetService's own ValidatePrLineLinkAsync - see that
+    // method's comment for the full rationale (why PurchaseRequisitionId
+    // is always resolved here rather than trusted from the client, and why
+    // excludeLicensePurchaseId uses 0 as a safe "exclude nothing"
+    // sentinel). The one difference: a license purchase can represent
+    // several seats at once (TotalLicenses), not just one unit, so the
+    // caller passes the quantity it needs room for instead of an implicit
+    // "+1".
+    private async Task<PurchaseRequisitionLineItem?> ValidatePrLineLinkAsync(
+        int? purchaseRequisitionLineItemId,
+        decimal requestedQuantity,
+        int? excludeLicensePurchaseId)
+    {
+        if (purchaseRequisitionLineItemId == null)
+        {
+            return null;
+        }
+
+        var line = await _context.PurchaseRequisitionLineItems
+            .Include(l => l.PurchaseRequisition)
+            .FirstOrDefaultAsync(l => l.Id == purchaseRequisitionLineItemId.Value);
+
+        if (line == null)
+        {
+            throw new InvalidOperationException(
+                "Purchase requisition line item not found.");
+        }
+
+        if (line.PurchaseRequisition.Status != "Approved")
+        {
+            throw new InvalidOperationException(
+                "License purchases can only be linked to an approved purchase requisition line item.");
+        }
+
+        var assetCount = await _context.Assets.CountAsync(a =>
+            a.PurchaseRequisitionLineItemId == line.Id);
+
+        var licenseQty = await _context.LicensePurchases
+            .Where(lp =>
+                lp.PurchaseRequisitionLineItemId == line.Id &&
+                lp.Id != (excludeLicensePurchaseId ?? 0))
+            .SumAsync(lp => (decimal?)lp.TotalLicenses) ?? 0m;
+
+        var fulfilled = assetCount + licenseQty;
+
+        if (fulfilled + requestedQuantity > line.Quantity)
+        {
+            throw new InvalidOperationException(
+                $"Purchase requisition line '{line.ItemDescription}' does not have enough remaining quantity (requested {line.Quantity}, already fulfilled {fulfilled}, this purchase needs {requestedQuantity}).");
+        }
+
+        return line;
     }
 
     public async Task<bool> UpdateAsync(
@@ -257,6 +318,24 @@ public class LicensePurchaseService : ILicensePurchaseService
         {
             throw new InvalidOperationException(
                 "Software cannot be changed because licenses already exist under this purchase.");
+        }
+
+        // Only re-validate/re-resolve the PR line link when the link
+        // itself or the quantity it needs room for actually changes -
+        // matches AssetService.UpdateAsync's same "only on real change"
+        // gate, and for the same reason (an untouched link shouldn't fail
+        // an otherwise-unrelated edit just because the PR has since become
+        // more constrained).
+        if (request.PurchaseRequisitionLineItemId != purchase.PurchaseRequisitionLineItemId ||
+            request.TotalLicenses != purchase.TotalLicenses)
+        {
+            var prLine = await ValidatePrLineLinkAsync(
+                request.PurchaseRequisitionLineItemId,
+                request.TotalLicenses,
+                excludeLicensePurchaseId: id);
+
+            purchase.PurchaseRequisitionLineItemId = prLine?.Id;
+            purchase.PurchaseRequisitionId = prLine?.PurchaseRequisitionId;
         }
 
         purchase.SoftwareId = request.SoftwareId;

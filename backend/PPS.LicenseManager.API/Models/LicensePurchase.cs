@@ -74,6 +74,21 @@ public class LicensePurchase
     [MaxLength(500)]
     public string? Remarks { get; set; }
 
+    // Optional traceability back to the Purchase Requisition this license
+    // purchase was bought against - see Asset.PurchaseRequisitionId's
+    // comment for the full rationale (same pattern: never required, both
+    // null together or both set together, PurchaseRequisitionId always
+    // resolved server-side from the line item). This class already has its
+    // own Cost field above, so unlike Asset there's no separate
+    // PurchaseCost to add here.
+    public int? PurchaseRequisitionId { get; set; }
+
+    public PurchaseRequisition? PurchaseRequisition { get; set; }
+
+    public int? PurchaseRequisitionLineItemId { get; set; }
+
+    public PurchaseRequisitionLineItem? PurchaseRequisitionLineItem { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

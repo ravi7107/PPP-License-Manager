@@ -62,4 +62,12 @@ public class CreateLicensePurchaseRequest
 
     [MaxLength(500)]
     public string? Remarks { get; set; }
+
+    // Optional link to the Purchase Requisition line item this license
+    // purchase was bought against - never required. Server resolves and
+    // validates (line must belong to an Approved PR, and TotalLicenses
+    // above must fit within its remaining unfulfilled quantity) rather
+    // than trusting a client-supplied PurchaseRequisitionId directly - see
+    // LicensePurchaseService.CreateAsync.
+    public int? PurchaseRequisitionLineItemId { get; set; }
 }

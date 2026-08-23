@@ -1605,6 +1605,51 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(a => a.VendorId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            // Optional PR/PO traceability - see Asset.PurchaseRequisitionId's
+            // comment. Restrict (not SetNull, unlike CurrentLocation/Vendor
+            // above): an approved PR that assets have already been
+            // fulfilled against should never be deletable while those
+            // assets still reference it - that link is an audit record,
+            // not a soft convenience field.
+            entity.HasIndex(a => a.PurchaseRequisitionId);
+            entity.HasIndex(a => a.PurchaseRequisitionLineItemId);
+
+            entity.HasOne(a => a.PurchaseRequisition)
+                  .WithMany()
+                  .HasForeignKey(a => a.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(a => a.PurchaseRequisitionLineItem)
+                  .WithMany()
+                  .HasForeignKey(a => a.PurchaseRequisitionLineItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(a => a.PurchaseCost)
+                  .HasPrecision(18, 2);
+        });
+
+        // LicensePurchase had no explicit Fluent configuration block before
+        // this - it relies entirely on conventions plus the [Required]/
+        // [MaxLength]/[Column] data annotations on the model itself. This
+        // block only configures the two new PR-traceability columns (see
+        // LicensePurchase.PurchaseRequisitionId's comment); it does not
+        // touch or override any of the existing convention-based behavior
+        // for Software/Company/Department/Client etc.
+        modelBuilder.Entity<LicensePurchase>(entity =>
+        {
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.PurchaseRequisitionLineItemId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany()
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PurchaseRequisitionLineItem)
+                  .WithMany()
+                  .HasForeignKey(x => x.PurchaseRequisitionLineItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Asset Software

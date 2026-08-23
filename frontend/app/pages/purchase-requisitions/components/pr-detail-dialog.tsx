@@ -306,6 +306,50 @@ export function PrDetailDialog({
           </Table>
         </div>
 
+        {/* FULFILLED BY - read-only audit trail of Assets/LicensePurchases
+            actually created against this PR's line items so far. Hidden
+            entirely when empty (the normal case for most PRs, since
+            linking an Asset/License to a PR is optional), so this never
+            adds visual noise to a PR nobody has linked anything to. */}
+
+        {pr.fulfilledByItems.length > 0 ? (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Fulfilled By</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Cost</TableHead>
+                  <TableHead>Purchase Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pr.fulfilledByItems.map((item) => (
+                  <TableRow key={`${item.type}-${item.recordId}`}>
+                    <TableCell>
+                      <Badge variant="outline">{item.type}</Badge>
+                    </TableCell>
+                    <TableCell>{item.description}</TableCell>
+                    <TableCell className="text-right">
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.cost != null ? item.cost.toFixed(2) : '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.purchaseDate
+                        ? new Date(item.purchaseDate).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+
         {/* ATTACHMENTS */}
 
         <div>

@@ -11,6 +11,7 @@ import {
   BarChart3,
   ShieldCheck,
   TrendingUp,
+  FileSearch,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LicenseUtilizationReport } from '@/app/pages/reports/components/license-utilization-report';
@@ -24,6 +25,7 @@ import { AssetAllocationReport } from '@/app/pages/reports/components/asset-allo
 import { AssetUtilizationReport } from '@/app/pages/reports/components/asset-utilization-report';
 import { AuditReport } from '@/app/pages/reports/components/audit-report';
 import { MonthlySummaryReport } from '@/app/pages/reports/components/monthly-summary-report';
+import { ProcurementTraceabilityReport } from '@/app/pages/reports/components/procurement-traceability-report';
 
 type ReportKey =
   | 'licenseUtilization'
@@ -36,7 +38,8 @@ type ReportKey =
   | 'assetAllocation'
   | 'assetUtilization'
   | 'audit'
-  | 'monthlySummary';
+  | 'monthlySummary'
+  | 'procurementTraceability';
 
 const REPORTS: { key: ReportKey; label: string; icon: typeof KeySquare; description: string }[] = [
   { key: 'licenseUtilization', label: 'License Utilization', icon: KeySquare, description: 'Drill down into where a software title is used.' },
@@ -50,6 +53,7 @@ const REPORTS: { key: ReportKey; label: string; icon: typeof KeySquare; descript
   { key: 'assetUtilization', label: 'Asset Utilization', icon: HardDrive, description: 'Fleet breakdown by status and assignment.' },
   { key: 'audit', label: 'Audit Report', icon: ShieldCheck, description: 'Recent create/update/delete activity across the system.' },
   { key: 'monthlySummary', label: 'Monthly Summary', icon: TrendingUp, description: 'Month-by-month activity trend.' },
+  { key: 'procurementTraceability', label: 'Procurement Traceability', icon: FileSearch, description: 'Which hardware and licenses were procured against which PR/PO.' },
 ];
 
 export default function ReportsPage() {
@@ -94,6 +98,7 @@ export default function ReportsPage() {
       {selected === 'assetUtilization' && <AssetUtilizationReport />}
       {selected === 'audit' && <AuditReport />}
       {selected === 'monthlySummary' && <MonthlySummaryReport />}
+      {selected === 'procurementTraceability' && <ProcurementTraceabilityReport />}
     </div>
   );
 }

@@ -27,6 +27,20 @@ export interface PurchaseRequisitionLineItem {
   notes: string | null;
 }
 
+// Read-only audit trail: which Assets/LicensePurchases have actually been
+// created against this PR's line items so far - empty for every PR with
+// no linked Asset/LicensePurchase yet, which is the normal case since
+// linking is optional.
+export interface PurchaseRequisitionFulfillmentItem {
+  type: 'Asset' | 'License';
+  recordId: number;
+  lineItemId: number;
+  description: string;
+  quantity: number;
+  cost: number | null;
+  purchaseDate: string | null;
+}
+
 export interface PurchaseRequisitionAttachment {
   id: number;
   attachmentType: AttachmentType;
@@ -111,6 +125,9 @@ export interface PurchaseRequisition {
   lineItems: PurchaseRequisitionLineItem[];
   attachments: PurchaseRequisitionAttachment[];
   approvalSteps: PurchaseRequisitionApprovalStep[];
+  // Only populated on the single-PR detail fetch (getPurchaseRequisition),
+  // not on list endpoints.
+  fulfilledByItems: PurchaseRequisitionFulfillmentItem[];
 }
 
 export interface PurchaseRequisitionListItem {
@@ -405,4 +422,52 @@ export async function downloadPurchaseRequisitionPoDocument(
     blob: response.data,
     fileName: match?.[1] ?? `purchase-order-${id}`,
   };
+}
+
+// One Approved PR line item that still has remaining unfulfilled quantity -
+// feeds an Asset/License purchase creation form's optional "link to a
+// Purchase Requisition" picker.
+export interface PurchaseRequisitionAvailableLine {
+  lineItemId: number;
+  purchaseRequisitionId: number;
+  prNumber: string;
+  itemDescription: string;
+  quantity: number;
+  fulfilledQuantity: number;
+  remainingQuantity: number;
+}
+
+export async function getAvailablePurchaseRequisitionLines(): Promise<
+  PurchaseRequisitionAvailableLine[]
+> {
+  const response = await api.get<
+    ApiResponse<PurchaseRequisitionAvailableLine[]>
+  >('/PurchaseRequisition/available-lines');
+
+  return response.data.data;
+}
+
+// One row of the audit/reconciliation report - every Asset or
+// LicensePurchase that has been linked back to the Purchase Requisition it
+// was bought against, across the whole system.
+export interface PurchaseRequisitionFulfillmentReportRow {
+  type: 'Asset' | 'License';
+  itemDescription: string;
+  prNumber: string;
+  poNumber: string | null;
+  prApprovedAt: string | null;
+  purchaseDate: string | null;
+  vendor: string | null;
+  cost: number | null;
+  requestedByUserName: string;
+}
+
+export async function getPurchaseRequisitionFulfillmentReport(): Promise<
+  PurchaseRequisitionFulfillmentReportRow[]
+> {
+  const response = await api.get<
+    ApiResponse<PurchaseRequisitionFulfillmentReportRow[]>
+  >('/PurchaseRequisition/fulfillment-report');
+
+  return response.data.data;
 }

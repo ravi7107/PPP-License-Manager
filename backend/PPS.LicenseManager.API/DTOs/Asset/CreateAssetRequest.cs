@@ -37,6 +37,15 @@ public class CreateAssetRequest
 
     public DateTime? WarrantyExpiry { get; set; }
 
+    // Optional link to the Purchase Requisition line item this asset was
+    // bought against - never required. Server resolves and validates
+    // (line must belong to an Approved PR, and must have remaining
+    // unfulfilled quantity) rather than trusting a client-supplied
+    // PurchaseRequisitionId directly - see AssetService.CreateAsync.
+    public int? PurchaseRequisitionLineItemId { get; set; }
+
+    public decimal? PurchaseCost { get; set; }
+
     public string? Remarks { get; set; }
 
     // Rental tracking - "Owned" (default) or "Rented".

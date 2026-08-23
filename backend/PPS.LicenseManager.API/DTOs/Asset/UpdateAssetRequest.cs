@@ -37,6 +37,14 @@ public class UpdateAssetRequest
 
     public DateTime? WarrantyExpiry { get; set; }
 
+    // Optional link to the Purchase Requisition line item this asset was
+    // bought against - see CreateAssetRequest's comment. Only re-validated
+    // by AssetService.UpdateAsync when this value actually changes from
+    // what's already on the asset.
+    public int? PurchaseRequisitionLineItemId { get; set; }
+
+    public decimal? PurchaseCost { get; set; }
+
     public string? Remarks { get; set; }
 
     public bool IsActive { get; set; } = true;

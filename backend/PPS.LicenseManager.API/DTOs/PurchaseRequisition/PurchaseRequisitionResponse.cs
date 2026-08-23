@@ -81,4 +81,12 @@ public class PurchaseRequisitionResponse
     public List<PurchaseRequisitionLineItemResponse> LineItems { get; set; } = new();
     public List<PurchaseRequisitionAttachmentResponse> Attachments { get; set; } = new();
     public List<PurchaseRequisitionApprovalStepResponse> ApprovalSteps { get; set; } = new();
+
+    // Read-only audit trail: which Assets/LicensePurchases have actually
+    // been created against this PR's line items so far (see
+    // PurchaseRequisitionService.GetByIdAsync) - empty for every PR with no
+    // linked Asset/LicensePurchase yet, which is the normal case for most
+    // PRs since linking is optional. Only populated on the single-PR detail
+    // fetch, not on list endpoints, to avoid an N+1 query cost there.
+    public List<PurchaseRequisitionFulfillmentItemResponse> FulfilledByItems { get; set; } = new();
 }

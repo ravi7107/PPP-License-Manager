@@ -76,6 +76,29 @@ public class Asset
 
     public DateTime? WarrantyExpiry { get; set; }
 
+    // Optional traceability back to the Purchase Requisition this asset was
+    // bought against - never required (plenty of assets are ad-hoc,
+    // outside the PR workflow entirely). Both null together, or both set
+    // together - PurchaseRequisitionId is always resolved server-side from
+    // the line item, never taken directly from a client (see
+    // AssetService's validation), so the two can never point at mismatched
+    // PRs. Restrict delete (see ApplicationDbContext) - an approved PR
+    // with assets fulfilled against it should never be deletable while
+    // those assets still reference it.
+    public int? PurchaseRequisitionId { get; set; }
+
+    public PurchaseRequisition? PurchaseRequisition { get; set; }
+
+    public int? PurchaseRequisitionLineItemId { get; set; }
+
+    public PurchaseRequisitionLineItem? PurchaseRequisitionLineItem { get; set; }
+
+    // What this specific asset cost, when linked to a PR line (the line
+    // item's UnitPrice covers the whole quantity, not this one unit) -
+    // Asset has no cost field otherwise, by design. Left null for ad-hoc
+    // assets with no PR link, same as the two fields above.
+    public decimal? PurchaseCost { get; set; }
+
     public string? Remarks { get; set; }
 
     public bool IsActive { get; set; } = true;

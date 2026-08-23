@@ -303,7 +303,209 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             throw new UnauthorizedAccessException(
                 "You don't have access to this purchase requisition.");
 
-        return Map(record, requestingUserId);
+        var response = Map(record, requestingUserId);
+        response.FulfilledByItems = await GetFulfillmentItemsAsync(record.Id);
+
+        return response;
+    }
+
+    // "Fulfilled by" section on the PR detail view - every Asset/
+    // LicensePurchase actually created against this PR so far. Only
+    // called from the single-PR GetByIdAsync (not any list endpoint), so
+    // the extra two queries here are cheap and scoped to one PR.
+    private async Task<List<PurchaseRequisitionFulfillmentItemResponse>> GetFulfillmentItemsAsync(
+        int purchaseRequisitionId)
+    {
+        var assetItems = await _context.Assets
+            .Where(a => a.PurchaseRequisitionId == purchaseRequisitionId)
+            .Select(a => new PurchaseRequisitionFulfillmentItemResponse
+            {
+                Type = "Asset",
+                RecordId = a.Id,
+                LineItemId = a.PurchaseRequisitionLineItemId!.Value,
+                Description = a.AssetTag + " - " + a.AssetName,
+                Quantity = 1,
+                Cost = a.PurchaseCost,
+                PurchaseDate = a.PurchaseDate
+            })
+            .ToListAsync();
+
+        // Projected with PurchaseDate still DateOnly here (a plain column
+        // read, always safely translatable) and converted to DateTime
+        // afterward in memory, rather than calling
+        // DateOnly.ToDateTime(TimeOnly) inside the query itself - that
+        // combinator isn't part of EF Core/Npgsql's well-supported
+        // DateOnly translation surface, and every other DateOnly usage in
+        // this codebase (see AnalyticsService.cs) only ever operates on
+        // already-materialized data, never inside a translated IQueryable.
+        var licenseItemsRaw = await _context.LicensePurchases
+            .Where(lp => lp.PurchaseRequisitionId == purchaseRequisitionId)
+            .Select(lp => new
+            {
+                lp.Id,
+                LineItemId = lp.PurchaseRequisitionLineItemId!.Value,
+                Description = lp.Software.Name + " (" + lp.LicenseType + ")",
+                lp.TotalLicenses,
+                lp.Cost,
+                lp.PurchaseDate
+            })
+            .ToListAsync();
+
+        var licenseItems = licenseItemsRaw
+            .Select(lp => new PurchaseRequisitionFulfillmentItemResponse
+            {
+                Type = "License",
+                RecordId = lp.Id,
+                LineItemId = lp.LineItemId,
+                Description = lp.Description,
+                Quantity = lp.TotalLicenses,
+                Cost = lp.Cost,
+                PurchaseDate = lp.PurchaseDate.ToDateTime(TimeOnly.MinValue)
+            })
+            .ToList();
+
+        return assetItems
+            .Concat(licenseItems)
+            .OrderBy(x => x.LineItemId)
+            .ThenBy(x => x.Type)
+            .ToList();
+    }
+
+    // Available-to-link PR lines for the Asset/License purchase creation
+    // forms - every line item on an Approved PR that still has remaining
+    // unfulfilled quantity. Small dataset in practice (Approved PRs with
+    // open lines only), so the two aggregate queries plus in-memory join
+    // below are simpler and cheap enough rather than a single hand-rolled
+    // SQL LEFT JOIN.
+    public async Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync()
+    {
+        var lines = await _context.PurchaseRequisitionLineItems
+            .Include(l => l.PurchaseRequisition)
+            .Where(l => l.PurchaseRequisition.Status == "Approved")
+            .OrderByDescending(l => l.PurchaseRequisition.ApprovedAt)
+            .ThenBy(l => l.LineNumber)
+            .ToListAsync();
+
+        if (lines.Count == 0)
+        {
+            return new List<PurchaseRequisitionAvailableLineResponse>();
+        }
+
+        var lineIds = lines.Select(l => l.Id).ToList();
+
+        var assetCounts = await _context.Assets
+            .Where(a =>
+                a.PurchaseRequisitionLineItemId != null &&
+                lineIds.Contains(a.PurchaseRequisitionLineItemId.Value))
+            .GroupBy(a => a.PurchaseRequisitionLineItemId!.Value)
+            .Select(g => new { LineItemId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.LineItemId, x => (decimal)x.Count);
+
+        var licenseQtys = await _context.LicensePurchases
+            .Where(lp =>
+                lp.PurchaseRequisitionLineItemId != null &&
+                lineIds.Contains(lp.PurchaseRequisitionLineItemId.Value))
+            .GroupBy(lp => lp.PurchaseRequisitionLineItemId!.Value)
+            .Select(g => new { LineItemId = g.Key, Total = g.Sum(x => (decimal)x.TotalLicenses) })
+            .ToDictionaryAsync(x => x.LineItemId, x => x.Total);
+
+        var result = new List<PurchaseRequisitionAvailableLineResponse>();
+
+        foreach (var line in lines)
+        {
+            var fulfilled =
+                (assetCounts.TryGetValue(line.Id, out var assetCount) ? assetCount : 0m) +
+                (licenseQtys.TryGetValue(line.Id, out var licenseQty) ? licenseQty : 0m);
+
+            var remaining = line.Quantity - fulfilled;
+
+            if (remaining <= 0)
+            {
+                continue;
+            }
+
+            result.Add(new PurchaseRequisitionAvailableLineResponse
+            {
+                LineItemId = line.Id,
+                PurchaseRequisitionId = line.PurchaseRequisitionId,
+                PrNumber = line.PurchaseRequisition.PrNumber ?? string.Empty,
+                ItemDescription = line.ItemDescription,
+                Quantity = line.Quantity,
+                FulfilledQuantity = fulfilled,
+                RemainingQuantity = remaining
+            });
+        }
+
+        return result;
+    }
+
+    // The audit/reconciliation report - every Asset/LicensePurchase across
+    // the whole system that has ever been linked to a PR, regardless of
+    // that PR's current status (a PR could since have had later revisions,
+    // but the link recorded at creation time is a historical fact and
+    // stays reportable). Vendor prefers the PR's own Vendor (the actual
+    // procurement vendor) and falls back to the License purchase's own
+    // free-text Vendor field only when the PR has none set - Asset has no
+    // equivalent fallback (its Vendor/VendorId is rental tracking, a
+    // different concept - see Asset.VendorId's model comment).
+    public async Task<List<PurchaseRequisitionFulfillmentReportRow>> GetFulfillmentReportAsync()
+    {
+        var assetRows = await _context.Assets
+            .Where(a => a.PurchaseRequisitionId != null)
+            .Select(a => new PurchaseRequisitionFulfillmentReportRow
+            {
+                Type = "Asset",
+                ItemDescription = a.AssetTag + " - " + a.AssetName,
+                PrNumber = a.PurchaseRequisition!.PrNumber ?? string.Empty,
+                PoNumber = a.PurchaseRequisition.PoNumber,
+                PrApprovedAt = a.PurchaseRequisition.ApprovedAt,
+                PurchaseDate = a.PurchaseDate,
+                Vendor = a.PurchaseRequisition.Vendor != null
+                    ? a.PurchaseRequisition.Vendor.VendorName
+                    : null,
+                Cost = a.PurchaseCost,
+                RequestedByUserName = a.PurchaseRequisition.RequestedByUser.FullName
+            })
+            .ToListAsync();
+
+        // Same DateOnly-stays-DateOnly-until-materialized reasoning as
+        // GetFulfillmentItemsAsync above.
+        var licenseRowsRaw = await _context.LicensePurchases
+            .Where(lp => lp.PurchaseRequisitionId != null)
+            .Select(lp => new
+            {
+                ItemDescription = lp.Software.Name + " (" + lp.LicenseType + ")",
+                PrNumber = lp.PurchaseRequisition!.PrNumber ?? string.Empty,
+                lp.PurchaseRequisition.PoNumber,
+                lp.PurchaseRequisition.ApprovedAt,
+                lp.PurchaseDate,
+                Vendor = lp.PurchaseRequisition.Vendor != null
+                    ? lp.PurchaseRequisition.Vendor.VendorName
+                    : lp.Vendor,
+                lp.Cost,
+                RequestedByUserName = lp.PurchaseRequisition.RequestedByUser.FullName
+            })
+            .ToListAsync();
+
+        var licenseRows = licenseRowsRaw
+            .Select(lp => new PurchaseRequisitionFulfillmentReportRow
+            {
+                Type = "License",
+                ItemDescription = lp.ItemDescription,
+                PrNumber = lp.PrNumber,
+                PoNumber = lp.PoNumber,
+                PrApprovedAt = lp.ApprovedAt,
+                PurchaseDate = lp.PurchaseDate.ToDateTime(TimeOnly.MinValue),
+                Vendor = lp.Vendor,
+                Cost = lp.Cost,
+                RequestedByUserName = lp.RequestedByUserName
+            })
+            .ToList();
+
+        return assetRows
+            .Concat(licenseRows)
+            .OrderByDescending(r => r.PrApprovedAt)
+            .ToList();
     }
 
 

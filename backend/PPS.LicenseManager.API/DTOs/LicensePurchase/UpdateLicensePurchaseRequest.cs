@@ -63,5 +63,12 @@ public class UpdateLicensePurchaseRequest
     [MaxLength(500)]
     public string? Remarks { get; set; }
 
+    // Optional link to the Purchase Requisition line item this license
+    // purchase was bought against - see CreateLicensePurchaseRequest's
+    // comment. Only re-validated by LicensePurchaseService.UpdateAsync when
+    // this value or TotalLicenses actually changes from what's already on
+    // the purchase.
+    public int? PurchaseRequisitionLineItemId { get; set; }
+
     public bool IsActive { get; set; }
 }
