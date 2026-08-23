@@ -1062,6 +1062,14 @@ public class MaterialMovementService : IMaterialMovementService
             TransporterId = request.TransporterId,
             VehicleNumber = NullIfBlank(request.VehicleNumber),
             GatePassNumber = gatePassNumber,
+            // Encodes the gate pass number itself - the same value already
+            // printed as the manual-verification handle on the PDF (see
+            // MaterialMovementGatePassPdfDocument's QR Verification
+            // section), so a scan and a manual read resolve to the same
+            // lookup. One QR per gate pass/shipment, not one per asset line
+            // - confirmed decision, since a movement can carry several
+            // assets under a single physical dispatch.
+            QrPayload = gatePassNumber,
             CreatedAt = DateTime.UtcNow
         };
 

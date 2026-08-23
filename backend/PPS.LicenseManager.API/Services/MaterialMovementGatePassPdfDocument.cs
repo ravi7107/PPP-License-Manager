@@ -21,15 +21,16 @@ namespace PPS.LicenseManager.API.Services;
  *   5. Transporter - always shown now (used to be conditional), "-" when
  *      not set, since it's a fixed section of the printed pass.
  *   6. Approval history.
- *   7. QR verification - deliberately NOT a real scannable QR code yet;
- *      per the confirmed v1 decision, adding a QR-generation NuGet
- *      package carries real risk of a build break that can't be
- *      compile-verified in the deploy sandbox this session works in (no
- *      dotnet CLI here - see this class's git history for the same
- *      reasoning, and the QuestPDF using-directive hotfix that already
- *      happened once this session). Reserves a clearly labeled
- *      placeholder box with the Gate Pass Number as the manual
- *      verification handle, ready to swap in a real QR image later.
+ *   7. QR verification - a real, scannable QR code (via
+ *      AssetQrCodeGenerator, the same ZXing-based SVG renderer already
+ *      proven in production by AssetQrLabelPdfDocument) encoding this
+ *      dispatch's GatePassNumber, whenever MaterialMovementDispatch.
+ *      QrPayload is populated (every dispatch created going forward -
+ *      see MaterialMovementService.DispatchAsync). Falls back to the
+ *      original grey placeholder box for any older dispatch row that
+ *      predates QrPayload being set, so a re-download of an
+ *      already-issued gate pass keeps rendering exactly as it did before
+ *      this change - only newly dispatched movements get a real QR.
  *   8. Security gate verification - a printed sign-off block only (blank
  *      lines for the security guard's name/signature/date-time at the
  *      physical gate). No new digital workflow step or database field,
@@ -433,16 +434,39 @@ public class MaterialMovementGatePassPdfDocument : IDocument
         });
     }
 
-    // 7. QR verification - see this class's top comment for why there's
-    // no real QR image yet. This reserves the visual slot and keeps the
-    // Gate Pass Number as the manual verification handle in the
-    // meantime, so swapping in a real QR image later is a layout-only
-    // change (replace the placeholder box's content with an Image call).
+    // 7. QR verification - see this class's top comment. Renders a real
+    // scannable QR (encoding GatePassNumber) when QrPayload is set on
+    // this dispatch; otherwise falls back to the original placeholder box
+    // unchanged, so older already-issued gate passes keep rendering
+    // exactly as before.
     private void ComposeQrVerificationPlaceholder(IContainer container)
     {
         container.Column(column =>
         {
             column.Item().Text("QR Verification").FontSize(11).Bold();
+
+            if (!string.IsNullOrWhiteSpace(_dispatch.QrPayload))
+            {
+                var qrSvg = AssetQrCodeGenerator.GenerateSvg(_dispatch.QrPayload);
+
+                column.Item().PaddingTop(4).Background(Colors.Grey.Lighten4).Padding(10).Row(row =>
+                {
+                    row.ConstantItem(64).AlignMiddle().AspectRatio(1).Svg(qrSvg);
+
+                    row.RelativeItem().PaddingLeft(12).Column(c =>
+                    {
+                        c.Item().Text(
+                            "Scan to verify this gate pass, or use the Gate Pass Number below.")
+                            .FontSize(9).FontColor(Colors.Grey.Darken2);
+
+                        c.Item().PaddingTop(6)
+                            .Text(_dispatch.GatePassNumber ?? $"Movement #{_movement.Id}")
+                            .FontSize(13).Bold();
+                    });
+                });
+
+                return;
+            }
 
             column.Item().PaddingTop(4).Background(Colors.Grey.Lighten4).Padding(10).Row(row =>
             {
