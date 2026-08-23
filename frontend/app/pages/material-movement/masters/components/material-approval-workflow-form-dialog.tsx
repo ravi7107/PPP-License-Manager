@@ -46,6 +46,7 @@ import { Department } from '@/lib/api/departments.api';
 
 const ANY_MOVEMENT_TYPE = '__any__';
 const NO_COMPANY = '__none__';
+const ANY_REQUIRES_IT_ASSET_LINE = '__any__';
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   InternalTransfer: 'Internal Transfer',
@@ -75,6 +76,9 @@ const schema = z
     // '' means "applies to every entity".
     fromCompanyId: z.string(),
     toCompanyId: z.string(),
+    // ANY_REQUIRES_IT_ASSET_LINE means "matches regardless"; otherwise
+    // 'true'/'false'.
+    requiresItAssetLine: z.string(),
     priority: z.coerce.number().int('Priority must be a whole number'),
     status: z.enum(['Active', 'Inactive']),
     steps: z
@@ -129,6 +133,7 @@ const EMPTY: MaterialApprovalWorkflowFormValues = {
   maxValue: '',
   fromCompanyId: NO_COMPANY,
   toCompanyId: NO_COMPANY,
+  requiresItAssetLine: ANY_REQUIRES_IT_ASSET_LINE,
   priority: 100,
   status: 'Active',
   steps: [EMPTY_STEP],
@@ -156,6 +161,10 @@ function toFormValues(
       workflow.toCompanyId != null
         ? String(workflow.toCompanyId)
         : NO_COMPANY,
+    requiresItAssetLine:
+      workflow.requiresItAssetLine == null
+        ? ANY_REQUIRES_IT_ASSET_LINE
+        : String(workflow.requiresItAssetLine),
     priority: workflow.priority,
     status: workflow.isActive ? 'Active' : 'Inactive',
     steps: workflow.steps.length
@@ -435,6 +444,46 @@ export function MaterialApprovalWorkflowFormDialog({
                     </Select>
 
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="requiresItAssetLine"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Requires IT Asset Line</FormLabel>
+
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+
+                      <SelectContent>
+                        <SelectItem value={ANY_REQUIRES_IT_ASSET_LINE}>
+                          Any
+                        </SelectItem>
+                        <SelectItem value="true">
+                          Yes - carries a serialized IT asset
+                        </SelectItem>
+                        <SelectItem value="false">
+                          No - does not carry one
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      Routes movements that (don&apos;t) carry a
+                      specific serialized IT asset line through
+                      this workflow.
+                    </p>
                   </FormItem>
                 )}
               />

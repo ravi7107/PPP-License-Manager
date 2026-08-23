@@ -25,6 +25,10 @@ public class CreateMaterialApprovalWorkflowRequest
 
     public int? ToCompanyId { get; set; }
 
+    // Null matches regardless; true/false requires the movement to (not)
+    // carry a line item linked to a serialized IT asset.
+    public bool? RequiresItAssetLine { get; set; }
+
     // Lower evaluates first when more than one workflow matches a movement.
     public int Priority { get; set; } = 100;
 

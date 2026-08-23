@@ -22,6 +22,9 @@ export interface MaterialApprovalWorkflow {
   fromCompanyName: string | null;
   toCompanyId: number | null;
   toCompanyName: string | null;
+  // null matches regardless; true/false requires the movement to (not)
+  // carry a line item linked to a serialized IT asset.
+  requiresItAssetLine: boolean | null;
   isActive: boolean;
   priority: number;
   createdAt: string;
@@ -70,6 +73,7 @@ export interface CreateMaterialApprovalWorkflowRequest {
   maxValue?: number | null;
   fromCompanyId?: number | null;
   toCompanyId?: number | null;
+  requiresItAssetLine?: boolean | null;
   priority: number;
   steps: CreateMaterialApprovalWorkflowStepRequest[];
 }

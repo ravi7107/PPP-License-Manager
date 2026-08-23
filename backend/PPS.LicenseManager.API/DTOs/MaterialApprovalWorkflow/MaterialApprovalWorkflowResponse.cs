@@ -14,6 +14,8 @@ public class MaterialApprovalWorkflowResponse
     public int? ToCompanyId { get; set; }
     public string? ToCompanyName { get; set; }
 
+    public bool? RequiresItAssetLine { get; set; }
+
     public bool IsActive { get; set; }
     public int Priority { get; set; }
 

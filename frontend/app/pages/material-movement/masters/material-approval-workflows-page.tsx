@@ -41,6 +41,7 @@ import {
 
 const ANY_MOVEMENT_TYPE = '__any__';
 const NO_COMPANY = '__none__';
+const ANY_REQUIRES_IT_ASSET_LINE = '__any__';
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   InternalTransfer: 'Internal Transfer',
@@ -188,6 +189,10 @@ export default function MaterialApprovalWorkflowsPage() {
         values.toCompanyId === NO_COMPANY
           ? null
           : Number(values.toCompanyId),
+      requiresItAssetLine:
+        values.requiresItAssetLine === ANY_REQUIRES_IT_ASSET_LINE
+          ? null
+          : values.requiresItAssetLine === 'true',
       priority: values.priority,
       steps: values.steps.map((step) => ({
         approverType: step.approverType,
@@ -333,6 +338,7 @@ export default function MaterialApprovalWorkflowsPage() {
                 <th>Movement Type</th>
                 <th>Value Range</th>
                 <th>Entities</th>
+                <th>IT Asset Line</th>
                 <th>Steps</th>
                 <th>Priority</th>
                 <th>Status</th>
@@ -345,7 +351,7 @@ export default function MaterialApprovalWorkflowsPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={canEdit ? 8 : 7}
+                    colSpan={canEdit ? 9 : 8}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     Loading workflows…
@@ -354,7 +360,7 @@ export default function MaterialApprovalWorkflowsPage() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canEdit ? 8 : 7}
+                    colSpan={canEdit ? 9 : 8}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
                     No approval workflows found.
@@ -390,6 +396,14 @@ export default function MaterialApprovalWorkflowsPage() {
                           To: {workflow.toCompanyName ?? 'Any'}
                         </span>
                       </div>
+                    </td>
+
+                    <td className="nova-cell-sub">
+                      {workflow.requiresItAssetLine == null
+                        ? 'Any'
+                        : workflow.requiresItAssetLine
+                          ? 'Yes'
+                          : 'No'}
                     </td>
 
                     <td className="nova-cell-sub">

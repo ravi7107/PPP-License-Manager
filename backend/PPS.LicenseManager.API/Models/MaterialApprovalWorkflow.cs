@@ -35,6 +35,15 @@ public class MaterialApprovalWorkflow
     public int? ToCompanyId { get; set; }
     public Company? ToCompany { get; set; }
 
+    // Null matches regardless (same "matches anything" convention as
+    // MovementType/company pair above). True/false requires the movement
+    // to have (or not have) at least one line item carrying a serialized
+    // IT asset - see MaterialMovementItem.cs's own comment on AssetId -
+    // used to route IT-asset-carrying movements through a different
+    // workflow (e.g. via Security) than everything else. See
+    // MaterialMovementService.SubmitAsync for where this is evaluated.
+    public bool? RequiresItAssetLine { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     // Lower evaluates first when more than one workflow matches a

@@ -1260,6 +1260,7 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasIndex(x => x.Priority);
             entity.HasIndex(x => x.FromCompanyId);
             entity.HasIndex(x => x.ToCompanyId);
+            entity.HasIndex(x => x.RequiresItAssetLine);
 
             entity.HasOne(x => x.FromCompany).WithMany().HasForeignKey(x => x.FromCompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ToCompany).WithMany().HasForeignKey(x => x.ToCompanyId).OnDelete(DeleteBehavior.Restrict);

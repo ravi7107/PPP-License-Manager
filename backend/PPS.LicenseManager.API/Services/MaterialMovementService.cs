@@ -739,16 +739,23 @@ public class MaterialMovementService : IMaterialMovementService
             throw new InvalidOperationException(
                 "Only Draft movements can be submitted.");
 
+        // Whether this movement carries at least one line item linked to a
+        // specific serialized IT Asset - the same signal
+        // MaterialMovementItem.cs's own doc comment defines AssetId as.
+        // Used below to route IT-asset-carrying movements through a
+        // different workflow (e.g. via Security) than everything else.
+        var hasItAssetLine = movement.Items.Any(i => i.AssetId.HasValue);
+
         // Highest-Priority (lowest number = evaluated first) active
-        // workflow whose MovementType/company pair matches, per
-        // MaterialApprovalWorkflow.cs's class comment. MinValue/MaxValue
-        // are deliberately NOT evaluated here - there's no monetary value
-        // anywhere reachable from a movement or its items (MaterialItem/
-        // Asset have no price field), so a value-bounded workflow can
-        // never be correctly matched today. Only workflows with both
-        // bounds null are considered; a value-scoped workflow silently
-        // never matches, which is a known v1 limitation, not a bug to
-        // chase here.
+        // workflow whose MovementType/company pair/IT-asset-line
+        // requirement matches, per MaterialApprovalWorkflow.cs's class
+        // comment. MinValue/MaxValue are deliberately NOT evaluated here -
+        // there's no monetary value anywhere reachable from a movement or
+        // its items (MaterialItem/Asset have no price field), so a
+        // value-bounded workflow can never be correctly matched today.
+        // Only workflows with both bounds null are considered; a
+        // value-scoped workflow silently never matches, which is a known
+        // v1 limitation, not a bug to chase here.
         var workflow = await _context.MaterialApprovalWorkflows
             .Include(w => w.Steps)
             .Where(w => w.IsActive)
@@ -756,7 +763,9 @@ public class MaterialMovementService : IMaterialMovementService
             .Where(w => w.MovementType == null || w.MovementType == movement.MovementType)
             .Where(w => w.FromCompanyId == null || w.FromCompanyId == movement.FromCompanyId)
             .Where(w => w.ToCompanyId == null || w.ToCompanyId == movement.ToCompanyId)
+            .Where(w => w.RequiresItAssetLine == null || w.RequiresItAssetLine == hasItAssetLine)
             .OrderBy(w => w.Priority)
+            .ThenBy(w => w.Id)
             .FirstOrDefaultAsync();
 
         if (workflow == null)

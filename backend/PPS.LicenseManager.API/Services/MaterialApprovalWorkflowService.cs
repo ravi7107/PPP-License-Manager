@@ -72,6 +72,7 @@ public class MaterialApprovalWorkflowService : IMaterialApprovalWorkflowService
                 FromCompanyName = w.FromCompany != null ? w.FromCompany.Name : null,
                 ToCompanyId = w.ToCompanyId,
                 ToCompanyName = w.ToCompany != null ? w.ToCompany.Name : null,
+                RequiresItAssetLine = w.RequiresItAssetLine,
                 IsActive = w.IsActive,
                 Priority = w.Priority,
                 CreatedAt = w.CreatedAt,
@@ -115,6 +116,7 @@ public class MaterialApprovalWorkflowService : IMaterialApprovalWorkflowService
                 FromCompanyName = w.FromCompany != null ? w.FromCompany.Name : null,
                 ToCompanyId = w.ToCompanyId,
                 ToCompanyName = w.ToCompany != null ? w.ToCompany.Name : null,
+                RequiresItAssetLine = w.RequiresItAssetLine,
                 IsActive = w.IsActive,
                 Priority = w.Priority,
                 CreatedAt = w.CreatedAt,
@@ -163,6 +165,7 @@ public class MaterialApprovalWorkflowService : IMaterialApprovalWorkflowService
             MaxValue = request.MaxValue,
             FromCompanyId = request.FromCompanyId,
             ToCompanyId = request.ToCompanyId,
+            RequiresItAssetLine = request.RequiresItAssetLine,
             Priority = request.Priority,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -211,6 +214,7 @@ public class MaterialApprovalWorkflowService : IMaterialApprovalWorkflowService
         workflow.MaxValue = request.MaxValue;
         workflow.FromCompanyId = request.FromCompanyId;
         workflow.ToCompanyId = request.ToCompanyId;
+        workflow.RequiresItAssetLine = request.RequiresItAssetLine;
         workflow.Priority = request.Priority;
         workflow.IsActive = request.IsActive;
         workflow.UpdatedAt = DateTime.UtcNow;

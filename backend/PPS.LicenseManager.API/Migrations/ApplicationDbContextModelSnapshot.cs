@@ -1125,6 +1125,9 @@ namespace PPS.LicenseManager.API.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(100);
 
+                    b.Property<bool?>("RequiresItAssetLine")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("ToCompanyId")
                         .HasColumnType("integer");
 
@@ -1140,6 +1143,8 @@ namespace PPS.LicenseManager.API.Migrations
                     b.HasIndex("MovementType");
 
                     b.HasIndex("Priority");
+
+                    b.HasIndex("RequiresItAssetLine");
 
                     b.HasIndex("ToCompanyId");
 
