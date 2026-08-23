@@ -24,13 +24,21 @@ public class MaterialApprovalWorkflowService : IMaterialApprovalWorkflowService
 
     // Must match the backend Roles table / AppRole names on the frontend
     // (lib/auth/roles.ts's KNOWN_ROLES).
+    //
+    // "Security" (added for the QR-driven material movement transfer/
+    // receive flow) is listed here for completeness/future use, but a
+    // Role-typed approval step doesn't actually function yet - see the
+    // v1 restriction to named-user-only steps in
+    // MaterialMovementService.SubmitAsync. It becomes meaningful
+    // automatically if that restriction is ever lifted.
     public static readonly string[] AllowedApproverRoles =
     {
         "Super Admin",
         "IT Admin",
         "Team Lead",
         "Manager",
-        "Employee"
+        "Employee",
+        "Security"
     };
 
     public static readonly string[] AllowedApproverTypes =

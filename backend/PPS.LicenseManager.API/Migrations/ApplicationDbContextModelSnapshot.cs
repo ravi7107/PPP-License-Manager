@@ -3364,6 +3364,14 @@ namespace PPS.LicenseManager.API.Migrations
                             DisplayOrder = 5,
                             IsActive = true,
                             Name = "Employee"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Description = "Confirm physical transfer/receipt of material movements",
+                            DisplayOrder = 6,
+                            IsActive = true,
+                            Name = "Security"
                         });
                 });
 
