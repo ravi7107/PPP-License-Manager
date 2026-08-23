@@ -11,9 +11,9 @@ namespace PPS.LicenseManager.API.Migrations
     // Adds a "Security" role, needed for the QR-driven material movement
     // transfer/receive flow (Security staff confirm physical dispatch/
     // receipt via the mobile scanner app - see MaterialMovementService's
-    // upcoming Transfer/Receive endpoints). Mirrors SeedDefaultRoles.cs's
-    // exact InsertData/DeleteData shape - Id 6 continues on from the 5
-    // roles seeded there.
+    // upcoming Transfer/Receive endpoints). Id 6 continues on from the 5
+    // roles seeded by SeedDefaultRoles.cs (see the Up() method below for
+    // why this uses raw SQL instead of that migration's InsertData shape).
     //
     // Like 20260822150000_WidenPurchaseRequisitionLineItemDescription.cs,
     // this skips the separate Designer.cs and puts the [DbContext]/
@@ -31,22 +31,29 @@ namespace PPS.LicenseManager.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.InsertData(
-                table: "Roles",
-                columns: new[] { "Id", "Description", "DisplayOrder", "IsActive", "Name" },
-                values: new object[,]
-                {
-                    { 6, "Confirm physical transfer/receipt of material movements", 6, true, "Security" }
-                });
+            // Raw SQL, not migrationBuilder.InsertData(...), deliberately.
+            // InsertData/DeleteData resolve their column mappings against
+            // this migration's TargetModel - which, without a paired
+            // Designer.cs BuildTargetModel() snapshot (this project has no
+            // dotnet-ef CLI to regenerate one, and hand-authoring a full,
+            // unverifiable model snapshot for the entire current schema is
+            // its own risk), is an EMPTY model. That fails at apply time
+            // with "There is no entity type mapped to the table 'Roles'"
+            // (confirmed live on the server). Raw SQL has no such
+            // dependency - it is emitted exactly as written, matching the
+            // real "Roles" table shape (see
+            // ApplicationDbContextModelSnapshot.cs's Role entity: Id
+            // integer, Description text, DisplayOrder integer, IsActive
+            // boolean, Name text).
+            migrationBuilder.Sql(
+                "INSERT INTO \"Roles\" (\"Id\", \"Description\", \"DisplayOrder\", \"IsActive\", \"Name\") " +
+                "VALUES (6, 'Confirm physical transfer/receipt of material movements', 6, TRUE, 'Security');");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(
-                table: "Roles",
-                keyColumn: "Id",
-                keyValue: 6);
+            migrationBuilder.Sql("DELETE FROM \"Roles\" WHERE \"Id\" = 6;");
         }
     }
 }
