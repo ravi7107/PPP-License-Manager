@@ -14,7 +14,7 @@ public class MaterialMovementDispatchResponse
 
     public string? GatePassNumber { get; set; }
 
-    // Null until Security's mobile "Transfer" tap confirms the goods
+    // Null until Facility's mobile "Transfer" tap confirms the goods
     // physically left - see MaterialMovementDispatch.TransferredByUserId's
     // own comment on why this is distinct from DispatchedByUserId/
     // DispatchedAt above. Always null for movements dispatched via the

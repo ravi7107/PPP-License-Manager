@@ -3408,7 +3408,7 @@ namespace PPS.LicenseManager.API.Migrations
                             Description = "Confirm physical transfer/receipt of material movements",
                             DisplayOrder = 6,
                             IsActive = true,
-                            Name = "Security"
+                            Name = "Facility"
                         });
                 });
 

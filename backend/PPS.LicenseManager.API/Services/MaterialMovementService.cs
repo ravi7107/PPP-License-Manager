@@ -762,7 +762,7 @@ public class MaterialMovementService : IMaterialMovementService
         // specific serialized IT Asset - the same signal
         // MaterialMovementItem.cs's own doc comment defines AssetId as.
         // Used below to route IT-asset-carrying movements through a
-        // different workflow (e.g. via Security) than everything else.
+        // different workflow (e.g. via Facility) than everything else.
         var hasItAssetLine = movement.Items.Any(i => i.AssetId.HasValue);
 
         // Highest-Priority (lowest number = evaluated first) active
@@ -1670,7 +1670,7 @@ public class MaterialMovementService : IMaterialMovementService
         // isPrivileged: true - same "having been allowed to act via the
         // controller's role gate IS the authorization for viewing the
         // result" reasoning as DecideAsync/DispatchAsync/MarkReturnedAsync's
-        // own final GetByIdAsync calls. A Security user is never this
+        // own final GetByIdAsync calls. A Facility user is never this
         // movement's owner or an assigned approver.
         return await GetByIdAsync(id, transferredByUserId, isPrivileged: true);
     }

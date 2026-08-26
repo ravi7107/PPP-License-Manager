@@ -39,7 +39,7 @@ public class MaterialMovementDispatch
     [MaxLength(500)]
     public string? QrPayload { get; set; }
 
-    // Set once security's mobile "Transfer" tap confirms the goods
+    // Set once Facility's mobile "Transfer" tap confirms the goods
     // physically left - distinct from DispatchedByUserId/DispatchedAt
     // above, which (since Phase 4 of the QR-driven material movement
     // plan) record who/when the gate pass was generated (the final

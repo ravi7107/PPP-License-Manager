@@ -4,7 +4,7 @@ export type AppRole =
   | 'Team Lead'
   | 'Manager'
   | 'Employee'
-  | 'Security';
+  | 'Facility';
 
 export type ModuleKey =
   | 'dashboard'
@@ -49,7 +49,7 @@ export type ModuleKey =
  * Team Lead
  * Manager
  * Employee
- * Security
+ * Facility
  */
 const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   // Business-analysis dashboard (hardware/license utilization, expiry,
@@ -220,19 +220,19 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
 
   // Raising/editing/deleting a movement Draft is open to any employee,
   // same as Purchase Requisitions - it's not an admin-only masters
-  // screen like the four above. Security is included so staff confirming
+  // screen like the four above. Facility is included so staff confirming
   // physical transfer/receipt (see MaterialMovementService's Transfer/
   // Receive endpoints) can also open this module from the web app if
   // they aren't purely using the mobile scanner app - default access
   // only, an admin can narrow this later via Access Management if
-  // Security turns out to be mobile-only in practice.
+  // Facility turns out to be mobile-only in practice.
   materialMovements: [
     'Super Admin',
     'IT Admin',
     'Team Lead',
     'Manager',
     'Employee',
-    'Security',
+    'Facility',
   ],
 
   // Software License Utilization & Analytics module - same audience as
@@ -264,7 +264,7 @@ const KNOWN_ROLES: AppRole[] = [
   'Team Lead',
   'Manager',
   'Employee',
-  'Security',
+  'Facility',
 ];
 
 /*
@@ -296,8 +296,8 @@ function normalizeRole(role: string): AppRole | null {
     case 'employee':
       return 'Employee';
 
-    case 'security':
-      return 'Security';
+    case 'facility':
+      return 'Facility';
 
     default:
       return null;
@@ -415,8 +415,8 @@ export function isEmployee(userRoles: AppRole[]): boolean {
   return userRoles.includes('Employee');
 }
 
-export function isSecurity(userRoles: AppRole[]): boolean {
-  return userRoles.includes('Security');
+export function isFacility(userRoles: AppRole[]): boolean {
+  return userRoles.includes('Facility');
 }
 
 /*

@@ -40,7 +40,7 @@ public class MaterialApprovalWorkflow
     // to have (or not have) at least one line item carrying a serialized
     // IT asset - see MaterialMovementItem.cs's own comment on AssetId -
     // used to route IT-asset-carrying movements through a different
-    // workflow (e.g. via Security) than everything else. See
+    // workflow (e.g. via Facility) than everything else. See
     // MaterialMovementService.SubmitAsync for where this is evaluated.
     public bool? RequiresItAssetLine { get; set; }
 

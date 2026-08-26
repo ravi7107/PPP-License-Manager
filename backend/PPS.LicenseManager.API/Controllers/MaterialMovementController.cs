@@ -416,16 +416,16 @@ public class MaterialMovementController : BaseController
     // All three below are what the external "PPS Asset Scanner" mobile
     // app calls after scanning a gate pass QR - see
     // IMaterialMovementService's own doc comments on each. Same admin-
-    // level access as Dispatch/MarkReturned/RgpTracking, plus the new
-    // "Security" role (Phase 0) - this is exactly the QR-driven flow that
-    // role was added for.
+    // level access as Dispatch/MarkReturned/RgpTracking, plus the
+    // "Facility" role (Phase 0, renamed from "Security") - this is
+    // exactly the QR-driven flow that role was added for.
 
     // No IsPrivileged()/owner/assigned-approver check here, unlike
     // GetById - see GetByGatePassNumberAsync's own doc comment for why
     // that narrower access model doesn't apply to a gate-pass lookup.
     // This role-based [Authorize] gate is the only access control needed.
     [HttpGet("by-gate-pass/{gatePassNumber}")]
-    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    [Authorize(Roles = "Facility,Super Admin,IT Admin")]
     public async Task<IActionResult> GetByGatePassNumber(string gatePassNumber)
     {
         var result = await _service.GetByGatePassNumberAsync(gatePassNumber);
@@ -437,7 +437,7 @@ public class MaterialMovementController : BaseController
     }
 
     [HttpPost("{id:int}/transfer")]
-    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    [Authorize(Roles = "Facility,Super Admin,IT Admin")]
     public async Task<IActionResult> Transfer(int id)
     {
         try
@@ -468,7 +468,7 @@ public class MaterialMovementController : BaseController
     // otherwise reject a genuinely empty body before this method even
     // runs.
     [HttpPost("{id:int}/receive")]
-    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    [Authorize(Roles = "Facility,Super Admin,IT Admin")]
     public async Task<IActionResult> Receive(
         int id,
         [FromBody] ReceiveMaterialMovementRequest? request)
