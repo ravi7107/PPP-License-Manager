@@ -78,6 +78,38 @@ public class MaterialMovementService : IMaterialMovementService
         int requestingUserId,
         bool isPrivileged)
     {
+        var response = await LoadMovementResponseAsync(id);
+
+        if (response == null)
+            return null;
+
+        // A movement's currently-assigned approver needs to be able to
+        // open it (to see the full item list/approval trail before
+        // deciding) even though they're neither the owner nor a
+        // privileged role - same "assigned approver can view" carve-out
+        // as PurchaseRequisitionService.GetPdfFileAsync's isAssignedApprover
+        // check.
+        var isOwner = response.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = response.Approvals.Any(a =>
+            a.StepOrder == response.CurrentApprovalStepOrder &&
+            a.ApproverUserId == requestingUserId &&
+            a.Status == "Pending");
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this movement.");
+
+        return response;
+    }
+
+    // Shared projection used by GetByIdAsync (which layers its own owner/
+    // assigned-approver/privileged access check on top) and, since Phase
+    // 5, GetByGatePassNumberAsync (which deliberately does NOT layer that
+    // check - see that method's own doc comment on IMaterialMovementService).
+    // Extracted rather than duplicated so both callers stay byte-for-byte
+    // in sync with whatever fields MaterialMovementResponse carries.
+    private async Task<MaterialMovementResponse?> LoadMovementResponseAsync(int id)
+    {
         var response = await _context.MaterialMovements
             .AsNoTracking()
             .Where(m => m.Id == id)
@@ -155,22 +187,6 @@ public class MaterialMovementService : IMaterialMovementService
         if (response == null)
             return null;
 
-        // A movement's currently-assigned approver needs to be able to
-        // open it (to see the full item list/approval trail before
-        // deciding) even though they're neither the owner nor a
-        // privileged role - same "assigned approver can view" carve-out
-        // as PurchaseRequisitionService.GetPdfFileAsync's isAssignedApprover
-        // check.
-        var isOwner = response.RequestedByUserId == requestingUserId;
-        var isAssignedApprover = response.Approvals.Any(a =>
-            a.StepOrder == response.CurrentApprovalStepOrder &&
-            a.ApproverUserId == requestingUserId &&
-            a.Status == "Pending");
-
-        if (!isOwner && !isPrivileged && !isAssignedApprover)
-            throw new UnauthorizedAccessException(
-                "You don't have access to this movement.");
-
         response.Dispatch = await _context.MaterialMovementDispatches
             .AsNoTracking()
             .Where(d => d.MovementId == id)
@@ -184,6 +200,9 @@ public class MaterialMovementService : IMaterialMovementService
                 TransporterName = d.Transporter != null ? d.Transporter.Name : null,
                 VehicleNumber = d.VehicleNumber,
                 GatePassNumber = d.GatePassNumber,
+                TransferredByUserId = d.TransferredByUserId,
+                TransferredByUserName = d.TransferredByUser != null ? d.TransferredByUser.FullName : null,
+                TransferredAt = d.TransferredAt,
                 HasGatePassPdf = d.GatePassPdfPath != null
             })
             .FirstOrDefaultAsync();
@@ -1571,6 +1590,244 @@ public class MaterialMovementService : IMaterialMovementService
         // controller level, so the caller is never the movement's owner
         // by default.
         return await GetByIdAsync(id, returnedByUserId, isPrivileged: true);
+    }
+
+    // =========================================================
+    // MOBILE: GATE PASS LOOKUP / TRANSFER / RECEIVE (Phase 5)
+    // =========================================================
+
+    public async Task<MaterialMovementResponse?> GetByGatePassNumberAsync(
+        string gatePassNumber)
+    {
+        if (string.IsNullOrWhiteSpace(gatePassNumber))
+            return null;
+
+        // Same normalized exact-match lookup idiom as
+        // AssetService.GetFullDetailByCodeAsync - the QR payload IS the
+        // gate pass number (see MaterialMovementDispatch.QrPayload), so a
+        // scan always supplies the value verbatim; normalizing case/
+        // whitespace here just also covers a manual-entry fallback in the
+        // scanning app.
+        var normalized = gatePassNumber.Trim().ToLower();
+
+        var movementId = await _context.MaterialMovementDispatches
+            .Where(d => d.GatePassNumber != null && d.GatePassNumber.ToLower() == normalized)
+            .Select(d => (int?)d.MovementId)
+            .FirstOrDefaultAsync();
+
+        if (movementId == null)
+            return null;
+
+        return await LoadMovementResponseAsync(movementId.Value);
+    }
+
+    public async Task<MaterialMovementResponse?> TransferAsync(
+        int id,
+        int transferredByUserId,
+        string? ipAddress)
+    {
+        var movement = await _context.MaterialMovements
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (movement == null)
+            return null;
+
+        if (movement.Status != "AwaitingTransfer")
+            throw new InvalidOperationException(
+                "Only movements awaiting transfer can be transferred.");
+
+        var dispatch = await _context.MaterialMovementDispatches
+            .FirstOrDefaultAsync(d => d.MovementId == id);
+
+        // Should be unreachable in practice - every movement that reaches
+        // "AwaitingTransfer" got there via GenerateGatePassOnApprovalAsync,
+        // which always creates this row in the same save. Guarded anyway
+        // rather than assumed, same defensive style as DispatchAsync's own
+        // alreadyDispatched check.
+        if (dispatch == null)
+            throw new InvalidOperationException(
+                "This movement has no gate pass to transfer against.");
+
+        dispatch.TransferredByUserId = transferredByUserId;
+        dispatch.TransferredAt = DateTime.UtcNow;
+
+        movement.Status = "Dispatched";
+        movement.UpdatedAt = DateTime.UtcNow;
+
+        AddAuditLog(movement.Id, "Transferred", transferredByUserId,
+            details: $"Gate pass {dispatch.GatePassNumber}", ipAddress: ipAddress);
+
+        AddNotification(
+            movement.RequestedByUserId,
+            "MaterialMovementTransferred",
+            "Material movement transferred",
+            $"Your movement {movement.MovementNumber} has been physically " +
+            $"transferred (gate pass {dispatch.GatePassNumber}).",
+            movement.Id);
+
+        await _context.SaveChangesAsync();
+
+        // isPrivileged: true - same "having been allowed to act via the
+        // controller's role gate IS the authorization for viewing the
+        // result" reasoning as DecideAsync/DispatchAsync/MarkReturnedAsync's
+        // own final GetByIdAsync calls. A Security user is never this
+        // movement's owner or an assigned approver.
+        return await GetByIdAsync(id, transferredByUserId, isPrivileged: true);
+    }
+
+    public async Task<MaterialMovementResponse?> ReceiveAsync(
+        int id,
+        int receivedByUserId,
+        ReceiveMaterialMovementRequest request,
+        string? ipAddress)
+    {
+        var movement = await _context.MaterialMovements
+            .Include(m => m.Items)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (movement == null)
+            return null;
+
+        // Deliberately checks Status directly rather than "TransferAsync
+        // already ran" - a movement dispatched via the pre-Phase-4 manual
+        // Dispatch endpoint reaches "Dispatched" without ever passing
+        // through TransferAsync, and must still be receivable here (see
+        // this method's own doc comment on IMaterialMovementService).
+        if (movement.Status != "Dispatched")
+            throw new InvalidOperationException(
+                "Only Dispatched movements can be received.");
+
+        var alreadyReceived = await _context.MaterialMovementReceipts
+            .AnyAsync(r => r.MovementId == id);
+
+        if (alreadyReceived)
+            throw new InvalidOperationException(
+                "This movement has already been received.");
+
+        var requestItems = request.Items ?? new List<ReceiveMaterialMovementItemRequest>();
+
+        // ToDictionary below throws an unhandled ArgumentException on a
+        // duplicate key (e.g. a mobile network retry double-submitting the
+        // same line) - checked explicitly here so that surfaces as a clean
+        // 400 instead of falling through to a generic 500.
+        var duplicateItemIds = requestItems
+            .GroupBy(i => i.MovementItemId)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateItemIds.Count > 0)
+            throw new InvalidOperationException(
+                $"Item(s) {string.Join(", ", duplicateItemIds)} appear more than once in the request.");
+
+        var overridesByItemId = requestItems.ToDictionary(i => i.MovementItemId);
+
+        var unknownItemIds = overridesByItemId.Keys
+            .Where(itemId => movement.Items.All(mi => mi.Id != itemId))
+            .ToList();
+
+        if (unknownItemIds.Count > 0)
+            throw new InvalidOperationException(
+                $"Item(s) {string.Join(", ", unknownItemIds)} are not part of this movement.");
+
+        var receipt = new Models.MaterialMovementReceipt
+        {
+            MovementId = movement.Id,
+            ReceivedByUserId = receivedByUserId,
+            ReceivedAt = DateTime.UtcNow,
+            DiscrepancyNotes = NullIfBlank(request.DiscrepancyNotes),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var hasDiscrepancy = false;
+
+        // Asset IDs to update CurrentLocationId for below - only lines
+        // actually recorded as received (QuantityReceived > 0) go in here.
+        // A line marked short/not-received (e.g. lost in transit) must
+        // NOT be treated as having arrived just because it was part of
+        // this shipment - see the ToLocationId block below for the write
+        // itself.
+        var receivedAssetIds = new HashSet<int>();
+
+        foreach (var movementItem in movement.Items)
+        {
+            overridesByItemId.TryGetValue(movementItem.Id, out var overrideLine);
+
+            // Defaults to "received in full, unchanged condition" when no
+            // override line was supplied for this item - the simple
+            // "scan and tap Receive" mobile flow needs no per-line entry
+            // at all (see ReceiveMaterialMovementRequest's own comment).
+            var quantityReceived = overrideLine?.QuantityReceived ?? movementItem.Quantity;
+            var condition = NullIfBlank(overrideLine?.Condition) ?? movementItem.Condition;
+            var lineDiscrepancyNotes = NullIfBlank(overrideLine?.DiscrepancyNotes);
+
+            if (quantityReceived < movementItem.Quantity)
+                hasDiscrepancy = true;
+
+            if (!string.IsNullOrWhiteSpace(condition) &&
+                !string.IsNullOrWhiteSpace(movementItem.Condition) &&
+                !string.Equals(condition, movementItem.Condition, StringComparison.OrdinalIgnoreCase))
+                hasDiscrepancy = true;
+
+            if (lineDiscrepancyNotes != null)
+                hasDiscrepancy = true;
+
+            receipt.ReceiptItems.Add(new Models.MaterialMovementReceiptItem
+            {
+                MovementItemId = movementItem.Id,
+                QuantityReceived = quantityReceived,
+                Condition = condition,
+                DiscrepancyNotes = lineDiscrepancyNotes,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            if (movementItem.AssetId.HasValue && quantityReceived > 0)
+                receivedAssetIds.Add(movementItem.AssetId.Value);
+        }
+
+        receipt.HasDiscrepancy = hasDiscrepancy || receipt.DiscrepancyNotes != null;
+
+        _context.MaterialMovementReceipts.Add(receipt);
+
+        // The actual fix for Asset.CurrentLocationId never being written
+        // (see that field's own doc comment on Asset.cs) - only for lines
+        // that carry a specific serialized IT Asset AND were actually
+        // recorded as received (see receivedAssetIds above), and only
+        // when this movement actually has a destination location
+        // (ToLocationId is null for movement types with no "arrival"
+        // side, e.g. OutwardToVendor - correctly a no-op there). Going
+        // forward only, per the plan's confirmed decision - no backfill
+        // of historical assets, and this is the only place in the
+        // codebase that ever writes this field.
+        if (movement.ToLocationId.HasValue && receivedAssetIds.Count > 0)
+        {
+            var assets = await _context.Assets
+                .Where(a => receivedAssetIds.Contains(a.Id))
+                .ToListAsync();
+
+            foreach (var asset in assets)
+                asset.CurrentLocationId = movement.ToLocationId;
+        }
+
+        movement.Status = "Received";
+        movement.UpdatedAt = DateTime.UtcNow;
+
+        AddAuditLog(movement.Id, "Received", receivedByUserId,
+            details: receipt.HasDiscrepancy ? "Received with discrepancy" : "Received",
+            ipAddress: ipAddress);
+
+        AddNotification(
+            movement.RequestedByUserId,
+            "MaterialMovementReceived",
+            "Material movement received",
+            $"Your movement {movement.MovementNumber} has been received at its destination.",
+            movement.Id);
+
+        await _context.SaveChangesAsync();
+
+        // isPrivileged: true - same reasoning as TransferAsync's own final
+        // GetByIdAsync call above.
+        return await GetByIdAsync(id, receivedByUserId, isPrivileged: true);
     }
 
     // =========================================================

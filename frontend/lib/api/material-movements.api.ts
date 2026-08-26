@@ -35,6 +35,9 @@ export interface MaterialMovementDispatch {
   transporterName: string | null;
   vehicleNumber: string | null;
   gatePassNumber: string | null;
+  transferredByUserId: number | null;
+  transferredByUserName: string | null;
+  transferredAt: string | null;
   hasGatePassPdf: boolean;
 }
 

@@ -408,4 +408,93 @@ public class MaterialMovementController : BaseController
             return BadRequestResponse(ex.Message);
         }
     }
+
+    // =========================================================
+    // MOBILE: GATE PASS LOOKUP / TRANSFER / RECEIVE (Phase 5)
+    // =========================================================
+    //
+    // All three below are what the external "PPS Asset Scanner" mobile
+    // app calls after scanning a gate pass QR - see
+    // IMaterialMovementService's own doc comments on each. Same admin-
+    // level access as Dispatch/MarkReturned/RgpTracking, plus the new
+    // "Security" role (Phase 0) - this is exactly the QR-driven flow that
+    // role was added for.
+
+    // No IsPrivileged()/owner/assigned-approver check here, unlike
+    // GetById - see GetByGatePassNumberAsync's own doc comment for why
+    // that narrower access model doesn't apply to a gate-pass lookup.
+    // This role-based [Authorize] gate is the only access control needed.
+    [HttpGet("by-gate-pass/{gatePassNumber}")]
+    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    public async Task<IActionResult> GetByGatePassNumber(string gatePassNumber)
+    {
+        var result = await _service.GetByGatePassNumberAsync(gatePassNumber);
+
+        if (result == null)
+            return NotFoundResponse("No movement found for that gate pass.");
+
+        return Success(result, "Movement retrieved successfully.");
+    }
+
+    [HttpPost("{id:int}/transfer")]
+    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    public async Task<IActionResult> Transfer(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.TransferAsync(
+                id, currentUserId, GetClientIpAddress());
+
+            if (result == null)
+                return NotFoundResponse("Movement not found.");
+
+            return Success(result, "Movement transferred.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
+
+    // request is nullable/optional - the simple "scan and tap Receive"
+    // flow needs no request body at all (see
+    // ReceiveMaterialMovementRequest's own comment); [FromBody] would
+    // otherwise reject a genuinely empty body before this method even
+    // runs.
+    [HttpPost("{id:int}/receive")]
+    [Authorize(Roles = "Security,Super Admin,IT Admin")]
+    public async Task<IActionResult> Receive(
+        int id,
+        [FromBody] ReceiveMaterialMovementRequest? request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.ReceiveAsync(
+                id,
+                currentUserId,
+                request ?? new ReceiveMaterialMovementRequest(),
+                GetClientIpAddress());
+
+            if (result == null)
+                return NotFoundResponse("Movement not found.");
+
+            return Success(result, "Movement received.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
 }

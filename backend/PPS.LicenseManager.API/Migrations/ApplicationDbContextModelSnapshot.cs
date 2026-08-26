@@ -1612,6 +1612,12 @@ namespace PPS.LicenseManager.API.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("TransferredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("TransferredByUserId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("TransporterId")
                         .HasColumnType("integer");
 
@@ -1628,6 +1634,8 @@ namespace PPS.LicenseManager.API.Migrations
 
                     b.HasIndex("MovementId")
                         .IsUnique();
+
+                    b.HasIndex("TransferredByUserId");
 
                     b.HasIndex("TransporterId");
 
@@ -4224,6 +4232,11 @@ namespace PPS.LicenseManager.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "TransferredByUser")
+                        .WithMany()
+                        .HasForeignKey("TransferredByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PPS.LicenseManager.API.Models.MaterialTransporter", "Transporter")
                         .WithMany()
                         .HasForeignKey("TransporterId")
@@ -4232,6 +4245,8 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("DispatchedByUser");
 
                     b.Navigation("Movement");
+
+                    b.Navigation("TransferredByUser");
 
                     b.Navigation("Transporter");
                 });

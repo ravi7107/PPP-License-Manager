@@ -39,5 +39,19 @@ public class MaterialMovementDispatch
     [MaxLength(500)]
     public string? QrPayload { get; set; }
 
+    // Set once security's mobile "Transfer" tap confirms the goods
+    // physically left - distinct from DispatchedByUserId/DispatchedAt
+    // above, which (since Phase 4 of the QR-driven material movement
+    // plan) record who/when the gate pass was generated (the final
+    // approver), not who physically handed the goods over. Null until
+    // MaterialMovementService.TransferAsync runs; never set at all for
+    // movements dispatched via the pre-Phase-4 manual Dispatch endpoint,
+    // since those go straight from Approved to Dispatched with no
+    // separate transfer step.
+    public int? TransferredByUserId { get; set; }
+    public User? TransferredByUser { get; set; }
+
+    public DateTime? TransferredAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

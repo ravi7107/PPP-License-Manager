@@ -14,6 +14,16 @@ public class MaterialMovementDispatchResponse
 
     public string? GatePassNumber { get; set; }
 
+    // Null until Security's mobile "Transfer" tap confirms the goods
+    // physically left - see MaterialMovementDispatch.TransferredByUserId's
+    // own comment on why this is distinct from DispatchedByUserId/
+    // DispatchedAt above. Always null for movements dispatched via the
+    // pre-Phase-4 manual Dispatch endpoint (they never pass through
+    // TransferAsync).
+    public int? TransferredByUserId { get; set; }
+    public string? TransferredByUserName { get; set; }
+    public DateTime? TransferredAt { get; set; }
+
     // The frontend uses this to decide whether to show a "Download Gate
     // Pass" link - GatePassPdfPath itself is a server-local physical path
     // and is never sent to the client (same convention as

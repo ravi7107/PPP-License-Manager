@@ -114,6 +114,57 @@ public interface IMaterialMovementService
         string? ipAddress);
 
     // =========================================================
+    // MOBILE: GATE PASS LOOKUP / TRANSFER / RECEIVE (Phase 5)
+    // =========================================================
+
+    // Same exact-match-on-normalized-code lookup pattern as
+    // AssetService.GetFullDetailByCodeAsync, keyed on the already-unique-
+    // indexed GatePassNumber - this is what the external "PPS Asset
+    // Scanner" mobile app calls after scanning a gate pass QR (the QR
+    // payload IS the gate pass number - see MaterialMovementDispatch.QrPayload).
+    // Deliberately has no owner/assigned-approver/privileged access check
+    // of its own (unlike GetByIdAsync) - by the time a movement has a gate
+    // pass at all it's already past its approval stage, so "assigned
+    // approver" can never apply, and Security staff are never the
+    // movement's owner. The controller's role-based [Authorize] gate is
+    // the only access control this needs. Returns null if no dispatch row
+    // has that gate pass number.
+    Task<MaterialMovementResponse?> GetByGatePassNumberAsync(string gatePassNumber);
+
+    // Security's mobile "Transfer" tap - the physical-departure
+    // confirmation that replaces, for movements that went through Phase
+    // 4's auto-generated gate pass, what used to just be clicking the web
+    // Dispatch button. Requires Status == "AwaitingTransfer"; sets
+    // Status = "Dispatched" and stamps the dispatch row's
+    // TransferredByUserId/TransferredAt (kept distinct from
+    // DispatchedByUserId/DispatchedAt, which since Phase 4 record the
+    // final approver, not who physically transferred the goods). Movements
+    // dispatched via the pre-Phase-4 manual Dispatch endpoint go straight
+    // to "Dispatched" and never pass through here - see DispatchAsync.
+    Task<MaterialMovementResponse?> TransferAsync(
+        int id,
+        int transferredByUserId,
+        string? ipAddress);
+
+    // Security's mobile "Receive" tap at the destination end. Requires
+    // Status == "Dispatched" (regardless of whether that was reached via
+    // TransferAsync or the old manual DispatchAsync path - both converge
+    // on the same status). Creates the movement's MaterialMovementReceipt
+    // + one MaterialMovementReceiptItem per line (their first real use
+    // anywhere in the codebase), and - the actual fix for
+    // Asset.CurrentLocationId never being written - sets
+    // asset.CurrentLocationId on every line item carrying a specific
+    // serialized IT Asset, when the movement has a ToLocationId (a no-op
+    // for movement types with no destination, e.g. OutwardToVendor).
+    // Sets Status = "Received" (kept distinct from "Completed", still
+    // reserved for the unrelated WFH system-logged-movement path).
+    Task<MaterialMovementResponse?> ReceiveAsync(
+        int id,
+        int receivedByUserId,
+        ReceiveMaterialMovementRequest request,
+        string? ipAddress);
+
+    // =========================================================
     // SYSTEM-LOGGED MOVEMENTS (e.g. Work From Home via Asset Reallocation)
     // =========================================================
 

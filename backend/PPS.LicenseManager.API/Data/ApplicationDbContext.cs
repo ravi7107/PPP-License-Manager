@@ -1323,6 +1323,7 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasIndex(x => x.GatePassNumber).IsUnique();
             entity.HasIndex(x => x.TransporterId);
             entity.HasIndex(x => x.DispatchedByUserId);
+            entity.HasIndex(x => x.TransferredByUserId);
 
             entity.HasOne(x => x.Movement)
                   .WithMany()
@@ -1337,6 +1338,11 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.HasOne(x => x.Transporter)
                   .WithMany()
                   .HasForeignKey(x => x.TransporterId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TransferredByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.TransferredByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
