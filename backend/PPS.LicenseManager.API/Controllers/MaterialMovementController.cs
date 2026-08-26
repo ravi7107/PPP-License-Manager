@@ -246,7 +246,7 @@ public class MaterialMovementController : BaseController
             var currentUserId = GetCurrentUserId();
 
             var result = await _service.ApproveAsync(
-                id, currentUserId, request, GetClientIpAddress());
+                id, currentUserId, request, GetClientIpAddress(), GetPdfStorageRootPath());
 
             if (result == null)
                 return NotFoundResponse("Movement not found.");
@@ -273,7 +273,7 @@ public class MaterialMovementController : BaseController
             var currentUserId = GetCurrentUserId();
 
             var result = await _service.RejectAsync(
-                id, currentUserId, request, GetClientIpAddress());
+                id, currentUserId, request, GetClientIpAddress(), GetPdfStorageRootPath());
 
             if (result == null)
                 return NotFoundResponse("Movement not found.");

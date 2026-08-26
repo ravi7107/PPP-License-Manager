@@ -49,17 +49,24 @@ public interface IMaterialMovementService
         int requestedByUserId,
         string? ipAddress);
 
+    // pdfStorageRootPath is only actually used on the approve path, when
+    // the final approval step clears and a gate pass PDF is generated
+    // eagerly (see MaterialMovementService.DecideAsync) - accepted on
+    // both so the two wrapper methods keep sharing one signature shape,
+    // same as they already share one private DecideAsync implementation.
     Task<MaterialMovementResponse?> ApproveAsync(
         int id,
         int decidingUserId,
         DecideMaterialMovementRequest request,
-        string? ipAddress);
+        string? ipAddress,
+        string pdfStorageRootPath);
 
     Task<MaterialMovementResponse?> RejectAsync(
         int id,
         int decidingUserId,
         DecideMaterialMovementRequest request,
-        string? ipAddress);
+        string? ipAddress,
+        string pdfStorageRootPath);
 
     // Movements currently awaiting a decision from this user at their
     // CurrentApprovalStepOrder - same shape/intent as GetMineAsync, just
@@ -92,11 +99,14 @@ public interface IMaterialMovementService
     Task<RgpTrackingResponse> GetRgpTrackingAsync();
 
     // Closes out an RGP - creates the MaterialMovementReturn row if
-    // DispatchAsync hasn't already (movements dispatched before this
-    // existed), sets it to Returned, and moves the movement's own Status
-    // to "TemporaryReturned". Throws InvalidOperationException if the
-    // movement isn't a dispatched TemporaryMovement or is already marked
-    // returned.
+    // DispatchAsync (or, since Phase 4, the automatic gate-pass-on-
+    // approval path) hasn't already, sets it to Returned, and moves the
+    // movement's own Status to "TemporaryReturned". Requires
+    // Status == "Dispatched" explicitly (not just "a dispatch row
+    // exists") - since Phase 4, a dispatch row can exist while a movement
+    // is only "AwaitingTransfer", not yet physically sent. Throws
+    // InvalidOperationException if the movement isn't a Dispatched
+    // TemporaryMovement or is already marked returned.
     Task<MaterialMovementResponse?> MarkReturnedAsync(
         int id,
         int returnedByUserId,

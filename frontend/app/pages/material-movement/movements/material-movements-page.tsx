@@ -97,10 +97,12 @@ const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   DirectOutward: 'Direct Outward',
 };
 
-// Status: Draft, Submitted, PendingApproval, Approved, Dispatched,
-// InTransit, Received, Completed, Rejected, Cancelled,
+// Status: Draft, Submitted, PendingApproval, Approved, AwaitingTransfer,
+// Dispatched, InTransit, Received, Completed, Rejected, Cancelled,
 // TemporaryReturnPending, TemporaryReturned - must match
 // MaterialMovement.Status (backend Models/MaterialMovement.cs).
+// AwaitingTransfer (Phase 4): final approval cleared and a gate pass/QR
+// already exists, but physical transfer hasn't been confirmed yet.
 function humanizeStatus(status: string): string {
   return status.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
@@ -113,6 +115,7 @@ function statusPillClass(status: string): string {
     case 'PendingApproval':
       return 'nova-pill-pending';
     case 'Approved':
+    case 'AwaitingTransfer':
     case 'Dispatched':
     case 'InTransit':
     case 'Received':
@@ -1039,7 +1042,8 @@ export default function MaterialMovementsPage() {
                         </Button>
                       ) : null}
 
-                      {movement.status === 'Dispatched' ? (
+                      {movement.status === 'Dispatched' ||
+                      movement.status === 'AwaitingTransfer' ? (
                         <Button
                           variant="ghost"
                           size="sm"

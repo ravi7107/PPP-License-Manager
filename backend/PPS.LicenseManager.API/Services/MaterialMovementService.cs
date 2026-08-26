@@ -874,22 +874,25 @@ public class MaterialMovementService : IMaterialMovementService
         int id,
         int decidingUserId,
         DecideMaterialMovementRequest request,
-        string? ipAddress) =>
-        DecideAsync(id, decidingUserId, approve: true, request, ipAddress);
+        string? ipAddress,
+        string pdfStorageRootPath) =>
+        DecideAsync(id, decidingUserId, approve: true, request, ipAddress, pdfStorageRootPath);
 
     public Task<MaterialMovementResponse?> RejectAsync(
         int id,
         int decidingUserId,
         DecideMaterialMovementRequest request,
-        string? ipAddress) =>
-        DecideAsync(id, decidingUserId, approve: false, request, ipAddress);
+        string? ipAddress,
+        string pdfStorageRootPath) =>
+        DecideAsync(id, decidingUserId, approve: false, request, ipAddress, pdfStorageRootPath);
 
     private async Task<MaterialMovementResponse?> DecideAsync(
         int id,
         int decidingUserId,
         bool approve,
         DecideMaterialMovementRequest request,
-        string? ipAddress)
+        string? ipAddress,
+        string pdfStorageRootPath)
     {
         var movement = await _context.MaterialMovements
             .Include(m => m.Approvals)
@@ -934,6 +937,13 @@ public class MaterialMovementService : IMaterialMovementService
         string notifyTitle;
         string notifyMessage;
 
+        // Set below only when final approval clears this step - triggers
+        // the eager gate pass PDF generation after this method's main
+        // SaveChangesAsync call, once the new Dispatch row it creates is
+        // actually persisted and re-queryable. See the nextApproval ==
+        // null branch below.
+        var generatedGatePass = false;
+
         if (!approve)
         {
             movement.Status = "Rejected";
@@ -956,15 +966,32 @@ public class MaterialMovementService : IMaterialMovementService
 
             if (nextApproval == null)
             {
-                movement.Status = "Approved";
+                // Phase 4 of the QR-driven material movement plan: the
+                // gate pass (with QR) is auto-generated the instant final
+                // approval clears, instead of waiting for a separate
+                // manual Dispatch click - see GenerateGatePassOnApprovalAsync's
+                // own comment for why this doesn't reuse DispatchAsync
+                // itself. Status lands on "AwaitingTransfer", not
+                // "Approved" - see MaterialMovement.cs's own comment on
+                // that status value.
+                var gatePassNumber = await GenerateGatePassOnApprovalAsync(
+                    movement, decidingUserId);
+
+                movement.Status = "AwaitingTransfer";
                 movement.CurrentApprovalStepOrder = null;
                 movement.UpdatedAt = DateTime.UtcNow;
+
+                AddAuditLog(movement.Id, "GatePassGenerated", decidingUserId,
+                    details: $"Gate pass {gatePassNumber}", ipAddress: ipAddress);
+
+                generatedGatePass = true;
 
                 notifyUserId = movement.RequestedByUserId;
                 notifyType = "MaterialMovementApproved";
                 notifyTitle = "Material movement approved";
                 notifyMessage = $"Your movement {movement.MovementNumber} has been " +
-                    "fully approved and is ready to dispatch.";
+                    $"fully approved. Gate pass {gatePassNumber} has been generated " +
+                    "and is awaiting transfer.";
             }
             else
             {
@@ -982,6 +1009,18 @@ public class MaterialMovementService : IMaterialMovementService
         AddNotification(notifyUserId, notifyType, notifyTitle, notifyMessage, movement.Id);
 
         await _context.SaveChangesAsync();
+
+        // Must run AFTER the SaveChangesAsync above - GenerateAndStoreGatePassPdfAsync
+        // re-queries the Dispatch row fresh (same pattern as the existing
+        // lazy/on-download path in GetGatePassPdfFileAsync), so it needs
+        // GenerateGatePassOnApprovalAsync's new row to actually be
+        // persisted first. Best-effort/never-throws, same as every other
+        // caller of this method - a PDF hiccup must never undo an
+        // already-committed approval.
+        if (generatedGatePass)
+        {
+            await GenerateAndStoreGatePassPdfAsync(movement.Id, pdfStorageRootPath);
+        }
 
         // isPrivileged: true here, not a real role check - the decider
         // was just allowed to act on this exact step (checked above), but
@@ -1148,6 +1187,76 @@ public class MaterialMovementService : IMaterialMovementService
     }
 
     /*
+     * Phase 4 of the QR-driven material movement plan: auto-generates the
+     * gate pass the instant a movement's final approval step clears - see
+     * DecideAsync's nextApproval == null branch, the only caller.
+     * Deliberately NOT a call into DispatchAsync itself - that method's
+     * existing contract requires Status == "Approved" (this runs at the
+     * moment Status is BECOMING "AwaitingTransfer", not yet "Approved" at
+     * all under the new flow) and takes caller-supplied transporter/
+     * vehicle info, neither of which fits an automatic, approval-triggered
+     * call with no human filling out a dispatch form. Mirrors
+     * DispatchAsync's own dispatch-row and TemporaryMovement-return-row
+     * creation logic directly instead.
+     *
+     * Transporter/vehicle fields are left null (already optional on
+     * MaterialMovementDispatch) since no logistics detail is known yet at
+     * approval time - unchanged from how the pre-existing manual Dispatch
+     * flow also leaves them null unless the dispatcher fills them in.
+     *
+     * DispatchedByUserId is set to the final approver, not a separate
+     * logistics user - there's no one else it could meaningfully be for
+     * an automatic action triggered by that approval decision, and the
+     * printed Gate Pass PDF's "Dispatched By" field reads naturally either
+     * way ("who caused this gate pass to exist").
+     *
+     * Does NOT call SaveChangesAsync - the caller (DecideAsync) does one
+     * combined save for the whole approval decision, same as it already
+     * does for the approval-step/notification writes.
+     */
+    private async Task<string> GenerateGatePassOnApprovalAsync(
+        Models.MaterialMovement movement,
+        int decidingUserId)
+    {
+        var gatePassNumber = await GenerateUniqueGatePassNumberAsync();
+
+        var dispatch = new Models.MaterialMovementDispatch
+        {
+            MovementId = movement.Id,
+            DispatchedByUserId = decidingUserId,
+            DispatchedAt = DateTime.UtcNow,
+            GatePassNumber = gatePassNumber,
+            QrPayload = gatePassNumber,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.MaterialMovementDispatches.Add(dispatch);
+
+        // Same guarded RGP-return-row bootstrap as DispatchAsync's own -
+        // see that method's comment for why the existence check is there
+        // (harmless defensive guard; this path can only ever run once per
+        // movement in practice, same as DispatchAsync's own call site).
+        if (movement.MovementType == "TemporaryMovement")
+        {
+            var alreadyHasReturnRow = await _context.MaterialMovementReturns
+                .AnyAsync(r => r.MovementId == movement.Id);
+
+            if (!alreadyHasReturnRow)
+            {
+                _context.MaterialMovementReturns.Add(new Models.MaterialMovementReturn
+                {
+                    MovementId = movement.Id,
+                    ExpectedReturnDate = movement.ExpectedReturnDate ?? DateTime.UtcNow,
+                    Status = "Pending",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        return gatePassNumber;
+    }
+
+    /*
      * Loads every navigation MaterialMovementGatePassPdfDocument reads
      * (From/To Company/Location, Vendor, RequestedByUser, Items with
      * Item/Asset, Approvals with ApproverUser, the Dispatch row with
@@ -1274,10 +1383,17 @@ public class MaterialMovementService : IMaterialMovementService
         // Starting from Dispatches (not Movements) means this naturally
         // only ever includes movements that have actually left the
         // building - a still-Draft/PendingApproval/Approved
-        // TemporaryMovement isn't an outstanding RGP yet.
+        // TemporaryMovement isn't an outstanding RGP yet. Since Phase 4,
+        // a dispatch row can also exist for a movement that's only
+        // "AwaitingTransfer" (gate pass generated at approval, not yet
+        // physically sent) - explicitly excluded here too, for the same
+        // reason: it hasn't left the building yet, so it isn't an
+        // outstanding RGP either. Every other status (Dispatched,
+        // TemporaryReturned, etc.) still shows, same as before.
         var dispatches = await _context.MaterialMovementDispatches
             .AsNoTracking()
             .Where(d => d.Movement.MovementType == "TemporaryMovement")
+            .Where(d => d.Movement.Status != "AwaitingTransfer")
             .Select(d => new
             {
                 d.MovementId,
@@ -1390,10 +1506,15 @@ public class MaterialMovementService : IMaterialMovementService
             throw new InvalidOperationException(
                 "Only Temporary Movements (RGP) can be marked returned.");
 
-        var dispatched = await _context.MaterialMovementDispatches
-            .AnyAsync(d => d.MovementId == id);
-
-        if (!dispatched)
+        // Tightened (Phase 4) to check Status directly rather than just
+        // "a dispatch row exists" - since Phase 4, a dispatch row can
+        // exist while a movement is only "AwaitingTransfer" (gate pass
+        // generated at approval, not yet physically sent). Every movement
+        // reachable under the pre-Phase-4 flow already satisfied this
+        // (Status only ever became "Dispatched" atomically with the
+        // dispatch row's creation), so this is a strict tightening with
+        // no behavior change for existing data.
+        if (movement.Status != "Dispatched")
             throw new InvalidOperationException(
                 "This movement has not been dispatched yet.");
 

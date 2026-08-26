@@ -14,9 +14,18 @@ namespace PPS.LicenseManager.API.Models;
  * MovementType: InternalTransfer, InterEntityTransfer, OutwardToVendor,
  * InwardFromVendor, TemporaryMovement, DirectInward, DirectOutward.
  *
- * Status: Draft, Submitted, PendingApproval, Approved, Dispatched,
- * InTransit, Received, Completed, Rejected, Cancelled,
+ * Status: Draft, Submitted, PendingApproval, Approved, AwaitingTransfer,
+ * Dispatched, InTransit, Received, Completed, Rejected, Cancelled,
  * TemporaryReturnPending, TemporaryReturned.
+ *
+ * AwaitingTransfer (Phase 4 of the QR-driven material movement plan): set
+ * the moment final approval clears, instead of "Approved" - a gate pass
+ * (with QR) is auto-generated at that same moment (see
+ * MaterialMovementService.DecideAsync), but the movement isn't physically
+ * "Dispatched" yet. "Approved" is no longer reachable for movements
+ * approved after this shipped - it's kept only because movements already
+ * sitting at "Approved" when this deployed still need to dispatch via the
+ * pre-existing manual Dispatch action/endpoint, which is left untouched.
  *
  * FROM/TO fields are all nullable because which ones apply depends on
  * MovementType - e.g. OutwardToVendor has a FROM location but no TO
