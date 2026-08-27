@@ -884,6 +884,21 @@ export default function OfficeFloorMap({
                             ? 'z-40'
                             : 'z-30',
 
+                      // A seat's tooltip already shows on plain hover
+                      // (see the TOOLTIP className below), but a plain
+                      // hover was never in the z-index tiers above -
+                      // it stayed at the same z-30 as every other
+                      // unselected seat. Two seats tied on z-index
+                      // stack by DOM order, so a neighboring seat
+                      // later in the list could paint its dot right
+                      // over the hovered seat's tooltip whenever they
+                      // were close enough on screen to overlap.
+                      // hover:z-50 (CSS :hover, so this also fires
+                      // while hovering the dot inside) outranks every
+                      // tier above it, guaranteeing whatever you're
+                      // currently pointing at is always on top.
+                      'hover:z-50',
+
                     ].join(' ')}
 
                     style={{
