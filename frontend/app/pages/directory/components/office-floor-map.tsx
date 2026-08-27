@@ -863,7 +863,7 @@ export default function OfficeFloorMap({
                     }}
 
                     className={[
-                      'group absolute -translate-x-1/2 -translate-y-1/2',
+                      'group absolute',
                       'focus:outline-none',
                       'select-none touch-none',
                       'transition-opacity duration-200',
@@ -889,6 +889,21 @@ export default function OfficeFloorMap({
                     style={{
                       left: `${x}%`,
                       top: `${y}%`,
+                      // The dot and its tooltip are descendants of
+                      // zoomLayerRef, which is what d3-zoom actually
+                      // scales - without counter-scaling here, both
+                      // would balloon in on-screen size right along
+                      // with the map at higher zoom levels, easily
+                      // growing the tooltip box large enough to
+                      // visually swallow neighboring seats' dots. The
+                      // 1/zoomScale factor cancels the ancestor's
+                      // scale(k) exactly (k * 1/k = 1), so every
+                      // marker stays a constant screen size at any
+                      // zoom level - the same convention Google Maps
+                      // (and similar) markers use. Position (left/top
+                      // %) is unaffected, since transform is a
+                      // paint-only effect, not a layout one.
+                      transform: `translate(-50%, -50%) scale(${1 / zoomScale})`,
                     }}
 
                     aria-label={
