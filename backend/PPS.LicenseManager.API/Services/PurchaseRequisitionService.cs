@@ -501,7 +501,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                     ? a.PurchaseRequisition.Vendor.VendorName
                     : null,
                 Cost = a.PurchaseCost,
-                RequestedByUserName = a.PurchaseRequisition.RequestedByUser.FullName
+                RequestedByUserName = a.PurchaseRequisition.RequestedByUser.FullName,
+                // Phase 9 - PO Date/Amount straight off the PR header
+                // (Phase 6); InvoiceCount/TotalInvoiceAmount via the same
+                // correlated-subquery pattern already reviewed and
+                // confirmed translatable in AssetService.GetAllAsync
+                // (Phase 8) - PurchaseRequisitionId is guaranteed non-null
+                // here by this query's own Where clause above.
+                PoDate = a.PurchaseRequisition.PoDate,
+                PoAmount = a.PurchaseRequisition.PoAmount,
+                InvoiceCount = _context.PurchaseRequisitionInvoices
+                    .Count(i => i.PurchaseRequisitionId == a.PurchaseRequisitionId),
+                TotalInvoiceAmount = _context.PurchaseRequisitionInvoices
+                    .Where(i => i.PurchaseRequisitionId == a.PurchaseRequisitionId)
+                    .Sum(i => (decimal?)i.InvoiceAmount)
             })
             .ToListAsync();
 
@@ -520,7 +533,14 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                     ? lp.PurchaseRequisition.Vendor.VendorName
                     : lp.Vendor,
                 lp.Cost,
-                RequestedByUserName = lp.PurchaseRequisition.RequestedByUser.FullName
+                RequestedByUserName = lp.PurchaseRequisition.RequestedByUser.FullName,
+                PoDate = lp.PurchaseRequisition.PoDate,
+                PoAmount = lp.PurchaseRequisition.PoAmount,
+                InvoiceCount = _context.PurchaseRequisitionInvoices
+                    .Count(i => i.PurchaseRequisitionId == lp.PurchaseRequisitionId),
+                TotalInvoiceAmount = _context.PurchaseRequisitionInvoices
+                    .Where(i => i.PurchaseRequisitionId == lp.PurchaseRequisitionId)
+                    .Sum(i => (decimal?)i.InvoiceAmount)
             })
             .ToListAsync();
 
@@ -535,7 +555,11 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 PurchaseDate = lp.PurchaseDate.ToDateTime(TimeOnly.MinValue),
                 Vendor = lp.Vendor,
                 Cost = lp.Cost,
-                RequestedByUserName = lp.RequestedByUserName
+                RequestedByUserName = lp.RequestedByUserName,
+                PoDate = lp.PoDate,
+                PoAmount = lp.PoAmount,
+                InvoiceCount = lp.InvoiceCount,
+                TotalInvoiceAmount = lp.TotalInvoiceAmount
             })
             .ToList();
 

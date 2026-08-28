@@ -523,6 +523,15 @@ export interface PurchaseRequisitionFulfillmentReportRow {
   vendor: string | null;
   cost: number | null;
   requestedByUserName: string;
+  // Phase 9 - PO Date/Amount (Phase 6) and invoice totals (Phase 7),
+  // duplicated per fulfilling row - see the backend DTO's own comment.
+  poDate: string | null;
+  poAmount: number | null;
+  invoiceCount: number;
+  totalInvoiceAmount: number | null;
+  // Computed server-side (see PurchaseRequisitionFulfillmentReportRow's
+  // ReconciliationFlag) - "OK" | "No PO" | "No Invoice" | "Amount Mismatch".
+  reconciliationFlag: string;
 }
 
 export async function getPurchaseRequisitionFulfillmentReport(): Promise<
