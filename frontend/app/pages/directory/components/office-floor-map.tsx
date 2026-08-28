@@ -149,6 +149,52 @@ export default function OfficeFloorMap({
 }: OfficeFloorMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
 
+  // A native double-click still fires two ordinary 'click' events before
+  // the browser's own 'dblclick' event fires - so any handler that opens
+  // a dialog immediately on the first of those two clicks intercepts
+  // every double-click attempt before the second click (or 'dblclick'
+  // itself) can ever be processed (worse still, once the dialog is open
+  // it visually covers the seat, so the second click can't even reach
+  // the button). For an editable (canEdit) seat, that immediate action
+  // is fired from finishDrag() below - a plain click is a pointerdown +
+  // pointerup with no movement in between, handled there rather than in
+  // the button's own onClick, since the same pointer handlers also drive
+  // drag-to-reposition. scheduleSeatClick()/cancelPendingSeatClick()
+  // delay that action just long enough to see whether a second click (or
+  // a native 'dblclick') follows, so a genuine double-click can cancel
+  // it instead of racing it.
+  const pendingClickTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleSeatClick = (seat: OfficeSeat) => {
+    if (pendingClickTimerRef.current) {
+      clearTimeout(pendingClickTimerRef.current);
+    }
+
+    pendingClickTimerRef.current = setTimeout(() => {
+      pendingClickTimerRef.current = null;
+      onSeatClick?.(seat);
+    }, 250);
+  };
+
+  const cancelPendingSeatClick = () => {
+    if (pendingClickTimerRef.current) {
+      clearTimeout(pendingClickTimerRef.current);
+      pendingClickTimerRef.current = null;
+    }
+  };
+
+  // Clears any single-click still pending a double-click check on
+  // unmount, so a stale onSeatClick never fires against an already
+  // torn-down component (e.g. the admin closed the map dialog inside
+  // the 250ms window).
+  useEffect(() => {
+    return () => {
+      cancelPendingSeatClick();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // --- Pan/zoom (Google-Maps-style scroll-to-zoom, drag-to-pan) ---
   //
   // d3-zoom only ever touches the CSS transform of zoomLayerRef - it
@@ -479,7 +525,7 @@ export default function OfficeFloorMap({
       Math.abs(position.y - oldY) > 0.01;
 
     if (!moved) {
-      onSeatClick?.(seat);
+      scheduleSeatClick(seat);
       return;
     }
 
@@ -850,8 +896,14 @@ export default function OfficeFloorMap({
                     onClick={(event) => {
                       event.stopPropagation();
 
+                      // When onSeatMove is set (canEdit), a plain click
+                      // is already handled by finishDrag() above via the
+                      // pointerdown/pointerup pair - this branch only
+                      // matters for a consumer that wires onSeatClick
+                      // without onSeatMove, and uses the same delayed
+                      // scheduling so it can't race onDoubleClick either.
                       if (!onSeatMove) {
-                        onSeatClick?.(seat);
+                        scheduleSeatClick(seat);
                       }
                     }}
 
@@ -859,6 +911,7 @@ export default function OfficeFloorMap({
                       event.preventDefault();
                       event.stopPropagation();
 
+                      cancelPendingSeatClick();
                       onSeatDoubleClick?.(seat);
                     }}
 
