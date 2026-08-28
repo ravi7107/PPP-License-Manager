@@ -32,6 +32,10 @@ public class ExecutiveOverviewResponse
     public List<AllocationTrendRow> AllocationTrends { get; set; } = new();
     public List<GrowthTrendRow> GrowthTrends { get; set; } = new();
     public List<CapacityRunwayRow> CapacityRunway { get; set; } = new();
+
+    // --- Pillar 4: Procurement (Phase 10 of the audit-trail extension) ---
+    // Additive - does not touch or reorder the three pillars above.
+    public ProcurementSummaryRow ProcurementSummary { get; set; } = new();
 }
 
 public class InvestmentSummaryRow
@@ -145,4 +149,26 @@ public class CapacityRunwayRow
     public int SeatsConsumedLast90Days { get; set; }
     public decimal? EstimatedWeeksOfRunway { get; set; }
     public string Recommendation { get; set; } = string.Empty;
+}
+
+// Phase 10 - the Procurement KPI tile on the Executive Dashboard. Computed
+// from Approved Purchase Requisitions only (a PO/invoice only becomes
+// relevant once a PR is Approved - see PurchaseRequisition.cs's own
+// comment on why Po* fields stay writable after Approved), scoped by the
+// same isEntityRestricted/companyId this whole endpoint already uses -
+// see AnalyticsService.BuildProcurementSummary.
+public class ProcurementSummaryRow
+{
+    public decimal TotalPoValue { get; set; }
+    public decimal TotalInvoicedValue { get; set; }
+    public decimal Variance { get; set; }
+    public int PrsWithNoPo { get; set; }
+    public int PosWithNoInvoice { get; set; }
+
+    // Null when no Approved PR in scope has both ApprovedAt and a PO
+    // upload recorded yet (nothing to average).
+    public decimal? AvgDaysApprovalToPoUpload { get; set; }
+
+    // Null when no PO in scope has at least one invoice uploaded yet.
+    public decimal? AvgDaysPoToFirstInvoice { get; set; }
 }

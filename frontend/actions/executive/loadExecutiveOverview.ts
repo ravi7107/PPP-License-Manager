@@ -108,6 +108,16 @@ async function loadExecutiveOverview() {
       estimated_weeks_of_runway: r.estimatedWeeksOfRunway,
       recommendation: r.recommendation,
     })),
+
+    procurementSummary: {
+      total_po_value: data.procurementSummary.totalPoValue,
+      total_invoiced_value: data.procurementSummary.totalInvoicedValue,
+      variance: data.procurementSummary.variance,
+      prs_with_no_po: data.procurementSummary.prsWithNoPo,
+      pos_with_no_invoice: data.procurementSummary.posWithNoInvoice,
+      avg_days_approval_to_po_upload: data.procurementSummary.avgDaysApprovalToPoUpload,
+      avg_days_po_to_first_invoice: data.procurementSummary.avgDaysPoToFirstInvoice,
+    },
   };
 }
 

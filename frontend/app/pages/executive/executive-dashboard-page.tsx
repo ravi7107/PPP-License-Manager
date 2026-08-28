@@ -7,6 +7,7 @@ import {
   DollarSign,
   Gauge,
   TrendingUp,
+  ClipboardCheck,
 } from 'lucide-react';
 
 import { useLoadAction } from '@/lib/uibakery';
@@ -22,11 +23,13 @@ import {
   AssetUtilizationSlice,
   GrowthTrendRow,
   CapacityRunwayRow,
+  ProcurementSummaryRow,
 } from '@/app/pages/executive/types';
 import { DepartmentCostRow, ClientReportRow, EntityReportRow } from '@/app/pages/reports/types';
 import { buildExecutiveInsights } from '@/app/pages/executive/insights';
 import { ExecutiveInsightStrip } from '@/app/pages/executive/components/executive-insight-strip';
 import { ExecutiveKpiCards } from '@/app/pages/executive/components/executive-kpi-cards';
+import { ProcurementSummaryCard } from '@/app/pages/executive/components/procurement-summary-card';
 import { CostBreakdownCharts } from '@/app/pages/executive/components/cost-breakdown-charts';
 import { TopSoftwareChart } from '@/app/pages/executive/components/top-software-chart';
 import { UpcomingRenewalsCard } from '@/app/pages/executive/components/upcoming-renewals-card';
@@ -49,6 +52,7 @@ interface ExecutiveOverviewData {
   entityCost: EntityReportRow[];
   growthTrends: GrowthTrendRow[];
   capacityRunway: CapacityRunwayRow[];
+  procurementSummary: ProcurementSummaryRow;
 }
 
 function SectionHeader({
@@ -267,6 +271,24 @@ export default function ExecutiveDashboardPage() {
             <CapacityRunwayCard rows={overview?.capacityRunway ?? []} />
           )}
         </div>
+      </div>
+
+      <div>
+        <SectionHeader
+          icon={ClipboardCheck}
+          title="Procurement"
+          description="Whether every Purchase Order raised is actually accounted for by an invoice"
+        />
+
+        {loading && !overview ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <KpiCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : (
+          <ProcurementSummaryCard summary={overview?.procurementSummary} />
+        )}
       </div>
     </div>
   );

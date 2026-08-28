@@ -68,3 +68,14 @@ export interface CapacityRunwayRow {
   estimated_weeks_of_runway: number | null;
   recommendation: string;
 }
+
+// Phase 10 - Pillar 4 (Procurement).
+export interface ProcurementSummaryRow {
+  total_po_value: number;
+  total_invoiced_value: number;
+  variance: number;
+  prs_with_no_po: number;
+  pos_with_no_invoice: number;
+  avg_days_approval_to_po_upload: number | null;
+  avg_days_po_to_first_invoice: number | null;
+}

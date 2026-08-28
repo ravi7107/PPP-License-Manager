@@ -97,6 +97,18 @@ export interface CapacityRunwayApi {
   recommendation: string;
 }
 
+// Phase 10 - Pillar 4 (Procurement), additive alongside the existing 3
+// pillars - see ExecutiveOverviewResponse.cs's own comment.
+export interface ProcurementSummaryApi {
+  totalPoValue: number;
+  totalInvoicedValue: number;
+  variance: number;
+  prsWithNoPo: number;
+  posWithNoInvoice: number;
+  avgDaysApprovalToPoUpload: number | null;
+  avgDaysPoToFirstInvoice: number | null;
+}
+
 export interface ExecutiveOverviewApi {
   investmentSummary: InvestmentSummaryApi;
   topExpensiveSoftware: TopExpensiveSoftwareApi[];
@@ -109,6 +121,7 @@ export interface ExecutiveOverviewApi {
   allocationTrends: AllocationTrendApi[];
   growthTrends: GrowthTrendApi[];
   capacityRunway: CapacityRunwayApi[];
+  procurementSummary: ProcurementSummaryApi;
 }
 
 export async function getExecutiveOverview(): Promise<ExecutiveOverviewApi> {

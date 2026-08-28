@@ -131,6 +131,31 @@ public class AnalyticsService : IAnalyticsService
         int UsedSeats(int purchaseId) =>
             usedSeatsByPurchase.TryGetValue(purchaseId, out var v) ? v : 0;
 
+        // Phase 10 - Procurement pillar. Only Approved PRs are relevant to
+        // PO/invoice reconciliation (Draft/Submitted/InApproval/Rejected
+        // PRs never get a PO - see PurchaseRequisition.cs's own comment on
+        // why the Po* fields stay writable specifically after Approved).
+        // CompanyId on PurchaseRequisition is a required (non-nullable)
+        // field, unlike LicensePurchase's optional one above, so scoping
+        // here is a direct equality filter rather than a null-or-match one.
+        var procurementPrsQuery = _context.PurchaseRequisitions
+            .AsNoTracking()
+            .Where(p => p.Status == "Approved");
+
+        if (isEntityRestricted)
+        {
+            procurementPrsQuery = procurementPrsQuery.Where(
+                p => p.CompanyId == companyId);
+        }
+
+        var approvedPrs = await procurementPrsQuery.ToListAsync();
+        var approvedPrIds = approvedPrs.Select(p => p.Id).ToHashSet();
+
+        var procurementInvoices = await _context.PurchaseRequisitionInvoices
+            .AsNoTracking()
+            .Where(i => approvedPrIds.Contains(i.PurchaseRequisitionId))
+            .ToListAsync();
+
         var response = new ExecutiveOverviewResponse
         {
             InvestmentSummary = BuildInvestmentSummary(purchases, UsedSeats, today),
@@ -144,6 +169,7 @@ public class AnalyticsService : IAnalyticsService
             AllocationTrends = BuildAllocationTrends(allocations, now),
             GrowthTrends = BuildGrowthTrends(users, purchases, now),
             CapacityRunway = BuildCapacityRunway(purchases, licenses, allocations, now),
+            ProcurementSummary = BuildProcurementSummary(approvedPrs, procurementInvoices),
         };
 
         return response;
@@ -557,5 +583,55 @@ public class AnalyticsService : IAnalyticsService
             })
             .OrderBy(r => r.EstimatedWeeksOfRunway ?? decimal.MaxValue)
             .ToList();
+    }
+
+    // --- Pillar 4: Procurement (Phase 10) ---
+
+    private static ProcurementSummaryRow BuildProcurementSummary(
+        List<PurchaseRequisition> approvedPrs,
+        List<PurchaseRequisitionInvoice> invoices)
+    {
+        var invoicesByPr = invoices
+            .GroupBy(i => i.PurchaseRequisitionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var totalPoValue = approvedPrs.Sum(p => p.PoAmount ?? 0m);
+        var totalInvoicedValue = invoices.Sum(i => i.InvoiceAmount ?? 0m);
+
+        var prsWithNoPo = approvedPrs.Count(p => string.IsNullOrEmpty(p.PoNumber));
+
+        // A PO with at least one invoice is fully reconciled from a
+        // "has invoicing started" standpoint even if amounts don't match
+        // yet (Phase 9's per-row ReconciliationFlag already surfaces
+        // amount mismatches at the line-item level) - this KPI is
+        // specifically "has anyone even started invoicing this PO".
+        var posWithNoInvoice = approvedPrs.Count(p =>
+            !string.IsNullOrEmpty(p.PoNumber) &&
+            !invoicesByPr.ContainsKey(p.Id));
+
+        var approvalToPoDays = approvedPrs
+            .Where(p => p.ApprovedAt.HasValue && p.PoUploadedAt.HasValue)
+            .Select(p => (p.PoUploadedAt!.Value - p.ApprovedAt!.Value).TotalDays)
+            .ToList();
+
+        var poToFirstInvoiceDays = approvedPrs
+            .Where(p => p.PoUploadedAt.HasValue && invoicesByPr.ContainsKey(p.Id))
+            .Select(p => (invoicesByPr[p.Id].Min(i => i.UploadedAt) - p.PoUploadedAt!.Value).TotalDays)
+            .ToList();
+
+        return new ProcurementSummaryRow
+        {
+            TotalPoValue = totalPoValue,
+            TotalInvoicedValue = totalInvoicedValue,
+            Variance = totalPoValue - totalInvoicedValue,
+            PrsWithNoPo = prsWithNoPo,
+            PosWithNoInvoice = posWithNoInvoice,
+            AvgDaysApprovalToPoUpload = approvalToPoDays.Count > 0
+                ? Math.Round((decimal)approvalToPoDays.Average(), 1)
+                : null,
+            AvgDaysPoToFirstInvoice = poToFirstInvoiceDays.Count > 0
+                ? Math.Round((decimal)poToFirstInvoiceDays.Average(), 1)
+                : null,
+        };
     }
 }
