@@ -64,4 +64,27 @@ public bool DualMonitor { get; set; }
 public int? CompanyId { get; set; }
 
 public string? CompanyName { get; set; }
+
+// Phase 8 - set only when this asset was created linked to a Purchase
+// Requisition line (see Asset.PurchaseRequisitionId's model comment -
+// linking is always optional, so all of these are null for most assets).
+// PoNumber/PoDate/PoAmount are drawn from that PR's own PO fields (Phase
+// 6). InvoiceCount/TotalInvoiceAmount summarize that PR's invoices (Phase
+// 7) - populated by GetAllAsync/GetByIdAsync (the list/detail endpoints
+// that actually feed the Hardware page's asset view), left at their
+// default (0/null) by GetPagedAsync's in-memory MapToResponse, which has
+// no database access to compute them from.
+public int? PurchaseRequisitionId { get; set; }
+
+public string? PrNumber { get; set; }
+
+public string? PoNumber { get; set; }
+
+public DateTime? PoDate { get; set; }
+
+public decimal? PoAmount { get; set; }
+
+public int InvoiceCount { get; set; }
+
+public decimal? TotalInvoiceAmount { get; set; }
 }

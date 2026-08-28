@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Eye, FileClock, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,9 @@ export default function PurchaseRequisitionsPage() {
   const [invoiceUploading, setInvoiceUploading] = useState(false);
   const [invoiceUploadError, setInvoiceUploadError] = useState<string | null>(null);
 
+  // Phase 8 - backs the ?prId=... deep-link auto-open effect below.
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [pageError, setPageError] = useState<string | null>(null);
 
   const loadList = useCallback(async () => {
@@ -155,10 +159,15 @@ export default function PurchaseRequisitionsPage() {
     }
   };
 
-  const openDetail = async (row: PurchaseRequisitionListItem) => {
+  // Phase 8 - accepts a bare id (not a full list row) so it can also be
+  // called from the ?prId=... deep-link effect further below, reached by
+  // clicking a "Fulfilled By" row on an Asset's own "Sourced from PR" card
+  // (asset-view-dialog.tsx) - that card only knows the PR's id, not a full
+  // PurchaseRequisitionListItem.
+  const openDetail = async (id: number) => {
     setPageError(null);
     try {
-      const full = await getPurchaseRequisition(row.id);
+      const full = await getPurchaseRequisition(id);
       setDetailPr(full);
       setUploadError(null);
       setRevisionError(null);
@@ -168,6 +177,30 @@ export default function PurchaseRequisitionsPage() {
       setPageError(err?.response?.data?.message ?? 'Failed to load purchase requisition.');
     }
   };
+
+  // Phase 8 - mirrors hardware-page.tsx's ?assetId=... auto-open effect for
+  // symmetry: a "Sourced from PR" card on the Asset view can link back here
+  // via /purchase-requisitions?prId={id}. Cleared immediately after opening
+  // so navigating away and back doesn't keep reopening the same PR.
+  useEffect(() => {
+    const prIdParam = searchParams.get('prId');
+    if (!prIdParam) return;
+
+    const prId = Number(prIdParam);
+    if (Number.isNaN(prId)) return;
+
+    void openDetail(prId);
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('prId');
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleDelete = async (row: PurchaseRequisitionListItem) => {
     setPageError(null);
@@ -432,7 +465,7 @@ export default function PurchaseRequisitionsPage() {
                     </td>
                     <td className="nova-cell-faint">{r.createdAt.slice(0, 10)}</td>
                     <td className="nova-right space-x-1">
-                      <Button variant="ghost" size="sm" onClick={() => openDetail(r)}>
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(r.id)}>
                         <Eye className="mr-1 h-3.5 w-3.5" /> View
                       </Button>
                       {r.status === 'Draft' ? (

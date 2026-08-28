@@ -34,6 +34,7 @@ public class AssetService : IAssetService
             .Include(a => a.Department)
                 .ThenInclude(d => d!.Company)
             .Include(a => a.Vendor)
+            .Include(a => a.PurchaseRequisition)
             .Where(a => a.IsActive);
 
         if (isEntityRestricted)
@@ -74,6 +75,25 @@ public class AssetService : IAssetService
                 CompanyId = a.Department != null ? a.Department.CompanyId : (int?)null,
                 CompanyName = a.Department != null && a.Department.Company != null
                     ? a.Department.Company.Name
+                    : null,
+
+                // Phase 8 - see AssetResponse's own comment. PurchaseRequisition
+                // is null for the vast majority of assets (linking is always
+                // optional), in which case every field below is correctly
+                // null/0 too.
+                PurchaseRequisitionId = a.PurchaseRequisitionId,
+                PrNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PrNumber : null,
+                PoNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoNumber : null,
+                PoDate = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoDate : null,
+                PoAmount = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoAmount : null,
+                InvoiceCount = a.PurchaseRequisitionId != null
+                    ? _context.PurchaseRequisitionInvoices
+                        .Count(i => i.PurchaseRequisitionId == a.PurchaseRequisitionId)
+                    : 0,
+                TotalInvoiceAmount = a.PurchaseRequisitionId != null
+                    ? _context.PurchaseRequisitionInvoices
+                        .Where(i => i.PurchaseRequisitionId == a.PurchaseRequisitionId)
+                        .Sum(i => (decimal?)i.InvoiceAmount)
                     : null
             })
             .ToListAsync();
@@ -85,6 +105,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
         .Include(a => a.Department)
             .ThenInclude(d => d!.Company)
         .Include(a => a.Vendor)
+        .Include(a => a.PurchaseRequisition)
         .Where(a => a.IsActive);
 
     // Global Search
@@ -163,10 +184,28 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             .Include(a => a.Department)
                 .ThenInclude(d => d!.Company)
             .Include(a => a.Vendor)
+            .Include(a => a.PurchaseRequisition)
             .FirstOrDefaultAsync(a => a.Id == id);
 
         if (asset == null)
             return null;
+
+        // Phase 8 - see AssetResponse's own comment. Computed as separate
+        // queries rather than inline in the object initializer below since
+        // asset is already materialized above (not a .Select() projection) -
+        // only run at all when this asset actually links to a PR.
+        var invoiceCount = 0;
+        decimal? totalInvoiceAmount = null;
+
+        if (asset.PurchaseRequisitionId.HasValue)
+        {
+            invoiceCount = await _context.PurchaseRequisitionInvoices
+                .CountAsync(i => i.PurchaseRequisitionId == asset.PurchaseRequisitionId.Value);
+
+            totalInvoiceAmount = await _context.PurchaseRequisitionInvoices
+                .Where(i => i.PurchaseRequisitionId == asset.PurchaseRequisitionId.Value)
+                .SumAsync(i => (decimal?)i.InvoiceAmount);
+        }
 
         return new AssetResponse
         {
@@ -196,7 +235,14 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             RentalEndDate = asset.RentalEndDate,
             DualMonitor = asset.DualMonitor,
             CompanyId = asset.Department?.CompanyId,
-            CompanyName = asset.Department?.Company?.Name
+            CompanyName = asset.Department?.Company?.Name,
+            PurchaseRequisitionId = asset.PurchaseRequisitionId,
+            PrNumber = asset.PurchaseRequisition?.PrNumber,
+            PoNumber = asset.PurchaseRequisition?.PoNumber,
+            PoDate = asset.PurchaseRequisition?.PoDate,
+            PoAmount = asset.PurchaseRequisition?.PoAmount,
+            InvoiceCount = invoiceCount,
+            TotalInvoiceAmount = totalInvoiceAmount
         };
     }
 
@@ -783,7 +829,18 @@ private static AssetResponse MapToResponse(Asset asset)
         RentalEndDate = asset.RentalEndDate,
         DualMonitor = asset.DualMonitor,
         CompanyId = asset.Department?.CompanyId,
-        CompanyName = asset.Department?.Company?.Name
+        CompanyName = asset.Department?.Company?.Name,
+
+        // Phase 8 - see AssetResponse's own comment. InvoiceCount/
+        // TotalInvoiceAmount are deliberately left at their default (0/
+        // null) here - this is a static in-memory mapper with no database
+        // access, and the paged list this feeds (GetPagedAsync) isn't what
+        // powers the Hardware page's asset view dialog (GetAllAsync is).
+        PurchaseRequisitionId = asset.PurchaseRequisitionId,
+        PrNumber = asset.PurchaseRequisition?.PrNumber,
+        PoNumber = asset.PurchaseRequisition?.PoNumber,
+        PoDate = asset.PurchaseRequisition?.PoDate,
+        PoAmount = asset.PurchaseRequisition?.PoAmount
     };
 }
 }

@@ -52,6 +52,23 @@ export interface AssetRecord {
   rentalEndDate?: string;
 
   dualMonitor?: boolean;
+
+  // Phase 8 - set only when this asset was created linked to a Purchase
+  // Requisition line (see Asset.PurchaseRequisitionId's model comment -
+  // linking is always optional). purchaseRequisitionId drives whether the
+  // "Sourced from PR" card shows at all; the rest are drawn from that PR's
+  // own PO fields (see PurchaseRequisitionService's PO Date/Amount, Phase 6).
+  purchaseRequisitionId?: number;
+  prNumber?: string;
+  poNumber?: string;
+  poDate?: string;
+  poAmount?: number;
+  // Summarizes that PR's own invoices (Phase 7) - 0/undefined for an asset
+  // with no PR link. Populated by the main asset list (GetAllAsync) and
+  // single-asset fetch (GetByIdAsync); left at 0/undefined by the separate
+  // paged list endpoint, which this app doesn't use for the Hardware page.
+  invoiceCount?: number;
+  totalInvoiceAmount?: number;
 }
 
 export type OwnershipType = "Owned" | "Rented";

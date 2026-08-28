@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Check,
   ChevronDown,
@@ -142,6 +143,7 @@ export function PrDetailDialog({
   const [invoiceDate, setInvoiceDate] = useState('');
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceNotes, setInvoiceNotes] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (open) {
@@ -479,25 +481,42 @@ export function PrDetailDialog({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pr.fulfilledByItems.map((item) => (
-                  <TableRow key={`${item.type}-${item.recordId}`}>
-                    <TableCell>
-                      <Badge variant="outline">{item.type}</Badge>
-                    </TableCell>
-                    <TableCell>{item.description}</TableCell>
-                    <TableCell className="text-right">
-                      {item.quantity}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.cost != null ? item.cost.toFixed(2) : '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {item.purchaseDate
-                        ? new Date(item.purchaseDate).toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {pr.fulfilledByItems.map((item) => {
+                  // Phase 8 - only Assets have a navigable detail view
+                  // today (there's no equivalent License detail page/deep
+                  // link yet), so License rows render as a plain row.
+                  const isNavigable = item.type === 'Asset';
+
+                  return (
+                    <TableRow
+                      key={`${item.type}-${item.recordId}`}
+                      className={isNavigable ? 'cursor-pointer hover:bg-muted/50' : undefined}
+                      onClick={
+                        isNavigable
+                          ? () => navigate(`/hardware?assetId=${item.recordId}`)
+                          : undefined
+                      }
+                    >
+                      <TableCell>
+                        <Badge variant="outline">{item.type}</Badge>
+                      </TableCell>
+                      <TableCell className={isNavigable ? 'text-primary hover:underline' : undefined}>
+                        {item.description}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.quantity}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.cost != null ? item.cost.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {item.purchaseDate
+                          ? new Date(item.purchaseDate).toLocaleDateString()
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { useLoadAction, useMutateAction, useUser } from '@/lib/uibakery';
 
 import {
@@ -345,6 +345,10 @@ export default function HardwarePage() {
   const canEdit = canManage(roles);
   const isSuperAdmin = isSuperAdminRole(roles);
   const isITAdmin = isITAdminRole(roles);
+
+  // Phase 8 - backs the ?assetId=... deep-link auto-open effect further
+  // below (see its own comment, near openView).
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Scope the shared premium Stripe/Apple-style re-skin (index.css,
   // `app-premium-theme` - also used by the Executive Dashboard) to just
@@ -1172,6 +1176,37 @@ export default function HardwarePage() {
     setSelectedAsset(asset);
     setViewOpen(true);
   };
+
+  // Phase 8 - deep link from the PR detail page's "Fulfilled By" section
+  // (see pr-detail-dialog.tsx): ?assetId=123 auto-opens that asset's view
+  // dialog once assetsWithAssignments has loaded. Re-runs whenever
+  // assetsWithAssignments changes (e.g. the initial load finishing after
+  // this page has already mounted), so it isn't a one-shot effect that
+  // misses the case where the id arrives before the data does. The query
+  // param is cleared immediately after opening so a later manual refresh,
+  // or navigating away and back, doesn't keep reopening the same asset.
+  useEffect(() => {
+    const assetIdParam = searchParams.get('assetId');
+    if (!assetIdParam) return;
+
+    const assetId = Number(assetIdParam);
+    if (Number.isNaN(assetId)) return;
+
+    const asset = assetsWithAssignments.find((a) => a.id === assetId);
+    if (!asset) return;
+
+    openView(asset);
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('assetId');
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetsWithAssignments, searchParams]);
 
   const openDelete = (
     asset: AssetWithAssignment,

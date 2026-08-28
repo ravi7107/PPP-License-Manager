@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   Cpu,
   MapPin,
   QrCode,
+  FileText,
 } from "lucide-react";
 
 import { AssetRecord } from "@/app/pages/hardware/types";
@@ -122,6 +124,28 @@ function WarrantyStatus({
   );
 }
 
+// Phase 8 - invoice-status summary for the "Sourced from PR" card below.
+// "No Invoice" isn't necessarily a problem (material may not have arrived/
+// been billed yet) - this is informational, not a warning by default.
+function InvoiceStatusBadge({
+  count,
+  total,
+}: {
+  count?: number;
+  total?: number;
+}) {
+  if (!count || count === 0) {
+    return <Badge variant="outline">No Invoice</Badge>;
+  }
+
+  return (
+    <Badge>
+      {count} Invoice{count === 1 ? "" : "s"}
+      {total != null ? ` • ${total.toFixed(2)}` : ""}
+    </Badge>
+  );
+}
+
 function InfoField({
   icon,
   label,
@@ -157,6 +181,7 @@ export function AssetViewDialog({
 }: AssetViewDialogProps) {
   const [downloadingLabel, setDownloadingLabel] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   if (!asset) return null;
 
@@ -405,6 +430,90 @@ export function AssetViewDialog({
                 </CardContent>
 
               </Card>
+
+              {/* Phase 8 - "Sourced from PR" - hidden entirely when this
+                  asset wasn't created linked to a Purchase Requisition
+                  (the normal case, since linking is always optional). */}
+
+              {asset.purchaseRequisitionId ? (
+                <Card>
+
+                  <CardHeader>
+
+                    <CardTitle className="flex items-center gap-2">
+
+                      <FileText className="h-5 w-5" />
+
+                      Sourced from PR
+
+                    </CardTitle>
+
+                  </CardHeader>
+
+                  <CardContent className="space-y-3">
+
+                    <InfoField
+                      icon={<Tag size={18} />}
+                      label="PR Number"
+                      value={asset.prNumber}
+                    />
+
+                    <InfoField
+                      icon={<Tag size={18} />}
+                      label="PO Number"
+                      value={asset.poNumber}
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <InfoField
+                        icon={<Calendar size={18} />}
+                        label="PO Date"
+                        value={formatDate(asset.poDate)}
+                      />
+
+                      <InfoField
+                        icon={<Calendar size={18} />}
+                        label="PO Amount"
+                        value={
+                          asset.poAmount != null
+                            ? asset.poAmount.toFixed(2)
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    <div className="rounded-lg border p-3">
+
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Invoicing
+                      </p>
+
+                      <div className="mt-2">
+                        <InvoiceStatusBadge
+                          count={asset.invoiceCount}
+                          total={asset.totalInvoiceAmount}
+                        />
+                      </div>
+
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() =>
+                        navigate(
+                          `/purchase-requisitions?prId=${asset.purchaseRequisitionId}`
+                        )
+                      }
+                    >
+                      View Purchase Requisition
+                    </Button>
+
+                  </CardContent>
+
+                </Card>
+              ) : null}
 
             </div>
 
