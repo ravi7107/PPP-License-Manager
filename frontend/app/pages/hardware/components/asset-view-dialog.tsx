@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -32,10 +32,23 @@ import {
   MapPin,
   QrCode,
   FileText,
+  KeyRound,
 } from "lucide-react";
 
 import { AssetRecord } from "@/app/pages/hardware/types";
 import { downloadAssetQrLabel } from "@/lib/api/assets.api";
+import {
+  ResourceAllocation,
+  getActiveResourceAllocationsByAsset,
+} from "@/lib/api/resource-allocations.api";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type ViewableAssetRecord = AssetRecord & {
   assignedUserName?: string | null;
@@ -182,6 +195,40 @@ export function AssetViewDialog({
   const [downloadingLabel, setDownloadingLabel] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Phase 11 - "Allocated Licenses" - licenses tied directly to this asset
+  // via ResourceAllocation.AssetId. Fetched on open rather than carried on
+  // every row of the Hardware list, since a per-row nested list here would
+  // add an extra join to a page that can list a large number of assets.
+  const [allocatedLicenses, setAllocatedLicenses] = useState<ResourceAllocation[]>([]);
+  const [allocatedLicensesLoading, setAllocatedLicensesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !asset?.id) {
+      setAllocatedLicenses([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setAllocatedLicensesLoading(true);
+
+      try {
+        const result = await getActiveResourceAllocationsByAsset(asset.id);
+        if (!cancelled) setAllocatedLicenses(result);
+      } catch {
+        // Non-fatal - the section just falls back to showing nothing
+        // until this succeeds again on the next open.
+      } finally {
+        if (!cancelled) setAllocatedLicensesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, asset?.id]);
 
   if (!asset) return null;
 
@@ -516,6 +563,63 @@ export function AssetViewDialog({
               ) : null}
 
             </div>
+
+            <Card>
+
+              <CardHeader>
+
+                <CardTitle className="flex items-center gap-2">
+
+                  <KeyRound className="h-5 w-5" />
+
+                  Allocated Licenses
+
+                </CardTitle>
+
+              </CardHeader>
+
+              <CardContent>
+
+                {allocatedLicensesLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : allocatedLicenses.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No license is currently allocated directly to this asset.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Software</TableHead>
+                        <TableHead>License</TableHead>
+                        <TableHead>Allocated To</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Allocated On</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allocatedLicenses.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.softwareName}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.licenseAliasCode}
+                          </TableCell>
+                          <TableCell>{item.userName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDate(item.allocatedOn)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+
+              </CardContent>
+
+            </Card>
 
             <Card>
 

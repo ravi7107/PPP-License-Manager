@@ -47,6 +47,45 @@ public class ResourceAllocationService : IResourceAllocationService
             .ToListAsync();
     }
 
+    // Phase 11 - active allocations tied directly to one asset, for the
+    // Asset detail views' new "Allocated Licenses" section. Same
+    // projection shape as GetAllAsync/GetHistoryByLicenseIdAsync, just
+    // filtered to r.AssetId == assetId && r.IsActive.
+    public async Task<IEnumerable<ResourceAllocationResponse>> GetActiveByAssetIdAsync(int assetId)
+    {
+        return await _context.ResourceAllocations
+            .AsNoTracking()
+            .Include(r => r.License)
+                .ThenInclude(l => l.Software)
+            .Include(r => r.User)
+            .Include(r => r.Asset)
+            .Include(r => r.AllocatedByUser)
+            .Where(r => r.AssetId == assetId && r.IsActive)
+            .OrderBy(r => r.AllocatedOn)
+            .Select(r => new ResourceAllocationResponse
+            {
+                Id = r.Id,
+                AllocationReference = r.AllocationReference,
+                LicenseId = r.LicenseId,
+                LicenseAliasCode = r.License.AliasCode,
+                SoftwareName = r.License.Software.Name,
+                UserId = r.UserId,
+                UserName = r.User.FullName,
+                AssetId = r.AssetId,
+                AssetName = r.Asset != null ? r.Asset.AssetName : null,
+                AllocatedByUserId = r.AllocatedByUserId,
+                AllocatedBy = r.AllocatedByUser.FullName,
+                AllocatedOn = r.AllocatedOn,
+                ExpectedReturnDate = r.ExpectedReturnDate,
+                ActualReturnDate = r.ActualReturnDate,
+                Status = r.Status,
+                Remarks = r.Remarks,
+                IsActive = r.IsActive,
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<ResourceAllocationResponse>> GetHistoryByLicenseIdAsync(int licenseId)
     {
         return await _context.ResourceAllocations

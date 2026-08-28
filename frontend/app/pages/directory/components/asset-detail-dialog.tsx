@@ -49,6 +49,10 @@ import {
   AssetSoftwareFormDialog,
   AssetSoftwareFormValues,
 } from '@/app/pages/directory/components/asset-software-form-dialog';
+import {
+  ResourceAllocation,
+  getActiveResourceAllocationsByAsset,
+} from '@/lib/api/resource-allocations.api';
 
 interface AssetDetailDialogProps {
   open: boolean;
@@ -117,6 +121,13 @@ export function AssetDetailDialog({
   const [softwareSaving, setSoftwareSaving] = useState(false);
   const [softwareError, setSoftwareError] = useState<string | null>(null);
 
+  // Phase 11 - "Allocated Licenses" - licenses tied directly to this asset
+  // via ResourceAllocation.AssetId, separate from the "Installed
+  // Applications" list above (that's AssetSoftware, an install-tracking
+  // record with no relation to who a license is formally allocated to).
+  const [allocatedLicenses, setAllocatedLicenses] = useState<ResourceAllocation[]>([]);
+  const [allocatedLicensesLoading, setAllocatedLicensesLoading] = useState(false);
+
   const loadInstalledSoftware = async (assetId: number) => {
     setInstalledLoading(true);
 
@@ -136,6 +147,7 @@ export function AssetDetailDialog({
       setDetail(null);
       setError(null);
       setInstalledSoftware([]);
+      setAllocatedLicenses([]);
       return;
     }
 
@@ -163,6 +175,21 @@ export function AssetDetailDialog({
     })();
 
     void loadInstalledSoftware(seat.assetId as number);
+
+    (async () => {
+      setAllocatedLicensesLoading(true);
+
+      try {
+        const result = await getActiveResourceAllocationsByAsset(seat.assetId as number);
+
+        if (!cancelled) setAllocatedLicenses(result);
+      } catch {
+        // Non-fatal - the panel just falls back to showing nothing until
+        // this succeeds again on the next open/refresh.
+      } finally {
+        if (!cancelled) setAllocatedLicensesLoading(false);
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -535,6 +562,49 @@ export function AssetDetailDialog({
                               </div>
                             </TableCell>
                           )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+
+              <div className="rounded-lg border p-3 sm:col-span-2">
+                <div className="mb-2 text-sm font-semibold">
+                  Allocated Licenses
+                </div>
+
+                {allocatedLicensesLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : allocatedLicenses.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No license is currently allocated directly to this asset.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Software</TableHead>
+                        <TableHead>License</TableHead>
+                        <TableHead>Allocated To</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Allocated On</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allocatedLicenses.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.softwareName}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.licenseAliasCode}
+                          </TableCell>
+                          <TableCell>{item.userName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.allocatedOn.slice(0, 10)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -37,6 +37,20 @@ public class ResourceAllocationController : ControllerBase
         return Ok(history);
     }
 
+    // Phase 11 - active allocations tied directly to one asset, for the
+    // Asset detail views' "Allocated Licenses" section (Hardware page +
+    // Office Floor Map). Read-only, so it stays open to any authenticated
+    // user like the other GETs above - only the mutating actions below are
+    // role-restricted.
+    [HttpGet("asset/{assetId}/active")]
+    public async Task<IActionResult> GetActiveByAsset(int assetId)
+    {
+        var allocations =
+            await _resourceAllocationService.GetActiveByAssetIdAsync(assetId);
+
+        return Ok(allocations);
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {

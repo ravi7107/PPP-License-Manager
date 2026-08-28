@@ -61,6 +61,19 @@ export async function getResourceAllocations():
   return response.data;
 }
 
+// Phase 11 - active allocations tied directly to one asset, for the
+// Asset detail views' "Allocated Licenses" section.
+export async function getActiveResourceAllocationsByAsset(
+  assetId: number
+): Promise<ResourceAllocation[]> {
+  const response =
+    await api.get<ResourceAllocation[]>(
+      `/ResourceAllocation/asset/${assetId}/active`
+    );
+
+  return response.data;
+}
+
 export async function getResourceAllocation(
   id: number
 ): Promise<ResourceAllocation> {
