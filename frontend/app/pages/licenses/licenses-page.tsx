@@ -1060,6 +1060,7 @@ export default function LicensesPage() {
                   <th>Expiry</th>
                   <th>Cost</th>
                   <th>Status</th>
+                  <th>Department</th>
                   {canEdit ? (
                     <th className="nova-right">
                       Actions
@@ -1072,7 +1073,7 @@ export default function LicensesPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={canEdit ? 11 : 10}
+                      colSpan={canEdit ? 12 : 11}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Loading purchases...
@@ -1081,7 +1082,7 @@ export default function LicensesPage() {
                 ) : licensePurchases.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={canEdit ? 11 : 10}
+                      colSpan={canEdit ? 12 : 11}
                       className="py-8 text-center text-muted-foreground"
                     >
                       No license purchases configured.
@@ -1154,6 +1155,10 @@ export default function LicensesPage() {
                             ? "Active"
                             : "Inactive"}
                         </span>
+                      </td>
+
+                      <td className="nova-cell-sub">
+                        {purchase.departmentName || "—"}
                       </td>
 
                       {canEdit ? (
@@ -1275,6 +1280,7 @@ export default function LicensesPage() {
                   <th>Licensed Email</th>
                   <th>Subscription ID</th>
                   <th>Status</th>
+                  <th>Department</th>
                   <th>Purchase Date</th>
                   <th>Expiry Date</th>
                   <th>Cost</th>
@@ -1288,7 +1294,7 @@ export default function LicensesPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={canEdit ? 10 : 9}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Loading licenses…
@@ -1297,7 +1303,7 @@ export default function LicensesPage() {
                 ) : filteredLicenses.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={canEdit ? 10 : 9}
                       className="py-8 text-center text-muted-foreground"
                     >
                       No licenses found.
@@ -1319,6 +1325,9 @@ export default function LicensesPage() {
                           <span className="nova-dot" />
                           {item.status}
                         </span>
+                      </td>
+                      <td className="nova-cell-sub">
+                        {item.effectiveDepartmentName || "—"}
                       </td>
                       <td className="nova-cell-sub">
                         {formatDate(item.purchaseDate)}

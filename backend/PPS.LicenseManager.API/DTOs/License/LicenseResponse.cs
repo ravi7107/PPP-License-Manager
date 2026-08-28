@@ -33,4 +33,15 @@ public class LicenseResponse
     public bool IsActive { get; set; }
 
     public string? Remarks { get; set; }
+
+    // Phase 13 - "effective" department for Software Inventory display:
+    // follows the currently-allocated user's department when this license
+    // is actively allocated (ResourceAllocation), falling back to the
+    // department recorded at purchase time (LicensePurchase.DepartmentId)
+    // when it isn't allocated to anyone right now. Null when neither is
+    // available (e.g. an unallocated license bought at Organization scope
+    // with no department set).
+    public int? EffectiveDepartmentId { get; set; }
+
+    public string? EffectiveDepartmentName { get; set; }
 }

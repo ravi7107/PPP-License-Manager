@@ -16,6 +16,12 @@ export interface License {
   purchaseCost: number;
   isActive: boolean;
   remarks: string | null;
+
+  // Phase 13 - follows the currently-allocated user's department when
+  // this license is actively allocated, falling back to the purchase's
+  // recorded department otherwise. Null when neither is available.
+  effectiveDepartmentId: number | null;
+  effectiveDepartmentName: string | null;
 }
 
 export interface CreateLicenseRequest {

@@ -64,7 +64,26 @@ public class LicenseService : ILicenseService
                 ExpiryDate = l.ExpiryDate,
                 PurchaseCost = l.PurchaseCost,
                 Remarks = l.Remarks,
-                IsActive = l.IsActive
+                IsActive = l.IsActive,
+                // Phase 13 - follow the active allocation's user
+                // department first, fall back to the purchase-time
+                // department when unallocated.
+                EffectiveDepartmentId = _context.ResourceAllocations
+                    .Where(r => r.LicenseId == l.Id && r.IsActive)
+                    .Select(r => (int?)r.User.DepartmentId)
+                    .FirstOrDefault()
+                    ?? (l.LicensePurchase != null
+                        ? l.LicensePurchase.DepartmentId
+                        : null),
+                EffectiveDepartmentName = _context.ResourceAllocations
+                    .Where(r => r.LicenseId == l.Id && r.IsActive)
+                    .Select(r => r.User.Department != null
+                        ? r.User.Department.DepartmentName
+                        : null)
+                    .FirstOrDefault()
+                    ?? (l.LicensePurchase != null && l.LicensePurchase.Department != null
+                        ? l.LicensePurchase.Department.DepartmentName
+                        : null)
             })
             .ToListAsync();
     }
@@ -74,6 +93,11 @@ public class LicenseService : ILicenseService
         var license = await _context.Licenses
             .Include(l => l.Software)
             .Include(l => l.LicensePurchase)
+                // Phase 13 - needed so the EffectiveDepartmentName fallback
+                // below (license.LicensePurchase.Department.DepartmentName)
+                // isn't silently null just because this entity was loaded
+                // via Include rather than a Select projection.
+                .ThenInclude(lp => lp!.Department)
             .FirstOrDefaultAsync(l => l.Id == id);
 
         if (license == null)
@@ -100,7 +124,23 @@ public class LicenseService : ILicenseService
             ExpiryDate = license.ExpiryDate,
             PurchaseCost = license.PurchaseCost,
             Remarks = license.Remarks,
-            IsActive = license.IsActive
+            IsActive = license.IsActive,
+            EffectiveDepartmentId = await _context.ResourceAllocations
+                .Where(r => r.LicenseId == license.Id && r.IsActive)
+                .Select(r => (int?)r.User.DepartmentId)
+                .FirstOrDefaultAsync()
+                ?? (license.LicensePurchase != null
+                    ? license.LicensePurchase.DepartmentId
+                    : null),
+            EffectiveDepartmentName = await _context.ResourceAllocations
+                .Where(r => r.LicenseId == license.Id && r.IsActive)
+                .Select(r => r.User.Department != null
+                    ? r.User.Department.DepartmentName
+                    : null)
+                .FirstOrDefaultAsync()
+                ?? (license.LicensePurchase != null && license.LicensePurchase.Department != null
+                    ? license.LicensePurchase.Department.DepartmentName
+                    : null)
         };
     }
 
