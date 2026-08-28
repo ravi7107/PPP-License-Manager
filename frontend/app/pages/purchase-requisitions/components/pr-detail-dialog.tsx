@@ -48,6 +48,7 @@ import {
   downloadPurchaseRequisitionPdf,
   downloadPurchaseRequisitionPoDocument,
   downloadPurchaseRequisitionPoUploadDocument,
+  downloadPurchaseRequisitionInvoiceDocument,
   PurchaseRequisition,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -82,6 +83,20 @@ interface PrDetailDialogProps {
   revising?: boolean;
   revisionError?: string | null;
   onCreateRevision?: () => Promise<void>;
+  // Phase 7 - optional, same "omit to hide the capability" convention as
+  // onDecide/onCreateRevision above. Callers that only need a read-only
+  // view (e.g. pending-approvals-page.tsx) simply don't pass this, and the
+  // upload form never renders - the invoice list itself (if any invoices
+  // already exist) still shows regardless.
+  invoiceUploading?: boolean;
+  invoiceUploadError?: string | null;
+  onUploadInvoice?: (
+    file: File,
+    invoiceNumber: string | null,
+    invoiceDate: string | null,
+    invoiceAmount: number | null,
+    notes: string | null
+  ) => Promise<void>;
 }
 
 export function PrDetailDialog({
@@ -100,6 +115,9 @@ export function PrDetailDialog({
   revising = false,
   revisionError,
   onCreateRevision,
+  invoiceUploading = false,
+  invoiceUploadError,
+  onUploadInvoice,
 }: PrDetailDialogProps) {
   const [attachmentType, setAttachmentType] =
     useState<AttachmentType>('VendorQuotation');
@@ -112,11 +130,29 @@ export function PrDetailDialog({
     number | null
   >(null);
   const [poHistoryOpen, setPoHistoryOpen] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<
+    number | null
+  >(null);
+  const [invoiceDownloadError, setInvoiceDownloadError] = useState<
+    string | null
+  >(null);
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceNotes, setInvoiceNotes] = useState('');
 
   useEffect(() => {
     if (open) {
       setDecisionRemarks('');
       setDownloadError(null);
+      setInvoiceFormOpen(false);
+      setInvoiceFile(null);
+      setInvoiceNumber('');
+      setInvoiceDate('');
+      setInvoiceAmount('');
+      setInvoiceNotes('');
     }
   }, [open, purchaseRequisition?.id]);
 
@@ -273,6 +309,67 @@ export function PrDetailDialog({
     } finally {
       setDownloadingPoUploadId(null);
     }
+  };
+
+  // Same blob-fetch pattern as handleDownloadPo/handleDownloadPoUpload, for
+  // one specific invoice's uploaded document.
+  const handleDownloadInvoice = async (invoiceId: number) => {
+    setDownloadingInvoiceId(invoiceId);
+    setInvoiceDownloadError(null);
+
+    try {
+      const { blob, fileName } = await downloadPurchaseRequisitionInvoiceDocument(
+        pr.id,
+        invoiceId
+      );
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      let message: string | undefined;
+
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          message = JSON.parse(text)?.message;
+        } catch {
+          // Not JSON - fall through to the generic message below.
+        }
+      }
+
+      setInvoiceDownloadError(
+        message ?? err?.message ?? 'Failed to download that invoice document.'
+      );
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  };
+
+  const handleSubmitInvoice = async () => {
+    if (!onUploadInvoice || !invoiceFile) return;
+
+    const parsedAmount = invoiceAmount.trim() ? Number(invoiceAmount) : null;
+
+    await onUploadInvoice(
+      invoiceFile,
+      invoiceNumber.trim() || null,
+      invoiceDate.trim() || null,
+      parsedAmount != null && !Number.isNaN(parsedAmount) ? parsedAmount : null,
+      invoiceNotes.trim() || null
+    );
+
+    setInvoiceFormOpen(false);
+    setInvoiceFile(null);
+    setInvoiceNumber('');
+    setInvoiceDate('');
+    setInvoiceAmount('');
+    setInvoiceNotes('');
   };
 
   return (
@@ -502,6 +599,180 @@ export function PrDetailDialog({
             ) : null}
           </div>
         ) : null}
+
+        {/* INVOICES (Phase 7) - every invoice raised against this PR/PO so
+            far, plus an upload form (only when the caller passed
+            onUploadInvoice - read-only callers like the pending-approvals
+            view simply omit it). Unlike Purchase Order above, this section
+            is never hidden entirely - it always shows so the upload
+            capability has an obvious home once a PR is Approved. */}
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Invoices</h3>
+            {pr.status === 'Approved' && onUploadInvoice ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setInvoiceFormOpen((v) => !v)}
+              >
+                <Upload className="mr-1 h-3.5 w-3.5" />
+                Upload Invoice
+              </Button>
+            ) : null}
+          </div>
+
+          {invoiceUploadError ? (
+            <div className="mb-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+              {invoiceUploadError}
+            </div>
+          ) : null}
+
+          {invoiceFormOpen && onUploadInvoice ? (
+            <div className="mb-3 rounded-md border border-border bg-muted/40 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <Label className="text-xs">Invoice Number (optional)</Label>
+                  <input
+                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    placeholder="e.g. INV-2026-0042"
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    disabled={invoiceUploading}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Invoice Date (optional)</Label>
+                  <input
+                    type="date"
+                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    disabled={invoiceUploading}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Invoice Amount (optional)</Label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    placeholder={`${pr.currency} amount`}
+                    value={invoiceAmount}
+                    onChange={(e) => setInvoiceAmount(e.target.value)}
+                    disabled={invoiceUploading}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <Label className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  className="mt-1"
+                  placeholder="e.g. which shipment/receipt this invoice covers..."
+                  value={invoiceNotes}
+                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  disabled={invoiceUploading}
+                />
+              </div>
+
+              <div className="mt-3">
+                <Label className="text-xs">
+                  Invoice Copy (PDF, JPG, PNG, DOCX, or XLSX)
+                </Label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
+                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm file:mr-2 file:rounded file:border-0 file:bg-transparent"
+                  onChange={(e) => setInvoiceFile(e.target.files?.[0] ?? null)}
+                  disabled={invoiceUploading}
+                />
+              </div>
+
+              <div className="mt-3 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={invoiceUploading}
+                  onClick={() => setInvoiceFormOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={invoiceUploading || !invoiceFile}
+                  onClick={handleSubmitInvoice}
+                >
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  {invoiceUploading ? 'Uploading...' : 'Submit Invoice'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {pr.invoices.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No invoices yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice Number</TableHead>
+                  <TableHead>Invoice Date</TableHead>
+                  <TableHead className="text-right">Invoice Amount</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pr.invoices.map((inv) => (
+                  <TableRow key={inv.id}>
+                    <TableCell>{inv.invoiceNumber ?? '—'}</TableCell>
+                    <TableCell>
+                      {inv.invoiceDate
+                        ? new Date(inv.invoiceDate).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {inv.invoiceAmount != null
+                        ? inv.invoiceAmount.toFixed(2)
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(inv.uploadedAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {inv.uploadedByUserName ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {inv.hasInvoiceDocument ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={downloadingInvoiceId === inv.id}
+                          onClick={() => handleDownloadInvoice(inv.id)}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {invoiceDownloadError ? (
+            <div className="mt-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+              {invoiceDownloadError}
+            </div>
+          ) : null}
+        </div>
 
         {/* ATTACHMENTS */}
 

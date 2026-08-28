@@ -164,4 +164,49 @@ public interface IPurchaseRequisitionService
         int requestingUserId,
         bool isPrivileged,
         string pdfStorageRootPath);
+
+
+    // =========================================================
+    // INVOICES (Phase 7)
+    // =========================================================
+
+    // Authenticated in-app upload (owner or privileged only, Approved PRs
+    // only) - deliberately separate from the Finance PO-upload flow, which
+    // is unauthenticated/token-based. materialMovementReceiptId is
+    // optional and, when supplied, is validated against this PR before
+    // being accepted - see the implementation's own comment for exactly
+    // how. Throws InvalidOperationException for a not-found PR, a non-
+    // Approved PR, an invalid/missing file, or a receipt that doesn't
+    // actually belong to this PR; throws UnauthorizedAccessException for
+    // a caller who is neither the owner nor privileged.
+    Task<PurchaseRequisitionInvoiceResponse> UploadInvoiceAsync(
+        int purchaseRequisitionId,
+        IFormFile file,
+        string? invoiceNumber,
+        DateTime? invoiceDate,
+        decimal? invoiceAmount,
+        int? materialMovementReceiptId,
+        string? notes,
+        int uploadedByUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath);
+
+    // Standalone list, same access rule as GetByIdAsync. Throws
+    // InvalidOperationException if the PR doesn't exist, or
+    // UnauthorizedAccessException if the caller has no access to it.
+    Task<List<PurchaseRequisitionInvoiceResponse>> GetInvoicesAsync(
+        int purchaseRequisitionId,
+        int requestingUserId,
+        bool isPrivileged);
+
+    // Same access rule as GetPoDocumentFileAsync, for one specific
+    // invoice's uploaded document. Returns null if that invoice (or its
+    // file) doesn't exist, or doesn't belong to the given purchase
+    // requisition.
+    Task<(string PhysicalPath, string FileName)?> GetInvoiceDocumentAsync(
+        int purchaseRequisitionId,
+        int invoiceId,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath);
 }

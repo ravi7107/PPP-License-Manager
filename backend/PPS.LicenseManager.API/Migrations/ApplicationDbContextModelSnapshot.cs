@@ -2546,6 +2546,56 @@ namespace PPS.LicenseManager.API.Migrations
                     b.ToTable("PurchaseRequisitionFinanceNotifications");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("InvoiceAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("InvoiceDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InvoiceDocumentPath")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("MaterialMovementReceiptId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("PurchaseRequisitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaterialMovementReceiptId");
+
+                    b.HasIndex("PurchaseRequisitionId");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.ToTable("PurchaseRequisitionInvoices");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionLineItem", b =>
                 {
                     b.Property<int>("Id")
@@ -4612,6 +4662,32 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("SentByUser");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionInvoice", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.MaterialMovementReceipt", "MaterialMovementReceipt")
+                        .WithMany()
+                        .HasForeignKey("MaterialMovementReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisition", "PurchaseRequisition")
+                        .WithMany("Invoices")
+                        .HasForeignKey("PurchaseRequisitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PPS.LicenseManager.API.Models.User", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MaterialMovementReceipt");
+
+                    b.Navigation("PurchaseRequisition");
+
+                    b.Navigation("UploadedByUser");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionLineItem", b =>
                 {
                     b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisition", "PurchaseRequisition")
@@ -5095,6 +5171,8 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("ApprovalSteps");
 
                     b.Navigation("Attachments");
+
+                    b.Navigation("Invoices");
 
                     b.Navigation("LineItems");
 

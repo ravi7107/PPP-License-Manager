@@ -53,4 +53,14 @@ public class MaterialMovementResponse
 
     // Null until the movement is Dispatched.
     public MaterialMovementDispatchResponse? Dispatch { get; set; }
+
+    // Phase 7 - the distinct set of Purchase Requisition ids reachable
+    // through this movement's own lines (only lines that carry a specific
+    // serialized IT Asset which is itself linked to a PR contribute here -
+    // see LoadMovementResponseAsync's own comment). Empty for the common
+    // case of a movement with no PR-linked assets at all. Purely additive,
+    // read-only - lets a caller (e.g. the external "PPS Asset Scanner"
+    // mobile app, after a receive scan) discover which PR(s), if any, an
+    // invoice could be uploaded against for this movement.
+    public List<int> LinkedPurchaseRequisitionIds { get; set; } = new();
 }

@@ -169,6 +169,17 @@ public class MaterialMovementService : IMaterialMovementService
                     Remarks = i.Remarks
                 }).ToList(),
 
+                // Phase 7 - see MaterialMovementResponse.LinkedPurchaseRequisitionIds'
+                // own comment. Only lines carrying a serialized IT Asset that
+                // is itself linked to a PR contribute - the only path from a
+                // movement back to a PR, since MaterialMovement has no direct
+                // FK to PurchaseRequisition of its own.
+                LinkedPurchaseRequisitionIds = m.Items
+                    .Where(i => i.Asset != null && i.Asset.PurchaseRequisitionId != null)
+                    .Select(i => i.Asset!.PurchaseRequisitionId!.Value)
+                    .Distinct()
+                    .ToList(),
+
                 Approvals = m.Approvals
                     .OrderBy(a => a.StepOrder)
                     .Select(a => new MaterialMovementApprovalResponse

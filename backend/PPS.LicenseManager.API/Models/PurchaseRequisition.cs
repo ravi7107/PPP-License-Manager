@@ -174,6 +174,12 @@ public class PurchaseRequisition
     public ICollection<PurchaseRequisitionPoUpload> PoUploadHistory { get; set; } =
         new List<PurchaseRequisitionPoUpload>();
 
+    // Invoices raised against this PR/PO - see PurchaseRequisitionInvoice's
+    // own class comment for why this is a separate 1:many table rather than
+    // more header fields alongside PoNumber/PoDate/PoAmount above.
+    public ICollection<PurchaseRequisitionInvoice> Invoices { get; set; } =
+        new List<PurchaseRequisitionInvoice>();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

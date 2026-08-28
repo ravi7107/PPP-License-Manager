@@ -53,6 +53,24 @@ export interface PurchaseRequisitionPoUpload {
   uploadedByEmail: string | null;
 }
 
+// Phase 7 - one row per invoice raised against this PR/PO, oldest first.
+// Deliberately a list, not more header fields alongside poNumber/poDate/
+// poAmount above - a single PO commonly gets invoiced across more than one
+// delivery. materialMovementReceiptId is set only when this invoice was
+// tagged to a specific receive event at upload time.
+export interface PurchaseRequisitionInvoice {
+  id: number;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  invoiceAmount: number | null;
+  hasInvoiceDocument: boolean;
+  uploadedAt: string;
+  uploadedByUserId: number;
+  uploadedByUserName: string | null;
+  materialMovementReceiptId: number | null;
+  notes: string | null;
+}
+
 export interface PurchaseRequisitionAttachment {
   id: number;
   attachmentType: AttachmentType;
@@ -132,6 +150,9 @@ export interface PurchaseRequisition {
   poAmount: number | null;
   poUploadedByEmail: string | null;
   poUploadHistory: PurchaseRequisitionPoUpload[];
+  // Phase 7 - every invoice raised against this PR/PO so far, oldest
+  // first. Empty until material is actually received/billed.
+  invoices: PurchaseRequisitionInvoice[];
   createdAt: string;
   updatedAt: string | null;
   isOwner: boolean;
@@ -512,4 +533,57 @@ export async function getPurchaseRequisitionFulfillmentReport(): Promise<
   >('/PurchaseRequisition/fulfillment-report');
 
   return response.data.data;
+}
+
+// Phase 7 - authenticated in-app invoice upload, independent of Material
+// Movement (materialMovementReceiptId is optional - see
+// PurchaseRequisitionInvoice's own comment). Only the PR owner or a
+// privileged user can call this, and only while the PR is Approved
+// (enforced server-side).
+export async function uploadPurchaseRequisitionInvoice(
+  id: number,
+  file: File,
+  invoiceNumber: string | null,
+  invoiceDate: string | null,
+  invoiceAmount: number | null,
+  materialMovementReceiptId?: number | null,
+  notes?: string | null
+): Promise<PurchaseRequisitionInvoice> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (invoiceNumber) formData.append('invoiceNumber', invoiceNumber);
+  if (invoiceDate) formData.append('invoiceDate', invoiceDate);
+  if (invoiceAmount != null) formData.append('invoiceAmount', String(invoiceAmount));
+  if (materialMovementReceiptId != null)
+    formData.append('materialMovementReceiptId', String(materialMovementReceiptId));
+  if (notes) formData.append('notes', notes);
+
+  const response = await api.post<ApiResponse<PurchaseRequisitionInvoice>>(
+    `/PurchaseRequisition/${id}/invoices`,
+    formData
+  );
+
+  return response.data.data;
+}
+
+// Same "not a static file, has to be fetched as a blob" reasoning as
+// downloadPurchaseRequisitionPoDocument above - invoice documents live
+// under the same private, non-wwwroot storage area.
+export async function downloadPurchaseRequisitionInvoiceDocument(
+  id: number,
+  invoiceId: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(
+    `/PurchaseRequisition/${id}/invoices/${invoiceId}/document`,
+    { responseType: 'blob' }
+  );
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `invoice-${id}-${invoiceId}`,
+  };
 }

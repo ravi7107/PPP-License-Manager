@@ -69,6 +69,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<PurchaseRequisitionPoUpload> PurchaseRequisitionPoUploads =>
         Set<PurchaseRequisitionPoUpload>();
 
+    public DbSet<PurchaseRequisitionInvoice> PurchaseRequisitionInvoices =>
+        Set<PurchaseRequisitionInvoice>();
+
     public DbSet<PurchaseRequisitionApprovalStep> PurchaseRequisitionApprovalSteps =>
         Set<PurchaseRequisitionApprovalStep>();
 
@@ -765,6 +768,39 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany(x => x.PoUploadHistory)
                   .HasForeignKey(x => x.PurchaseRequisitionId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionInvoice>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.InvoiceAmount).HasPrecision(18, 2);
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+            entity.HasIndex(x => x.MaterialMovementReceiptId);
+            entity.HasIndex(x => x.UploadedByUserId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany(x => x.Invoices)
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(x => x.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional - see PurchaseRequisitionInvoice.MaterialMovementReceiptId's
+            // own comment. Restrict (not Cascade): a receipt being an
+            // independent, already-completed record of a Material Movement,
+            // not something this invoice owns the lifecycle of - matches the
+            // dominant Restrict convention this DbContext uses for FKs to
+            // independent/shared entities (see the PurchaseRequisition-level
+            // Vendor/Company/User FKs above).
+            entity.HasOne(x => x.MaterialMovementReceipt)
+                  .WithMany()
+                  .HasForeignKey(x => x.MaterialMovementReceiptId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PurchaseRequisitionApprovalStep>(entity =>

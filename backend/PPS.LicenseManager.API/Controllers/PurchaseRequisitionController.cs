@@ -450,6 +450,91 @@ public class PurchaseRequisitionController : BaseController
 
 
     // =========================================================
+    // INVOICES (Phase 7)
+    // =========================================================
+
+    // Authenticated in-app upload, independent of Material Movement -
+    // covers hardware PRs (optionally tagged to a receive event via
+    // materialMovementReceiptId) and software-only PRs alike (no Asset, no
+    // Movement, but still invoiced against their PO).
+    [HttpPost("{id:int}/invoices")]
+    [RequestSizeLimit(15 * 1024 * 1024)]
+    public async Task<IActionResult> UploadInvoice(
+        int id,
+        IFormFile file,
+        [FromForm] string? invoiceNumber = null,
+        [FromForm] DateTime? invoiceDate = null,
+        [FromForm] decimal? invoiceAmount = null,
+        [FromForm] int? materialMovementReceiptId = null,
+        [FromForm] string? notes = null)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.UploadInvoiceAsync(
+                id, file, invoiceNumber, invoiceDate, invoiceAmount,
+                materialMovementReceiptId, notes, currentUserId, IsPrivileged(),
+                GetPdfStorageRootPath());
+
+            return Success(result, "Invoice uploaded.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequestResponse(ex.Message);
+        }
+    }
+
+    [HttpGet("{id:int}/invoices")]
+    public async Task<IActionResult> GetInvoices(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var result = await _service.GetInvoicesAsync(id, currentUserId, IsPrivileged());
+
+            return Success(result, "Invoices retrieved successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFoundResponse(ex.Message);
+        }
+    }
+
+    // Same access rule as DownloadPoDocument, for one specific invoice's
+    // uploaded document.
+    [HttpGet("{id:int}/invoices/{invoiceId:int}/document")]
+    public async Task<IActionResult> DownloadInvoiceDocument(int id, int invoiceId)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var file = await _service.GetInvoiceDocumentAsync(
+                id, invoiceId, currentUserId, IsPrivileged(), GetPdfStorageRootPath());
+
+            if (file == null)
+                return NotFoundResponse("That invoice document could not be found.");
+
+            return PhysicalFile(file.Value.PhysicalPath, "application/octet-stream", file.Value.FileName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+
+    // =========================================================
     // SUBMIT
     // =========================================================
 

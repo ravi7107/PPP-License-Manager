@@ -35,6 +35,7 @@ import {
   SubmitPurchaseRequisitionRequest,
   updatePurchaseRequisitionDraft,
   uploadPurchaseRequisitionAttachment,
+  uploadPurchaseRequisitionInvoice,
 } from '@/lib/api/purchase-requisitions.api';
 
 import { PrFormDialog } from '@/app/pages/purchase-requisitions/components/pr-form-dialog';
@@ -87,6 +88,9 @@ export default function PurchaseRequisitionsPage() {
 
   const [revising, setRevising] = useState(false);
   const [revisionError, setRevisionError] = useState<string | null>(null);
+
+  const [invoiceUploading, setInvoiceUploading] = useState(false);
+  const [invoiceUploadError, setInvoiceUploadError] = useState<string | null>(null);
 
   const [pageError, setPageError] = useState<string | null>(null);
 
@@ -158,6 +162,7 @@ export default function PurchaseRequisitionsPage() {
       setDetailPr(full);
       setUploadError(null);
       setRevisionError(null);
+      setInvoiceUploadError(null);
       setDetailOpen(true);
     } catch (err: any) {
       setPageError(err?.response?.data?.message ?? 'Failed to load purchase requisition.');
@@ -260,6 +265,36 @@ export default function PurchaseRequisitionsPage() {
       );
     } finally {
       setRevising(false);
+    }
+  };
+
+  const handleUploadInvoice = async (
+    file: File,
+    invoiceNumber: string | null,
+    invoiceDate: string | null,
+    invoiceAmount: number | null,
+    notes: string | null
+  ) => {
+    if (!detailPr) return;
+    setInvoiceUploading(true);
+    setInvoiceUploadError(null);
+    try {
+      await uploadPurchaseRequisitionInvoice(
+        detailPr.id,
+        file,
+        invoiceNumber,
+        invoiceDate,
+        invoiceAmount,
+        null,
+        notes
+      );
+      await refreshDetail(detailPr.id);
+    } catch (err: any) {
+      setInvoiceUploadError(
+        err?.response?.data?.message ?? err?.message ?? 'Failed to upload invoice.'
+      );
+    } finally {
+      setInvoiceUploading(false);
     }
   };
 
@@ -443,6 +478,9 @@ export default function PurchaseRequisitionsPage() {
         revising={revising}
         revisionError={revisionError}
         onCreateRevision={handleCreateRevision}
+        invoiceUploading={invoiceUploading}
+        invoiceUploadError={invoiceUploadError}
+        onUploadInvoice={handleUploadInvoice}
       />
 
       <SubmitPrDialog

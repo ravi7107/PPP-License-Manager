@@ -74,6 +74,13 @@ public class PurchaseRequisitionResponse
     public string? PoUploadedByEmail { get; set; }
     public List<PurchaseRequisitionPoUploadResponse> PoUploadHistory { get; set; } = new();
 
+    // Phase 7 - every invoice raised against this PR/PO so far, oldest
+    // first. Empty for a PR with no invoice uploaded yet (the common case
+    // until material is actually received/billed). See
+    // Models.PurchaseRequisitionInvoice's own comment on why this is a
+    // list rather than more header fields like the PO ones above.
+    public List<PurchaseRequisitionInvoiceResponse> Invoices { get; set; } = new();
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

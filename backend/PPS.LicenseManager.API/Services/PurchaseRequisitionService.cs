@@ -143,7 +143,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 .ThenInclude(x => x.AssignedApproverContact)
             .Include(x => x.PreviousRevision)
             .Include(x => x.PoUploadedByUser)
-            .Include(x => x.PoUploadHistory);
+            .Include(x => x.PoUploadHistory)
+            .Include(x => x.Invoices)
+                .ThenInclude(x => x.UploadedByUser);
     }
 
     private static PurchaseRequisitionResponse Map(
@@ -210,6 +212,23 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                     HasPoDocument = !string.IsNullOrWhiteSpace(h.PoDocumentPath),
                     UploadedAt = h.UploadedAt,
                     UploadedByEmail = h.UploadedByEmail
+                })
+                .ToList(),
+
+            Invoices = r.Invoices
+                .OrderBy(i => i.UploadedAt)
+                .Select(i => new PurchaseRequisitionInvoiceResponse
+                {
+                    Id = i.Id,
+                    InvoiceNumber = i.InvoiceNumber,
+                    InvoiceDate = i.InvoiceDate,
+                    InvoiceAmount = i.InvoiceAmount,
+                    HasInvoiceDocument = !string.IsNullOrWhiteSpace(i.InvoiceDocumentPath),
+                    UploadedAt = i.UploadedAt,
+                    UploadedByUserId = i.UploadedByUserId,
+                    UploadedByUserName = i.UploadedByUser?.FullName,
+                    MaterialMovementReceiptId = i.MaterialMovementReceiptId,
+                    Notes = i.Notes
                 })
                 .ToList(),
 
@@ -3683,6 +3702,240 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var physicalPath = Path.Combine(
             pdfStorageRootPath,
             upload.PoDocumentPath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(physicalPath))
+            return null;
+
+        return (physicalPath, Path.GetFileName(physicalPath));
+    }
+
+
+    // =========================================================
+    // INVOICES (Phase 7)
+    // =========================================================
+
+    /*
+     * Authenticated in-app upload - unlike the Finance PO link, this is a
+     * normal session-backed action (UploadedByUserId is always set), so it
+     * follows the owner/privileged access rule every other authenticated
+     * write on this service uses, not the token-as-credential pattern.
+     * Requires the PR to be Approved - matches the business flow (an
+     * invoice is only ever raised against an actual PO), and reuses the
+     * exact same file-validation helpers (size cap, extension whitelist,
+     * magic-byte signature check) already proven by UploadPoByTokenAsync,
+     * stored under the same private, non-wwwroot area as PO/PDF documents
+     * since an invoice can carry vendor pricing/bank details.
+     *
+     * materialMovementReceiptId is optional (see
+     * PurchaseRequisitionInvoice.MaterialMovementReceiptId's own comment
+     * on why) - when supplied, it's validated here rather than trusted:
+     * MaterialMovement has no direct link to PurchaseRequisition at all,
+     * only a transitive one through a moved line's linked Asset, so this
+     * loads the receipt's movement items and confirms at least one
+     * item's Asset.PurchaseRequisitionId actually matches this PR before
+     * accepting the link - this is the ONLY coupling this method has to
+     * the Material Movement module; nothing about ReceiveAsync's own
+     * precondition, status transition, or receipt-item creation is
+     * touched anywhere in this codepath.
+     */
+    public async Task<PurchaseRequisitionInvoiceResponse> UploadInvoiceAsync(
+        int purchaseRequisitionId,
+        IFormFile file,
+        string? invoiceNumber,
+        DateTime? invoiceDate,
+        decimal? invoiceAmount,
+        int? materialMovementReceiptId,
+        string? notes,
+        int uploadedByUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath)
+    {
+        var record = await _context.PurchaseRequisitions
+            .FirstOrDefaultAsync(x => x.Id == purchaseRequisitionId);
+
+        if (record == null)
+            throw new InvalidOperationException("Purchase requisition not found.");
+
+        var isOwner = record.RequestedByUserId == uploadedByUserId;
+
+        if (!isOwner && !isPrivileged)
+            throw new UnauthorizedAccessException(
+                "You don't have access to upload invoices for this purchase requisition.");
+
+        if (record.Status != "Approved")
+            throw new InvalidOperationException(
+                "Invoices can only be uploaded for an Approved purchase requisition.");
+
+        if (file == null || file.Length == 0)
+            throw new InvalidOperationException("Please select an invoice file to upload.");
+
+        if (file.Length > MaxAttachmentSizeBytes)
+            throw new InvalidOperationException("The invoice file must not exceed 15 MB.");
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+        if (!AllowedAttachmentExtensions.Contains(extension))
+            throw new InvalidOperationException(
+                "Only PDF, JPG, PNG, DOCX, and XLSX files are allowed.");
+
+        await ValidateFileSignatureAsync(file, extension);
+
+        if (materialMovementReceiptId.HasValue)
+        {
+            var receipt = await _context.MaterialMovementReceipts
+                .Include(r => r.Movement)
+                    .ThenInclude(m => m.Items)
+                        .ThenInclude(i => i.Asset)
+                .FirstOrDefaultAsync(r => r.Id == materialMovementReceiptId.Value);
+
+            var linkedToThisPr = receipt?.Movement.Items
+                .Any(i => i.Asset != null && i.Asset.PurchaseRequisitionId == purchaseRequisitionId)
+                ?? false;
+
+            if (!linkedToThisPr)
+                throw new InvalidOperationException(
+                    "The selected material movement receipt is not linked to this purchase requisition.");
+        }
+
+        var directory = Path.Combine(
+            pdfStorageRootPath, "purchase-requisitions", record.Id.ToString(), "invoices");
+
+        Directory.CreateDirectory(directory);
+
+        var generatedFileName = $"{Guid.NewGuid():N}{extension}";
+        var destination = Path.Combine(directory, generatedFileName);
+
+        await using (var output = new FileStream(
+            destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            await file.CopyToAsync(output);
+        }
+
+        var trimmedInvoiceNumber = string.IsNullOrWhiteSpace(invoiceNumber) ? null : invoiceNumber.Trim();
+        var trimmedNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+
+        var invoice = new Models.PurchaseRequisitionInvoice
+        {
+            PurchaseRequisitionId = record.Id,
+            InvoiceNumber = trimmedInvoiceNumber,
+            InvoiceDate = invoiceDate,
+            InvoiceAmount = invoiceAmount,
+            InvoiceDocumentPath = $"purchase-requisitions/{record.Id}/invoices/{generatedFileName}",
+            UploadedAt = DateTime.UtcNow,
+            UploadedByUserId = uploadedByUserId,
+            MaterialMovementReceiptId = materialMovementReceiptId,
+            Notes = trimmedNotes
+        };
+
+        _context.PurchaseRequisitionInvoices.Add(invoice);
+
+        AddAuditLog(record.Id, "InvoiceUploaded", uploadedByUserId,
+            trimmedInvoiceNumber != null
+                ? $"Invoice uploaded. Invoice Number: {trimmedInvoiceNumber}."
+                : "Invoice uploaded.");
+
+        await _context.SaveChangesAsync();
+
+        var uploader = await _context.Users.FirstOrDefaultAsync(u => u.Id == uploadedByUserId);
+
+        return new PurchaseRequisitionInvoiceResponse
+        {
+            Id = invoice.Id,
+            InvoiceNumber = invoice.InvoiceNumber,
+            InvoiceDate = invoice.InvoiceDate,
+            InvoiceAmount = invoice.InvoiceAmount,
+            HasInvoiceDocument = true,
+            UploadedAt = invoice.UploadedAt,
+            UploadedByUserId = invoice.UploadedByUserId,
+            UploadedByUserName = uploader?.FullName,
+            MaterialMovementReceiptId = invoice.MaterialMovementReceiptId,
+            Notes = invoice.Notes
+        };
+    }
+
+    /*
+     * Standalone list endpoint - a lighter query than the full PR detail
+     * fetch (which also embeds this same data via Map/Query above for
+     * convenience) for callers that only need the invoice list itself.
+     * Same owner/assigned-approver/privileged access rule as
+     * GetPoDocumentFileAsync.
+     */
+    public async Task<List<PurchaseRequisitionInvoiceResponse>> GetInvoicesAsync(
+        int purchaseRequisitionId,
+        int requestingUserId,
+        bool isPrivileged)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .Include(x => x.Invoices)
+                .ThenInclude(x => x.UploadedByUser)
+            .FirstOrDefaultAsync(x => x.Id == purchaseRequisitionId);
+
+        if (record == null)
+            throw new InvalidOperationException("Purchase requisition not found.");
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        return record.Invoices
+            .OrderBy(i => i.UploadedAt)
+            .Select(i => new PurchaseRequisitionInvoiceResponse
+            {
+                Id = i.Id,
+                InvoiceNumber = i.InvoiceNumber,
+                InvoiceDate = i.InvoiceDate,
+                InvoiceAmount = i.InvoiceAmount,
+                HasInvoiceDocument = !string.IsNullOrWhiteSpace(i.InvoiceDocumentPath),
+                UploadedAt = i.UploadedAt,
+                UploadedByUserId = i.UploadedByUserId,
+                UploadedByUserName = i.UploadedByUser?.FullName,
+                MaterialMovementReceiptId = i.MaterialMovementReceiptId,
+                Notes = i.Notes
+            })
+            .ToList();
+    }
+
+    /*
+     * Same access rule and "not under wwwroot" storage principle as
+     * GetPoDocumentFileAsync, for one specific invoice's document.
+     */
+    public async Task<(string PhysicalPath, string FileName)?> GetInvoiceDocumentAsync(
+        int purchaseRequisitionId,
+        int invoiceId,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .FirstOrDefaultAsync(x => x.Id == purchaseRequisitionId);
+
+        if (record == null)
+            return null;
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        var invoice = await _context.PurchaseRequisitionInvoices
+            .FirstOrDefaultAsync(x =>
+                x.Id == invoiceId && x.PurchaseRequisitionId == purchaseRequisitionId);
+
+        if (invoice == null || string.IsNullOrWhiteSpace(invoice.InvoiceDocumentPath))
+            return null;
+
+        var physicalPath = Path.Combine(
+            pdfStorageRootPath,
+            invoice.InvoiceDocumentPath.Replace('/', Path.DirectorySeparatorChar));
 
         if (!File.Exists(physicalPath))
             return null;
