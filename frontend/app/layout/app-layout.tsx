@@ -57,11 +57,6 @@ export function AppLayout() {
       : location.pathname.startsWith(item.path)
   );
 
-  const userName =
-    user?.fullName ||
-    user?.email ||
-    'User';
-
   const breadcrumbGroup = currentItem
     ? getNavGroupLabel(currentItem.key)
     : undefined;
@@ -77,12 +72,9 @@ export function AppLayout() {
 
       <SidebarInset>
         <AppTopbar
-          userName={userName}
-          roles={roles}
           pageTitle={currentItem?.label ?? 'Dashboard'}
           breadcrumbGroup={breadcrumbGroup}
           canSearch={canSearch}
-          companyName={user?.companyName}
         />
 
         <div className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6">
