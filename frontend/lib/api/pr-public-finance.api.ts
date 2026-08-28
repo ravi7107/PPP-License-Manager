@@ -40,6 +40,8 @@ export interface PublicPurchaseRequisitionFinance {
   // the first upload. The link stays usable afterward, so revisiting
   // shows what's already on file rather than looking blank.
   poNumber: string | null;
+  poDate: string | null;
+  poAmount: number | null;
   hasPoDocument: boolean;
   poUploadedAt: string | null;
 }
@@ -69,12 +71,22 @@ export async function getPublicPurchaseRequisitionFinance(
 export async function uploadPurchaseRequisitionPoByToken(
   token: string,
   file: File,
-  poNumber: string | null
+  poNumber: string | null,
+  // ISO date string (yyyy-mm-dd, from a <input type="date">) and a plain
+  // number - both optional, matching the backend's nullable PoDate/PoAmount.
+  poDate: string | null,
+  poAmount: number | null
 ): Promise<PublicPurchaseRequisitionFinance> {
   const formData = new FormData();
   formData.append('file', file);
   if (poNumber) {
     formData.append('poNumber', poNumber);
+  }
+  if (poDate) {
+    formData.append('poDate', poDate);
+  }
+  if (poAmount != null && !Number.isNaN(poAmount)) {
+    formData.append('poAmount', String(poAmount));
   }
 
   const response = await api.post<ApiResponse<PublicPurchaseRequisitionFinance>>(

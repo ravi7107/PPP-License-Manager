@@ -125,13 +125,22 @@ public interface IPurchaseRequisitionService
     // Records Finance's PO upload via the secure link - deliberately
     // re-callable (see PurchaseRequisitionFinanceNotification.TokenHash's
     // comment), so a second call simply overwrites the PO details and
-    // re-sends the requester their "PO ready" email. Returns null only
-    // when the token doesn't exist; throws InvalidOperationException for
-    // an expired token, a PR that isn't Approved, or a rejected upload.
+    // re-sends the requester their "PO ready" email. Starting with the
+    // second call for a given PR, whatever was about to be overwritten is
+    // first preserved as a row in PurchaseRequisitionPoUpload, so no
+    // revision is ever lost (the very first upload has nothing to
+    // preserve yet - it just becomes the header). poDate/poAmount are
+    // optional so an already-sent Finance link posting the pre-Phase-6
+    // request shape (no PO date/amount fields) still succeeds. Returns
+    // null only when the token doesn't exist; throws
+    // InvalidOperationException for an expired token, a PR that isn't
+    // Approved, or a rejected upload.
     Task<PublicPurchaseRequisitionFinanceResponse?> UploadPoByTokenAsync(
         string rawToken,
         IFormFile file,
         string? poNumber,
+        DateTime? poDate,
+        decimal? poAmount,
         string pdfStorageRootPath);
 
     // Authenticated in-app download of whatever PO document Finance most
@@ -139,6 +148,19 @@ public interface IPurchaseRequisitionService
     // null if none has been uploaded yet.
     Task<(string PhysicalPath, string FileName)?> GetPoDocumentFileAsync(
         int id,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath);
+
+    // Same access rule as GetPoDocumentFileAsync, but for one specific
+    // past upload from PoUploadHistory rather than always "whatever's
+    // current" - lets the PR detail view's upload-history list download an
+    // older PO copy after a later revision has overwritten the header.
+    // Returns null if that history row (or its file) doesn't exist, or
+    // doesn't belong to the given purchase requisition.
+    Task<(string PhysicalPath, string FileName)?> GetPoUploadHistoryDocumentAsync(
+        int purchaseRequisitionId,
+        int poUploadId,
         int requestingUserId,
         bool isPrivileged,
         string pdfStorageRootPath);

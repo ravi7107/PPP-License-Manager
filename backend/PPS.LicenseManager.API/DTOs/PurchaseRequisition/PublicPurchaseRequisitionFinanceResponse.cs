@@ -49,6 +49,8 @@ public class PublicPurchaseRequisitionFinanceResponse
     // PurchaseRequisitionFinanceNotification.TokenHash's comment), so a
     // second visit shows what's already on file rather than looking blank.
     public string? PoNumber { get; set; }
+    public DateTime? PoDate { get; set; }
+    public decimal? PoAmount { get; set; }
     public bool HasPoDocument { get; set; }
     public DateTime? PoUploadedAt { get; set; }
 }

@@ -41,6 +41,18 @@ export interface PurchaseRequisitionFulfillmentItem {
   purchaseDate: string | null;
 }
 
+// One row per past PO upload/re-upload via the Finance email link - a
+// correction never loses the paper trail of what was on file before it.
+export interface PurchaseRequisitionPoUpload {
+  id: number;
+  poNumber: string | null;
+  poDate: string | null;
+  poAmount: number | null;
+  hasPoDocument: boolean;
+  uploadedAt: string;
+  uploadedByEmail: string | null;
+}
+
 export interface PurchaseRequisitionAttachment {
   id: number;
   attachmentType: AttachmentType;
@@ -113,6 +125,13 @@ export interface PurchaseRequisition {
   poDocumentPath: string | null;
   poUploadedAt: string | null;
   poUploadedByUserName: string | null;
+  // Added alongside the 4 fields above (Phase 6) - all null for a PR
+  // whose PO was uploaded before this shipped. poUploadHistory lists every
+  // past upload/re-upload, oldest first - empty until a PO is uploaded.
+  poDate: string | null;
+  poAmount: number | null;
+  poUploadedByEmail: string | null;
+  poUploadHistory: PurchaseRequisitionPoUpload[];
   createdAt: string;
   updatedAt: string | null;
   isOwner: boolean;
@@ -421,6 +440,29 @@ export async function downloadPurchaseRequisitionPoDocument(
   return {
     blob: response.data,
     fileName: match?.[1] ?? `purchase-order-${id}`,
+  };
+}
+
+// Same as downloadPurchaseRequisitionPoDocument, but for one specific
+// past upload from poUploadHistory rather than always "whatever's
+// current" - lets an earlier PO copy be downloaded after a later revision
+// has overwritten the header.
+export async function downloadPurchaseRequisitionPoUploadDocument(
+  id: number,
+  poUploadId: number
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await api.get(
+    `/PurchaseRequisition/${id}/po-history/${poUploadId}/document`,
+    { responseType: 'blob' }
+  );
+
+  const disposition: string | undefined =
+    response.headers?.['content-disposition'];
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+
+  return {
+    blob: response.data,
+    fileName: match?.[1] ?? `purchase-order-${id}-v${poUploadId}`,
   };
 }
 

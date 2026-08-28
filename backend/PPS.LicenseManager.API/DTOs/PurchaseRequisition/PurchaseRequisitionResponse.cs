@@ -64,6 +64,16 @@ public class PurchaseRequisitionResponse
     public DateTime? PoUploadedAt { get; set; }
     public string? PoUploadedByUserName { get; set; }
 
+    // Added alongside the original 4 PO fields above (Phase 6) - PoDate/
+    // PoAmount/PoUploadedByEmail are all null for a PR whose PO was
+    // uploaded before this shipped, same as any other nullable field on a
+    // pre-existing row. PoUploadHistory lists every past upload/re-upload,
+    // oldest first - empty for a PR with no PO uploaded yet.
+    public DateTime? PoDate { get; set; }
+    public decimal? PoAmount { get; set; }
+    public string? PoUploadedByEmail { get; set; }
+    public List<PurchaseRequisitionPoUploadResponse> PoUploadHistory { get; set; } = new();
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

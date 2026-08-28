@@ -2148,6 +2148,13 @@ namespace PPS.LicenseManager.API.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<decimal?>("PoAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("PoDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PoDocumentPath")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -2158,6 +2165,10 @@ namespace PPS.LicenseManager.API.Migrations
 
                     b.Property<DateTime?>("PoUploadedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PoUploadedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<int?>("PoUploadedByUserId")
                         .HasColumnType("integer");
@@ -2583,6 +2594,46 @@ namespace PPS.LicenseManager.API.Migrations
                     b.HasIndex("PurchaseRequisitionId");
 
                     b.ToTable("PurchaseRequisitionLineItems");
+                });
+
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionPoUpload", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("PoAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("PoDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PoDocumentPath")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("PoNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("PurchaseRequisitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseRequisitionId");
+
+                    b.ToTable("PurchaseRequisitionPoUploads");
                 });
 
             modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionSettings", b =>
@@ -4572,6 +4623,17 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("PurchaseRequisition");
                 });
 
+            modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionPoUpload", b =>
+                {
+                    b.HasOne("PPS.LicenseManager.API.Models.PurchaseRequisition", "PurchaseRequisition")
+                        .WithMany("PoUploadHistory")
+                        .HasForeignKey("PurchaseRequisitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PurchaseRequisition");
+                });
+
             modelBuilder.Entity("PPS.LicenseManager.API.Models.PurchaseRequisitionSettings", b =>
                 {
                     b.HasOne("PPS.LicenseManager.API.Models.User", "UpdatedByUser")
@@ -5035,6 +5097,8 @@ namespace PPS.LicenseManager.API.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("LineItems");
+
+                    b.Navigation("PoUploadHistory");
 
                     b.Navigation("Revisions");
                 });

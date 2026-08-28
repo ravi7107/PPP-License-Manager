@@ -66,6 +66,9 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
     public DbSet<PurchaseRequisitionAttachment> PurchaseRequisitionAttachments =>
         Set<PurchaseRequisitionAttachment>();
 
+    public DbSet<PurchaseRequisitionPoUpload> PurchaseRequisitionPoUploads =>
+        Set<PurchaseRequisitionPoUpload>();
+
     public DbSet<PurchaseRequisitionApprovalStep> PurchaseRequisitionApprovalSteps =>
         Set<PurchaseRequisitionApprovalStep>();
 
@@ -663,6 +666,7 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
             entity.Property(x => x.SgstPercent).HasPrecision(5, 2).HasDefaultValue(9m);
             entity.Property(x => x.TaxAmount).HasPrecision(18, 2);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PoAmount).HasPrecision(18, 2);
 
             entity.HasIndex(x => x.CompanyId);
             entity.HasIndex(x => x.DepartmentId);
@@ -747,6 +751,20 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
                   .WithMany()
                   .HasForeignKey(x => x.UploadedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionPoUpload>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PoAmount).HasPrecision(18, 2);
+
+            entity.HasIndex(x => x.PurchaseRequisitionId);
+
+            entity.HasOne(x => x.PurchaseRequisition)
+                  .WithMany(x => x.PoUploadHistory)
+                  .HasForeignKey(x => x.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PurchaseRequisitionApprovalStep>(entity =>

@@ -28,6 +28,8 @@ export default function PrPublicFinancePage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [poNumber, setPoNumber] = useState('');
+  const [poDate, setPoDate] = useState('');
+  const [poAmount, setPoAmount] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [justUploaded, setJustUploaded] = useState(false);
@@ -46,6 +48,8 @@ export default function PrPublicFinancePage() {
       const data = await getPublicPurchaseRequisitionFinance(token);
       setPr(data);
       setPoNumber(data.poNumber ?? '');
+      setPoDate(data.poDate ? data.poDate.slice(0, 10) : '');
+      setPoAmount(data.poAmount != null ? String(data.poAmount) : '');
     } catch (err: any) {
       setLoadError(
         err?.response?.data?.message ??
@@ -69,10 +73,13 @@ export default function PrPublicFinancePage() {
     setJustUploaded(false);
 
     try {
+      const parsedAmount = poAmount.trim() ? Number(poAmount) : null;
       const updated = await uploadPurchaseRequisitionPoByToken(
         token,
         file,
-        poNumber.trim() || null
+        poNumber.trim() || null,
+        poDate.trim() || null,
+        parsedAmount != null && !Number.isNaN(parsedAmount) ? parsedAmount : null
       );
       setPr(updated);
       setFile(null);
@@ -241,6 +248,8 @@ export default function PrPublicFinancePage() {
                     <div className="mb-3 rounded-md border border-teal-300 bg-teal-50 px-3 py-2 text-xs text-teal-700">
                       A PO copy is already on file
                       {pr.poNumber ? ` (PO Number: ${pr.poNumber})` : ''}
+                      {pr.poDate ? `, dated ${new Date(pr.poDate).toLocaleDateString()}` : ''}
+                      {pr.poAmount != null ? `, ${pr.currency} ${pr.poAmount.toFixed(2)}` : ''}
                       {pr.poUploadedAt
                         ? ` — uploaded ${new Date(pr.poUploadedAt).toLocaleString()}`
                         : ''}
@@ -262,15 +271,42 @@ export default function PrPublicFinancePage() {
                   ) : null}
 
                   <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs">PO Number (optional)</Label>
-                      <Input
-                        className="mt-1"
-                        placeholder="e.g. PO-2026-0042"
-                        value={poNumber}
-                        onChange={(e) => setPoNumber(e.target.value)}
-                        disabled={uploading}
-                      />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <Label className="text-xs">PO Number (optional)</Label>
+                        <Input
+                          className="mt-1"
+                          placeholder="e.g. PO-2026-0042"
+                          value={poNumber}
+                          onChange={(e) => setPoNumber(e.target.value)}
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">PO Date (optional)</Label>
+                        <Input
+                          className="mt-1"
+                          type="date"
+                          value={poDate}
+                          onChange={(e) => setPoDate(e.target.value)}
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">PO Amount (optional)</Label>
+                        <Input
+                          className="mt-1"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={`${pr.currency} amount`}
+                          value={poAmount}
+                          onChange={(e) => setPoAmount(e.target.value)}
+                          disabled={uploading}
+                        />
+                      </div>
                     </div>
 
                     <div>

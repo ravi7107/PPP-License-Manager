@@ -423,6 +423,31 @@ public class PurchaseRequisitionController : BaseController
         }
     }
 
+    // Same access rule as DownloadPoDocument, but for one specific past
+    // upload from PoUploadHistory rather than always "whatever's current" -
+    // lets the PR detail view's upload-history list download an older PO
+    // copy after a later revision has overwritten the header.
+    [HttpGet("{id:int}/po-history/{poUploadId:int}/document")]
+    public async Task<IActionResult> DownloadPoUploadHistoryDocument(int id, int poUploadId)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var file = await _service.GetPoUploadHistoryDocumentAsync(
+                id, poUploadId, currentUserId, IsPrivileged(), GetPdfStorageRootPath());
+
+            if (file == null)
+                return NotFoundResponse("That PO document could not be found.");
+
+            return PhysicalFile(file.Value.PhysicalPath, "application/octet-stream", file.Value.FileName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
 
     // =========================================================
     // SUBMIT

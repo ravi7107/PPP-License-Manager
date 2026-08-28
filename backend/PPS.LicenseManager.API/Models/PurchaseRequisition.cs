@@ -155,6 +155,25 @@ public class PurchaseRequisition
 
     public User? PoUploadedByUser { get; set; }
 
+    // PO Date/Amount, added alongside the original 4 PO columns above -
+    // same "unprotected by the immutability trigger, writable after
+    // Approved" treatment, same "latest wins on re-upload" semantics.
+    // PoUploadedByEmail is populated from
+    // PurchaseRequisitionFinanceNotification.SentToEmail (already resolved
+    // at upload time) - a quick "who" without touching the deliberately-
+    // null PoUploadedByUserId above (see that field's own comment for why
+    // it stays null). Full history of every past upload - not just the
+    // latest - lives in PoUploadHistory below.
+    public DateTime? PoDate { get; set; }
+
+    public decimal? PoAmount { get; set; }
+
+    [MaxLength(256)]
+    public string? PoUploadedByEmail { get; set; }
+
+    public ICollection<PurchaseRequisitionPoUpload> PoUploadHistory { get; set; } =
+        new List<PurchaseRequisitionPoUpload>();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

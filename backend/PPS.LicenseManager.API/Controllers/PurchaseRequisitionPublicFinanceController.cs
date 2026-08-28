@@ -52,12 +52,17 @@ public class PurchaseRequisitionPublicFinanceController : BaseController
     public async Task<IActionResult> UploadPo(
         string token,
         IFormFile file,
-        [FromForm] string? poNumber = null)
+        [FromForm] string? poNumber = null,
+        [FromForm] DateTime? poDate = null,
+        [FromForm] decimal? poAmount = null)
     {
         try
         {
+            // poDate/poAmount are optional - an already-sent Finance link
+            // whose page was loaded before this field pair existed still
+            // posts the old request shape and succeeds unchanged.
             var result = await _service.UploadPoByTokenAsync(
-                token, file, poNumber, GetPdfStorageRootPath());
+                token, file, poNumber, poDate, poAmount, GetPdfStorageRootPath());
 
             if (result == null)
                 return NotFoundResponse("This Finance link is invalid.");

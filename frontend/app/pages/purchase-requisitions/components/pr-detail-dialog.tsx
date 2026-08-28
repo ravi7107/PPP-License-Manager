@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Download, Send, Trash2, Upload, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Download,
+  Send,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 
 import {
   Dialog,
@@ -38,6 +47,7 @@ import {
   buildAttachmentUrl,
   downloadPurchaseRequisitionPdf,
   downloadPurchaseRequisitionPoDocument,
+  downloadPurchaseRequisitionPoUploadDocument,
   PurchaseRequisition,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -98,6 +108,10 @@ export function PrDetailDialog({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingPo, setDownloadingPo] = useState(false);
   const [poDownloadError, setPoDownloadError] = useState<string | null>(null);
+  const [downloadingPoUploadId, setDownloadingPoUploadId] = useState<
+    number | null
+  >(null);
+  const [poHistoryOpen, setPoHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -216,6 +230,48 @@ export function PrDetailDialog({
       );
     } finally {
       setDownloadingPo(false);
+    }
+  };
+
+  // Same blob-fetch pattern as handleDownloadPo, but for one specific past
+  // upload from poUploadHistory rather than always "whatever's current" -
+  // lets an older PO copy be retrieved after a later revision overwrote
+  // the header.
+  const handleDownloadPoUpload = async (poUploadId: number) => {
+    setDownloadingPoUploadId(poUploadId);
+    setPoDownloadError(null);
+
+    try {
+      const { blob, fileName } = await downloadPurchaseRequisitionPoUploadDocument(
+        pr.id,
+        poUploadId
+      );
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      let message: string | undefined;
+
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          message = JSON.parse(text)?.message;
+        } catch {
+          // Not JSON - fall through to the generic message below.
+        }
+      }
+
+      setPoDownloadError(
+        message ?? err?.message ?? 'Failed to download that PO document.'
+      );
+    } finally {
+      setDownloadingPoUploadId(null);
     }
   };
 
@@ -347,6 +403,103 @@ export function PrDetailDialog({
                 ))}
               </TableBody>
             </Table>
+          </div>
+        ) : null}
+
+        {/* PURCHASE ORDER - PO Number/Date/Amount plus the upload history,
+            wherever a PO has actually been uploaded via the Finance email
+            link. Hidden entirely when no PO has ever been uploaded, same
+            hidden-when-empty convention as Fulfilled By above. */}
+
+        {pr.poNumber || pr.poDocumentPath || pr.poDate || pr.poAmount != null ? (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Purchase Order</h3>
+            <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-muted-foreground">PO Number</p>
+                <p className="font-medium">{pr.poNumber ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">PO Date</p>
+                <p className="font-medium">
+                  {pr.poDate ? new Date(pr.poDate).toLocaleDateString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">PO Amount</p>
+                <p className="font-medium">
+                  {pr.poAmount != null
+                    ? `${pr.currency} ${pr.poAmount.toFixed(2)}`
+                    : '—'}
+                </p>
+              </div>
+            </div>
+
+            {pr.poUploadHistory.length > 0 ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setPoHistoryOpen((v) => !v)}
+                >
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-150 ${
+                      poHistoryOpen ? '' : '-rotate-90'
+                    }`}
+                  />
+                  Upload History ({pr.poUploadHistory.length})
+                </button>
+
+                {poHistoryOpen ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>PO Number</TableHead>
+                        <TableHead>PO Date</TableHead>
+                        <TableHead className="text-right">PO Amount</TableHead>
+                        <TableHead>Uploaded</TableHead>
+                        <TableHead>By</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pr.poUploadHistory.map((h) => (
+                        <TableRow key={h.id}>
+                          <TableCell>{h.poNumber ?? '—'}</TableCell>
+                          <TableCell>
+                            {h.poDate
+                              ? new Date(h.poDate).toLocaleDateString()
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {h.poAmount != null ? h.poAmount.toFixed(2) : '—'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {new Date(h.uploadedAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {h.uploadedByEmail ?? '—'}
+                          </TableCell>
+                          <TableCell>
+                            {h.hasPoDocument ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={downloadingPoUploadId === h.id}
+                                onClick={() => handleDownloadPoUpload(h.id)}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

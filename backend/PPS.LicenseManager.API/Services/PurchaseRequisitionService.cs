@@ -142,7 +142,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             .Include(x => x.ApprovalSteps)
                 .ThenInclude(x => x.AssignedApproverContact)
             .Include(x => x.PreviousRevision)
-            .Include(x => x.PoUploadedByUser);
+            .Include(x => x.PoUploadedByUser)
+            .Include(x => x.PoUploadHistory);
     }
 
     private static PurchaseRequisitionResponse Map(
@@ -194,6 +195,23 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             PoDocumentPath = r.PoDocumentPath,
             PoUploadedAt = r.PoUploadedAt,
             PoUploadedByUserName = r.PoUploadedByUser?.FullName,
+
+            PoDate = r.PoDate,
+            PoAmount = r.PoAmount,
+            PoUploadedByEmail = r.PoUploadedByEmail,
+            PoUploadHistory = r.PoUploadHistory
+                .OrderBy(h => h.UploadedAt)
+                .Select(h => new PurchaseRequisitionPoUploadResponse
+                {
+                    Id = h.Id,
+                    PoNumber = h.PoNumber,
+                    PoDate = h.PoDate,
+                    PoAmount = h.PoAmount,
+                    HasPoDocument = !string.IsNullOrWhiteSpace(h.PoDocumentPath),
+                    UploadedAt = h.UploadedAt,
+                    UploadedByEmail = h.UploadedByEmail
+                })
+                .ToList(),
 
             CreatedAt = r.CreatedAt,
             UpdatedAt = r.UpdatedAt,
@@ -3135,6 +3153,8 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
                 .ToList(),
 
             PoNumber = record.PoNumber,
+            PoDate = record.PoDate,
+            PoAmount = record.PoAmount,
             HasPoDocument = !string.IsNullOrWhiteSpace(record.PoDocumentPath),
             PoUploadedAt = record.PoUploadedAt
         };
@@ -3159,19 +3179,26 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
      * authenticated session backs this call, same token-as-credential
      * principle as DecideStepByTokenAsync. Unlike that flow this is
      * deliberately re-callable: a second upload simply overwrites
-     * PoNumber/PoDocumentPath/PoUploadedAt and re-sends the "PO ready"
-     * email to the requester with the latest file, rather than being
-     * rejected as already-consumed (see TokenHash's comment).
+     * PoNumber/PoDate/PoAmount/PoDocumentPath/PoUploadedAt and re-sends
+     * the "PO ready" email to the requester with the latest file, rather
+     * than being rejected as already-consumed (see TokenHash's comment).
+     * Before each overwrite, a PurchaseRequisitionPoUpload row captures
+     * exactly what's being replaced, so a correction never erases the
+     * paper trail (Phase 6) - the header still always reflects "the
+     * current PO," matching every existing caller's expectation.
      *
      * PoUploadedByUserId is left null - Finance isn't a User in this
      * app (same reasoning as PurchaseRequisitionFinanceNotification's
-     * email-only addressing) - the audit log entry captures which
-     * Finance address performed the upload instead.
+     * email-only addressing) - the audit log entry, and now
+     * PoUploadedByEmail on the record itself, capture which Finance
+     * address performed the upload instead.
      */
     public async Task<PublicPurchaseRequisitionFinanceResponse?> UploadPoByTokenAsync(
         string rawToken,
         IFormFile file,
         string? poNumber,
+        DateTime? poDate,
+        decimal? poAmount,
         string pdfStorageRootPath)
     {
         var notification = await FindFinanceTokenAsync(rawToken);
@@ -3229,15 +3256,39 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         var trimmedPoNumber = string.IsNullOrWhiteSpace(poNumber) ? null : poNumber.Trim();
 
+        // Whether this is Finance's first upload for this PR, or a
+        // revision of one already on file - decided before the header is
+        // touched below, so the distinction is based on what was actually
+        // there a moment ago.
+        var isRevision = !string.IsNullOrWhiteSpace(record.PoDocumentPath);
+
+        if (isRevision)
+        {
+            _context.PurchaseRequisitionPoUploads.Add(new Models.PurchaseRequisitionPoUpload
+            {
+                PurchaseRequisitionId = record.Id,
+                PoNumber = record.PoNumber,
+                PoDate = record.PoDate,
+                PoAmount = record.PoAmount,
+                PoDocumentPath = record.PoDocumentPath,
+                UploadedAt = record.PoUploadedAt ?? record.UpdatedAt ?? record.CreatedAt,
+                UploadedByEmail = record.PoUploadedByEmail
+            });
+        }
+
         record.PoNumber = trimmedPoNumber;
+        record.PoDate = poDate;
+        record.PoAmount = poAmount;
         record.PoDocumentPath =
             $"purchase-requisitions/{record.Id}/po/{generatedFileName}";
         record.PoUploadedAt = DateTime.UtcNow;
         record.PoUploadedByUserId = null;
+        record.PoUploadedByEmail = notification.SentToEmail;
         record.UpdatedAt = DateTime.UtcNow;
 
-        AddAuditLog(record.Id, "PoUploaded", null,
-            $"PO document uploaded via the Finance link ({notification.SentToEmail})." +
+        AddAuditLog(record.Id, isRevision ? "PoRevised" : "PoUploaded", null,
+            $"PO document {(isRevision ? "revised" : "uploaded")} via the Finance link " +
+            $"({notification.SentToEmail})." +
             (trimmedPoNumber != null ? $" PO Number: {trimmedPoNumber}." : string.Empty),
             "EmailLink");
 
@@ -3584,6 +3635,54 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var physicalPath = Path.Combine(
             pdfStorageRootPath,
             record.PoDocumentPath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(physicalPath))
+            return null;
+
+        return (physicalPath, Path.GetFileName(physicalPath));
+    }
+
+    /*
+     * Same access rule as GetPoDocumentFileAsync, but for one specific
+     * PurchaseRequisitionPoUpload history row instead of always "whatever
+     * is current" - lets a user download an earlier PO copy after a later
+     * revision has overwritten PurchaseRequisition.PoDocumentPath. The
+     * file itself is never moved/deleted on revision (see
+     * UploadPoByTokenAsync), so this just resolves a different, older
+     * path than GetPoDocumentFileAsync does.
+     */
+    public async Task<(string PhysicalPath, string FileName)?> GetPoUploadHistoryDocumentAsync(
+        int purchaseRequisitionId,
+        int poUploadId,
+        int requestingUserId,
+        bool isPrivileged,
+        string pdfStorageRootPath)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .FirstOrDefaultAsync(x => x.Id == purchaseRequisitionId);
+
+        if (record == null)
+            return null;
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        var upload = await _context.PurchaseRequisitionPoUploads
+            .FirstOrDefaultAsync(x =>
+                x.Id == poUploadId && x.PurchaseRequisitionId == purchaseRequisitionId);
+
+        if (upload == null || string.IsNullOrWhiteSpace(upload.PoDocumentPath))
+            return null;
+
+        var physicalPath = Path.Combine(
+            pdfStorageRootPath,
+            upload.PoDocumentPath.Replace('/', Path.DirectorySeparatorChar));
 
         if (!File.Exists(physicalPath))
             return null;
