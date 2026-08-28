@@ -21,6 +21,23 @@ public class OfficeLocationController : BaseController
         _environment = environment;
     }
 
+    // Phase 12 - same pattern as AssetAssignmentController.GetCurrentUserId,
+    // needed so a direct seat edit that implies a new hardware assignment
+    // (see SyncAssetFromSeatAsync) can record who made it.
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrWhiteSpace(value) ||
+            !int.TryParse(value, out var userId))
+        {
+            throw new UnauthorizedAccessException(
+                "Authenticated user ID is missing from the token.");
+        }
+
+        return userId;
+    }
+
     // =========================================================
     // LOCATIONS
     // =========================================================
@@ -336,12 +353,18 @@ public async Task<IActionResult> UploadFloorMap(
         try
         {
             var result =
-                await _service.CreateSeatAsync(request);
+                await _service.CreateSeatAsync(
+                    request,
+                    GetCurrentUserId());
 
             return CreatedAtAction(
                 nameof(GetSeat),
                 new { id = result.Id },
                 result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -358,7 +381,10 @@ public async Task<IActionResult> UploadFloorMap(
         try
         {
             var result =
-                await _service.UpdateSeatAsync(id, request);
+                await _service.UpdateSeatAsync(
+                    id,
+                    request,
+                    GetCurrentUserId());
 
             if (result == null)
                 return NotFound(new
@@ -367,6 +393,10 @@ public async Task<IActionResult> UploadFloorMap(
                 });
 
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

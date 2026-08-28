@@ -80,14 +80,20 @@ public interface IOfficeLocationService
     Task<OfficeSeatResponse?>
         GetSeatByIdAsync(int id);
 
+    // Phase 12 - actingUserId is the admin performing this edit, recorded
+    // as AssignedByUserId on any AssetAssignment row this seat edit
+    // creates/closes when the seat's Asset/User/Department pairing implies
+    // a real assignment or department change (see SyncAssetFromSeatAsync).
     Task<OfficeSeatResponse>
         CreateSeatAsync(
-            CreateOfficeSeatRequest request);
+            CreateOfficeSeatRequest request,
+            int actingUserId);
 
     Task<OfficeSeatResponse?>
         UpdateSeatAsync(
             int id,
-            UpdateOfficeSeatRequest request);
+            UpdateOfficeSeatRequest request,
+            int actingUserId);
 
     Task<bool>
         DeleteSeatAsync(int id);

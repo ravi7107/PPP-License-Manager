@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.OfficeLocation;
+using PPS.LicenseManager.API.Enums;
 using PPS.LicenseManager.API.Interfaces;
 using PPS.LicenseManager.API.Models;
 
@@ -795,7 +796,8 @@ public class OfficeLocationService : IOfficeLocationService
 
     public async Task<OfficeSeatResponse>
         CreateSeatAsync(
-            CreateOfficeSeatRequest request)
+            CreateOfficeSeatRequest request,
+            int actingUserId)
     {
         var floor = await GetFloorForValidationAsync(
             request.OfficeFloorId);
@@ -851,9 +853,29 @@ public class OfficeLocationService : IOfficeLocationService
             CreatedAt = DateTime.UtcNow
         };
 
+        // Phase 12 - the seat row and its downstream Asset/AssetAssignment
+        // sync must commit together. Without this, a failure inside
+        // SyncAssetFromSeatAsync (e.g. the actingUserId check) would leave
+        // an already-committed seat pointing at an asset/user with no
+        // matching assignment row - the exact drift this phase exists to
+        // prevent, just reintroduced as a partial-failure case.
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
+
         _context.OfficeSeats.Add(record);
 
         await _context.SaveChangesAsync();
+
+        // A brand-new seat has no "previous" asset to close out.
+        await SyncAssetFromSeatAsync(
+            previousAssetId: null,
+            newAssetId: request.AssetId,
+            newUserId: request.UserId,
+            newDepartmentId: request.DepartmentId,
+            seatId: record.Id,
+            actingUserId: actingUserId);
+
+        await transaction.CommitAsync();
 
         return await GetSeatByIdAsync(record.Id)
             ?? throw new Exception(
@@ -863,13 +885,19 @@ public class OfficeLocationService : IOfficeLocationService
     public async Task<OfficeSeatResponse?>
         UpdateSeatAsync(
             int id,
-            UpdateOfficeSeatRequest request)
+            UpdateOfficeSeatRequest request,
+            int actingUserId)
     {
         var record = await _context.OfficeSeats
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (record == null)
             return null;
+
+        // Phase 12 - captured before we overwrite it below, so
+        // SyncAssetFromSeatAsync can tell whether the seat's asset changed
+        // (and close out the previous asset's assignment if so).
+        var previousAssetId = record.AssetId;
 
         var floor = await GetFloorForValidationAsync(
             request.OfficeFloorId);
@@ -928,7 +956,23 @@ public class OfficeLocationService : IOfficeLocationService
         record.UpdatedAt =
             DateTime.UtcNow;
 
+        // Phase 12 - same atomicity reasoning as CreateSeatAsync: the seat
+        // row and its downstream Asset/AssetAssignment sync must commit
+        // together, not as two independent saves.
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
+
         await _context.SaveChangesAsync();
+
+        await SyncAssetFromSeatAsync(
+            previousAssetId: previousAssetId,
+            newAssetId: request.AssetId,
+            newUserId: request.UserId,
+            newDepartmentId: request.DepartmentId,
+            seatId: id,
+            actingUserId: actingUserId);
+
+        await transaction.CommitAsync();
 
         return await GetSeatByIdAsync(id);
     }
@@ -978,6 +1022,231 @@ public class OfficeLocationService : IOfficeLocationService
         await _context.SaveChangesAsync();
 
         return await GetSeatByIdAsync(seatId);
+    }
+
+    // =========================================================
+    // PHASE 12 - MAP <-> ASSET WRITE-THROUGH SYNC
+    // =========================================================
+
+    // Keeps Asset.DepartmentId and the AssetAssignment table in sync when a
+    // seat's Asset/User/Department pairing is edited directly through
+    // CreateSeatAsync/UpdateSeatAsync (the Office Locations admin screen).
+    //
+    // Deliberately NOT called from SetSeatOccupantAsync - that method runs
+    // *inside* AssetAssignmentService's own AssignAsync/TransferAsync/
+    // ReturnAsync/ReseatAsync transactions, before their own
+    // AssetAssignment row is committed. Querying AssetAssignments from in
+    // here at that point would see a stale "no active assignment" result
+    // (the pending insert isn't visible to a fresh query yet) and could
+    // create a second, conflicting active assignment for the same asset -
+    // violating the partial unique index that enforces one active
+    // assignment per AssetId. AssetAssignmentService already keeps the
+    // seat in sync in that direction; this method only ever needs to run
+    // for edits that originate on the map side.
+    private async Task SyncAssetFromSeatAsync(
+        int? previousAssetId,
+        int? newAssetId,
+        int? newUserId,
+        int? newDepartmentId,
+        int seatId,
+        int actingUserId)
+    {
+        var now = DateTime.UtcNow;
+        var changed = false;
+
+        // The seat no longer points at its previous asset (cleared, or
+        // reassigned to a different asset) - that asset isn't occupying
+        // this seat anymore, so close out its assignment same as a Return.
+        if (previousAssetId.HasValue && previousAssetId != newAssetId)
+        {
+            var previousActive = await _context.AssetAssignments
+                .FirstOrDefaultAsync(a =>
+                    a.AssetId == previousAssetId.Value && a.IsActive);
+
+            // Only auto-close if that assignment was actually anchored to
+            // THIS seat - if it belongs to a different seat (or none),
+            // leave it alone. Otherwise editing an unrelated seat's Asset
+            // field could return hardware out from under a holder that
+            // this seat edit has nothing to do with.
+            if (previousActive != null &&
+                previousActive.SeatId == seatId)
+            {
+                previousActive.IsActive = false;
+                previousActive.ReturnedOn = now;
+                previousActive.Status = "Returned";
+                previousActive.UpdatedAt = now;
+                changed = true;
+
+                var previousAsset = await _context.Assets
+                    .FirstOrDefaultAsync(x => x.Id == previousAssetId.Value);
+
+                if (previousAsset != null)
+                {
+                    previousAsset.Status = "Available";
+                    previousAsset.IsReadyForAssignment = true;
+                    previousAsset.UpdatedAt = now;
+                }
+            }
+        }
+
+        if (!newAssetId.HasValue)
+        {
+            if (changed)
+                await _context.SaveChangesAsync();
+
+            return;
+        }
+
+        var asset = await _context.Assets
+            .FirstOrDefaultAsync(x => x.Id == newAssetId.Value);
+
+        // Already validated to exist by ValidateSeatAssignmentAsync before
+        // this method is ever called - defensive only.
+        if (asset == null)
+        {
+            if (changed)
+                await _context.SaveChangesAsync();
+
+            return;
+        }
+
+        // Department - the map is authoritative per the business decision
+        // this phase implements: push the seat's department onto the
+        // asset rather than rejecting the seat save on a mismatch (the
+        // mismatch throw this used to be was removed from
+        // ValidateSeatAssignmentAsync above).
+        if (newDepartmentId.HasValue &&
+            asset.DepartmentId != newDepartmentId.Value)
+        {
+            asset.DepartmentId = newDepartmentId.Value;
+            asset.UpdatedAt = now;
+            changed = true;
+        }
+
+        var activeAssignment = await _context.AssetAssignments
+            .FirstOrDefaultAsync(a =>
+                a.AssetId == newAssetId.Value && a.IsActive);
+
+        if (newUserId.HasValue)
+        {
+            if (activeAssignment == null)
+            {
+                // No current holder - open a new assignment for the
+                // seat's occupant, mirroring
+                // AssetAssignmentService.AssignAsync's own field-setting.
+                await EnsureActingUserExistsAsync(actingUserId);
+
+                _context.AssetAssignments.Add(new AssetAssignment
+                {
+                    AssetId = newAssetId.Value,
+                    UserId = newUserId.Value,
+                    AssignedByUserId = actingUserId,
+                    AssignedOn = now,
+                    Status = "Assigned",
+                    Remarks = "Set via Office Floor Map seat edit.",
+                    IsActive = true,
+                    CreatedAt = now,
+                    AssignmentType = AssignmentType.Permanent,
+                    SeatId = seatId,
+                });
+
+                asset.Status = "Assigned";
+                asset.IsReadyForAssignment = false;
+                asset.UpdatedAt = now;
+                changed = true;
+            }
+            else if (activeAssignment.UserId != newUserId.Value)
+            {
+                // Different occupant than the current holder. Only treat
+                // this as an in-place reassignment when the existing
+                // assignment is already anchored to THIS seat - i.e. the
+                // admin is looking at the pairing this screen already
+                // shows and simply changing who sits here. If the asset's
+                // active assignment belongs to a different seat (or none -
+                // e.g. hardware assigned to a remote worker with no seat
+                // at all), this edit has no visibility into that holder,
+                // so it must not silently reassign their hardware out from
+                // under them - block it and point at the dedicated
+                // Transfer action instead, same as AssignAsync's own
+                // "already assigned" guard.
+                if (activeAssignment.SeatId != seatId)
+                    throw new InvalidOperationException(
+                        "This workstation is already assigned to another user " +
+                        "(not via this seat). Use Transfer from the Hardware " +
+                        "page to reassign it.");
+
+                // Close the old assignment and open a new one, mirroring
+                // AssetAssignmentService.TransferAsync's own pattern.
+                await EnsureActingUserExistsAsync(actingUserId);
+
+                activeAssignment.IsActive = false;
+                activeAssignment.ReturnedOn = now;
+                activeAssignment.Status = "Transferred";
+                activeAssignment.UpdatedAt = now;
+
+                _context.AssetAssignments.Add(new AssetAssignment
+                {
+                    AssetId = newAssetId.Value,
+                    UserId = newUserId.Value,
+                    AssignedByUserId = actingUserId,
+                    AssignedOn = now,
+                    Status = "Assigned",
+                    Remarks = "Reassigned via Office Floor Map seat edit.",
+                    IsActive = true,
+                    CreatedAt = now,
+                    AssignmentType = AssignmentType.Permanent,
+                    OriginalAssignmentId = activeAssignment.Id,
+                    SeatId = seatId,
+                });
+
+                asset.Status = "Assigned";
+                asset.IsReadyForAssignment = false;
+                asset.UpdatedAt = now;
+                changed = true;
+            }
+
+            // else: activeAssignment.UserId already matches newUserId -
+            // already in sync (this is also the normal case when this
+            // write originated from AssetAssignmentService itself, since
+            // that path always sets both sides to match before this
+            // method could ever observe them).
+        }
+        else if (activeAssignment != null && activeAssignment.SeatId == seatId)
+        {
+            // Seat's occupant was cleared while the asset stays mapped to
+            // this seat - treat it as a return, mirroring
+            // AssetAssignmentService.ReturnAsync. Same seat-anchoring
+            // guard as above - only close an assignment this seat is
+            // actually the recorded location for.
+            activeAssignment.IsActive = false;
+            activeAssignment.ReturnedOn = now;
+            activeAssignment.Status = "Returned";
+            activeAssignment.UpdatedAt = now;
+
+            asset.Status = "Available";
+            asset.IsReadyForAssignment = true;
+            asset.UpdatedAt = now;
+            changed = true;
+        }
+
+        if (changed)
+            await _context.SaveChangesAsync();
+    }
+
+    // Defensive check mirroring AssetAssignmentService.AssignAsync's own
+    // "Assigned By user not found" guard - actingUserId comes from an
+    // authenticated admin's JWT claim, but validating it here means a
+    // stale/deleted-user token fails with a clear 400 instead of a raw
+    // FK-violation 500 once the transaction commits.
+    private async Task EnsureActingUserExistsAsync(int actingUserId)
+    {
+        var exists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == actingUserId);
+
+        if (!exists)
+            throw new InvalidOperationException(
+                "Acting user could not be verified. Please sign in again.");
     }
 
     // =========================================================
@@ -1060,10 +1329,11 @@ public class OfficeLocationService : IOfficeLocationService
                 throw new InvalidOperationException(
                     "Selected workstation belongs to a different entity than this office.");
 
-            if (departmentId.HasValue &&
-                asset.DepartmentId != departmentId.Value)
-                throw new InvalidOperationException(
-                    "Selected workstation belongs to a different department than this seat.");
+            // Phase 12 - department mismatch used to be a hard error here.
+            // Per the business decision that the map is authoritative for
+            // an asset's department, a mismatch is no longer rejected -
+            // SyncAssetFromSeatAsync below pushes the seat's department
+            // onto the asset instead of blocking the save.
 
             var assetAlreadyMapped =
                 await _context.OfficeSeats
