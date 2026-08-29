@@ -75,13 +75,27 @@ const assetFormSchema = z.object({
 
   operatingSystem: z.string().default(""),
 
-  status: z.enum([
-    "Available",
-    "Assigned",
-    "Maintenance",
-    "Reserved",
-    "Retired",
-  ]),
+  /*
+   * On create, the Status FormField below is intentionally not rendered
+   * (see the comment at its render site) — the backend always force-sets
+   * Status = "Available" on insert regardless of what's sent. Without a
+   * default here, an undefined "status" fails this required enum check
+   * with no on-screen field to show the error on, so react-hook-form's
+   * handleSubmit silently swallows the submit and Create Asset never
+   * proceeds. ".default('Available')" fixes create without changing
+   * edit-mode behavior at all: when the Status field IS rendered (editing),
+   * it always already has a real, valid value from toFormValues(asset) or
+   * the user's own selection, so the default never applies there.
+   */
+  status: z
+    .enum([
+      "Available",
+      "Assigned",
+      "Maintenance",
+      "Reserved",
+      "Retired",
+    ])
+    .default("Available"),
 
   remarks: z.string().default(""),
 
