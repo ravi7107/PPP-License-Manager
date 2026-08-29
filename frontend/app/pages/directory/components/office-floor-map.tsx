@@ -890,6 +890,11 @@ const OfficeFloorMap = forwardRef<
   const handleOverviewClick = (
     event: React.MouseEvent<HTMLDivElement>
   ) => {
+    // See the onPointerDown handler on this same minimap element below
+    // for why this is needed - stopping propagation here too closes the
+    // same door for the 'click' event, not just 'pointerdown'.
+    event.stopPropagation();
+
     const rect = event.currentTarget.getBoundingClientRect();
 
     if (!rect.width || !rect.height) return;
@@ -1367,8 +1372,16 @@ const OfficeFloorMap = forwardRef<
 
           {/* ZOOM CONTROLS */}
           <div className="pointer-events-auto absolute right-3 top-3 z-[100] flex flex-col overflow-hidden rounded-md border bg-background shadow-md">
+            {/* stopPropagation on pointerDown for all three buttons
+                below - same defensive reasoning as the minimap's own
+                onPointerDown a bit further down this file: zoomBy()/
+                fitMap() also kick off a d3 transition that re-renders
+                this component for its duration, so this closes the
+                same latent "second interaction lands mid-transition"
+                door for these controls too, cheaply and pre-emptively. */}
             <button
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => zoomBy(ZOOM_STEP)}
               className="flex h-9 w-9 items-center justify-center hover:bg-muted"
               aria-label="Zoom in"
@@ -1381,6 +1394,7 @@ const OfficeFloorMap = forwardRef<
 
             <button
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => zoomBy(1 / ZOOM_STEP)}
               className="flex h-9 w-9 items-center justify-center hover:bg-muted"
               aria-label="Zoom out"
@@ -1393,6 +1407,7 @@ const OfficeFloorMap = forwardRef<
 
             <button
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={fitMap}
               className="flex h-9 w-9 items-center justify-center hover:bg-muted"
               aria-label="Fit Map"
@@ -1417,6 +1432,23 @@ const OfficeFloorMap = forwardRef<
               <div
                 className="relative cursor-pointer"
                 style={{ width: MINIMAP_WIDTH, height: minimapHeight }}
+                // Reported bug: clicking this minimap could close the
+                // whole full-screen map Dialog it lives inside. Traced
+                // to panTo() below kicking off a 300ms d3 transition
+                // that re-renders this component on every animation
+                // frame - a second click landing in that window can
+                // resolve to a different DOM target than its own
+                // pointerdown did, which is enough for Radix's dismiss-
+                // outside detection (a document-level pointerdown
+                // listener) to misclassify the interaction as outside
+                // the dialog and close it. Stopping propagation here
+                // keeps the pointerdown from ever reaching that
+                // document-level listener at all, regardless of what
+                // the DOM looks like a moment later when the click
+                // itself resolves - same defensive pattern this file
+                // already uses on every seat button's own pointer
+                // handlers, just not previously applied here.
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={handleOverviewClick}
                 title="Click to jump to that part of the map"
               >
