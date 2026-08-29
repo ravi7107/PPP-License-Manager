@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2,
   MapPin,
@@ -10,8 +10,11 @@ import {
   RefreshCw,
   Map,
   Upload,
+  Search,
+  X,
 } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,7 +64,11 @@ import {
   getDepartments,
 } from '@/lib/api/departments.api';
 
-import OfficeFloorMap from '@/app/pages/directory/components/office-floor-map';
+import OfficeFloorMap, {
+  isOccupied as isSeatOccupied,
+  matchesSearch as seatMatchesSearch,
+  type OfficeFloorMapHandle,
+} from '@/app/pages/directory/components/office-floor-map';
 import { AssetDetailDialog } from '@/app/pages/directory/components/asset-detail-dialog';
 
 import { useAuth } from '@/lib/auth/auth-context';
@@ -130,6 +137,21 @@ export default function OfficeLocationsPage() {
   // When on, clicking the map places a brand-new seat at that position
   // instead of the default drag-to-reposition/click-to-edit behavior.
   const [mapAddSeatMode, setMapAddSeatMode] = useState(false);
+
+  // Imperative handle onto the currently-open OfficeFloorMap instance -
+  // this is how the sticky header's Fit Map click and search-result
+  // clicks drive the camera (fitMap()/focusSeat()), since both are
+  // one-shot commands rather than values the map re-renders against.
+  const floorMapRef = useRef<OfficeFloorMapHandle>(null);
+
+  // Sticky-header search box, and the currently-highlighted seat (set on
+  // a search-result click, cleared when the map dialog itself closes).
+  // Both are owned here rather than inside OfficeFloorMap, since the
+  // search input/dropdown now live in this page's header, not in that
+  // component.
+  const [mapSearchText, setMapSearchText] = useState('');
+  const [mapSearchDropdownOpen, setMapSearchDropdownOpen] = useState(false);
+  const [mapSelectedSeatId, setMapSelectedSeatId] = useState<number | null>(null);
 
   // Double-click detail panel - available to every role that can open the
   // map (Team Lead/Manager included), unlike single-click-to-edit which
@@ -459,7 +481,56 @@ export default function OfficeLocationsPage() {
   const openFloorMap = (floor: OfficeFloor) => {
     setMapFloor(floor);
     setMapAddSeatMode(false);
+    setMapSearchText('');
+    setMapSearchDropdownOpen(false);
+    setMapSelectedSeatId(null);
     setMapDialog(true);
+  };
+
+  // Search results shown in the sticky header's dropdown while typing -
+  // capped so a floor with hundreds of workstations doesn't render a
+  // dropdown taller than the screen. Uses the same matchesSearch() the
+  // map itself uses to highlight matches, so "what's in the dropdown"
+  // and "what's highlighted on the map" never disagree.
+  const mapSearchResults = useMemo(() => {
+    if (!mapFloor || !mapSearchText.trim()) return [];
+
+    return getFloorSeats(mapFloor.id)
+      .filter(
+        (seat) =>
+          seat.isActive &&
+          seat.xPosition !== null &&
+          seat.yPosition !== null &&
+          seatMatchesSearch(seat, mapSearchText)
+      )
+      .slice(0, 8);
+  }, [mapFloor, seats, mapSearchText]);
+
+  // SEARCH -> LOCATE -> ZOOM -> HIGHLIGHT -> SHOW DETAILS: a dropdown
+  // click pans/zooms the map to the seat (via the imperative handle),
+  // marks it selected so OfficeFloorMap highlights it, and opens the
+  // read-only details panel - all without touching page scroll, and
+  // without resetting anything else about the map's current view.
+  const handleMapSearchResultClick = (seat: OfficeSeat) => {
+    setMapSearchDropdownOpen(false);
+    setMapSelectedSeatId(seat.id);
+    floorMapRef.current?.focusSeat(seat.id);
+    setDetailSeat(seat);
+    setDetailDialog(true);
+  };
+
+  // Switching floors from the sticky header's selector, without closing
+  // and reopening the whole map dialog - clears search/selection/add-seat
+  // mode the same way opening the dialog fresh would, since none of that
+  // state has any meaning on a different floor's map.
+  const handleMapFloorChange = (floor: OfficeFloor) => {
+    setMapFloor(floor);
+    setMapAddSeatMode(false);
+    setMapSearchText('');
+    setMapSearchDropdownOpen(false);
+    setMapSelectedSeatId(null);
+    setDetailDialog(false);
+    setDetailSeat(null);
   };
 
   const uploadFloorMap = async (
@@ -1074,7 +1145,13 @@ export default function OfficeLocationsPage() {
         ))
       )}
 
-      {/* FLOOR MAP DIALOG */}
+      {/* FLOOR MAP DIALOG - full-screen shell: a slim sticky header
+          (floor name/selector, search + results dropdown, compact
+          stats, actions) on top, OfficeFloorMap filling every remaining
+          pixel below it. Nothing here scrolls - the header is a fixed-
+          height flex item and the map area is flex-1, so there's never
+          a reason to scroll the page (or this dialog) to reach the
+          map. */}
       <Dialog
         open={mapDialog}
         onOpenChange={(open) => {
@@ -1083,140 +1160,341 @@ export default function OfficeLocationsPage() {
           if (!open) {
             setMapFloor(null);
             setMapAddSeatMode(false);
+            setMapSearchText('');
+            setMapSearchDropdownOpen(false);
+            setMapSelectedSeatId(null);
+            setDetailDialog(false);
+            setDetailSeat(null);
           }
         }}
       >
-        <DialogContent className="max-h-[95vh] max-w-[95vw] overflow-y-auto sm:max-w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>
-              {mapFloor
-                ? `${mapFloor.floorName} - Interactive Floor Map`
-                : 'Interactive Floor Map'}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent
+          className="flex h-[95vh] max-h-[95vh] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[95vw]"
+          // The workstation-details slide-in panel (AssetDetailDialog)
+          // renders as a plain fixed-position div OUTSIDE this
+          // DialogContent's own DOM subtree (it's a sibling further
+          // down this file, not nested here) - deliberately, so the map
+          // stays interactive while it's open. Radix's own outside-
+          // click/Escape handling doesn't know about that panel, so
+          // without these three guards, clicking anything inside the
+          // panel (its Close button, a table row, "Add Software"...) or
+          // pressing Escape while it's open would register as
+          // dismissing THIS dialog and close the whole map out from
+          // under the panel. Each guard checks for the panel's own
+          // data-asset-detail-panel marker (see that component) and, if
+          // the interaction is inside it, prevents Radix's default
+          // close - the panel's own onOpenChange/Escape handling still
+          // runs independently and closes just the panel.
+          onPointerDownOutside={(event) => {
+            const target = event.target as HTMLElement | null;
 
-          {mapFloor && (
-            <OfficeFloorMap
-              floor={mapFloor}
-              seats={getFloorSeats(mapFloor.id)}
-              addMode={mapAddSeatMode}
-              onMapClick={
-                canEdit
-                  ? (xPosition, yPosition) => {
-                      const floor = mapFloor;
+            if (target?.closest('[data-asset-detail-panel]')) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            const target = event.target as HTMLElement | null;
 
-                      if (!floor) return;
+            if (target?.closest('[data-asset-detail-panel]')) {
+              event.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(event) => {
+            if (detailDialog) {
+              event.preventDefault();
+            }
+          }}
+        >
+          {mapFloor && (() => {
+            const positionedSeats = getFloorSeats(mapFloor.id).filter(
+              (seat) =>
+                seat.isActive &&
+                seat.xPosition !== null &&
+                seat.yPosition !== null
+            );
 
-                      setMapAddSeatMode(false);
-                      setMapDialog(false);
-                      setMapFloor(null);
+            const occupiedCount = positionedSeats.filter(isSeatOccupied).length;
+            const vacantCount = positionedSeats.length - occupiedCount;
 
-                      openCreateSeat(floor, {
-                        x: xPosition,
-                        y: yPosition,
-                      });
+            return (
+              <>
+                {/* STICKY HEADER */}
+                <div className="flex flex-none flex-wrap items-center gap-2.5 border-b bg-background px-4 py-2.5 pr-14">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold">
+                    <Map className="h-4 w-4 text-muted-foreground" />
+                    {mapFloor.floorName}
+                  </div>
+
+                  {/* Floor selector - scoped to this floor's own office
+                      location, so switching floors from here can never
+                      jump to a different location's map. */}
+                  <Select
+                    value={String(mapFloor.id)}
+                    onValueChange={(value) => {
+                      const next = floors.find(
+                        (f) => f.id === Number(value)
+                      );
+
+                      if (next) handleMapFloorChange(next);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[170px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {getLocationFloors(mapFloor.officeLocationId).map(
+                        (floor) => (
+                          <SelectItem key={floor.id} value={String(floor.id)}>
+                            {floor.floorName}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {/* SEARCH - typing shows a results dropdown; a result
+                      click pans/zooms/highlights the seat on the map
+                      (via floorMapRef) and opens the details panel,
+                      without ever scrolling the page. */}
+                  <div className="relative min-w-[220px] flex-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+
+                    <Input
+                      value={mapSearchText}
+                      onChange={(event) => {
+                        setMapSearchText(event.target.value);
+                        setMapSearchDropdownOpen(true);
+                      }}
+                      onFocus={() => setMapSearchDropdownOpen(true)}
+                      onBlur={() => {
+                        // Delayed so a click on a dropdown result (which
+                        // blurs the input first) still lands - without
+                        // this the dropdown would close itself before
+                        // the result's own onClick ever fires.
+                        window.setTimeout(
+                          () => setMapSearchDropdownOpen(false),
+                          150
+                        );
+                      }}
+                      placeholder="Search employee, hostname, asset, department or seat..."
+                      className="h-8 pl-8 pr-7 text-xs"
+                    />
+
+                    {mapSearchText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMapSearchText('');
+                          setMapSearchDropdownOpen(false);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        aria-label="Clear search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+
+                    {mapSearchDropdownOpen && mapSearchText.trim() && (
+                      <div className="absolute left-0 right-0 top-9 z-[300] max-h-72 overflow-y-auto rounded-md border bg-background shadow-lg">
+                        {mapSearchResults.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            No matching workstation found.
+                          </div>
+                        ) : (
+                          mapSearchResults.map((seat) => (
+                            <button
+                              type="button"
+                              key={seat.id}
+                              // Fires before the input's onBlur handler
+                              // (mousedown precedes blur), so this
+                              // click is never lost to the dropdown
+                              // closing itself first.
+                              onMouseDown={(event) =>
+                                event.preventDefault()
+                              }
+                              onClick={() =>
+                                handleMapSearchResultClick(seat)
+                              }
+                              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs hover:bg-muted"
+                            >
+                              <span className="flex items-center gap-1.5 font-medium">
+                                <span
+                                  className={[
+                                    'h-2 w-2 rounded-full',
+                                    isSeatOccupied(seat)
+                                      ? 'bg-green-500'
+                                      : 'bg-gray-400',
+                                  ].join(' ')}
+                                />
+                                {seat.userName ??
+                                  seat.hostName ??
+                                  seat.seatCode}
+                              </span>
+
+                              <span className="text-muted-foreground">
+                                {[seat.departmentName, seat.seatCode]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* COMPACT STATS */}
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline">
+                      {positionedSeats.length} workstations
+                    </Badge>
+
+                    <Badge variant="secondary">
+                      {occupiedCount} occupied
+                    </Badge>
+
+                    <Badge variant="secondary">
+                      {vacantCount} vacant
+                    </Badge>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    {canEdit && (
+                      <Button
+                        size="sm"
+                        variant={mapAddSeatMode ? 'default' : 'outline'}
+                        onClick={() =>
+                          setMapAddSeatMode((current) => !current)
+                        }
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+
+                        {mapAddSeatMode
+                          ? 'Cancel Add Seat'
+                          : 'Add Seat Here'}
+                      </Button>
+                    )}
+
+                    {canEdit && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          mapUploadingFloorId === mapFloor.id
+                        }
+                        onClick={() =>
+                          selectFloorMapFile(mapFloor)
+                        }
+                      >
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
+
+                        {mapUploadingFloorId === mapFloor.id
+                          ? 'Uploading...'
+                          : 'Replace Map'}
+                      </Button>
+                    )}
+
+                    <Button
+                      size="sm"
+                      onClick={() => setMapDialog(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+
+                {/* MAP - fills all remaining space */}
+                <div className="relative min-h-0 flex-1">
+                  <OfficeFloorMap
+                    ref={floorMapRef}
+                    floor={mapFloor}
+                    seats={getFloorSeats(mapFloor.id)}
+                    selectedSeatId={mapSelectedSeatId}
+                    searchText={mapSearchText}
+                    addMode={mapAddSeatMode}
+                    onMapClick={
+                      canEdit
+                        ? (xPosition, yPosition) => {
+                            const floor = mapFloor;
+
+                            if (!floor) return;
+
+                            setMapAddSeatMode(false);
+                            setMapDialog(false);
+                            setMapFloor(null);
+
+                            openCreateSeat(floor, {
+                              x: xPosition,
+                              y: yPosition,
+                            });
+                          }
+                        : undefined
                     }
-                  : undefined
-              }
-              onSeatClick={
-                canEdit && !mapAddSeatMode
-                  ? (seat) => {
-                      setMapDialog(false);
-                      setMapFloor(null);
-                      openEditSeat(seat);
+                    onSeatClick={
+                      canEdit && !mapAddSeatMode
+                        ? (seat) => {
+                            setMapDialog(false);
+                            setMapFloor(null);
+                            openEditSeat(seat);
+                          }
+                        : undefined
                     }
-                  : undefined
-              }
-              onSeatDoubleClick={(seat) => {
-                setDetailSeat(seat);
-                setDetailDialog(true);
-              }}
-              onSeatMove={canEdit && !mapAddSeatMode ? async (
-                seat,
-                xPosition,
-                yPosition
-              ) => {
-                try {
-                  setError(null);
+                    onSeatDoubleClick={(seat) => {
+                      setMapSelectedSeatId(seat.id);
+                      setDetailSeat(seat);
+                      setDetailDialog(true);
+                    }}
+                    onSeatMove={canEdit && !mapAddSeatMode ? async (
+                      seat,
+                      xPosition,
+                      yPosition
+                    ) => {
+                      try {
+                        setError(null);
 
-                  const updatedSeat =
-                    await updateOfficeSeat(
-                      seat.id,
-                      {
-                        officeFloorId:
-                          seat.officeFloorId,
-                        seatCode: seat.seatCode,
-                        seatName: seat.seatName,
-                        departmentId:
-                          seat.departmentId,
-                        assetId:
-                          seat.assetId,
-                        userId:
-                          seat.userId,
-                        xPosition,
-                        yPosition,
-                        isActive:
-                          seat.isActive,
+                        const updatedSeat =
+                          await updateOfficeSeat(
+                            seat.id,
+                            {
+                              officeFloorId:
+                                seat.officeFloorId,
+                              seatCode: seat.seatCode,
+                              seatName: seat.seatName,
+                              departmentId:
+                                seat.departmentId,
+                              assetId:
+                                seat.assetId,
+                              userId:
+                                seat.userId,
+                              xPosition,
+                              yPosition,
+                              isActive:
+                                seat.isActive,
+                            }
+                          );
+
+                        setSeats((current) =>
+                          current.map((item) =>
+                            item.id === updatedSeat.id
+                              ? updatedSeat
+                              : item
+                          )
+                        );
+                      } catch (err: any) {
+                        setError(
+                          err?.response?.data?.message ??
+                          'Unable to save workstation position.'
+                        );
+
+                        throw err;
                       }
-                    );
-
-                  setSeats((current) =>
-                    current.map((item) =>
-                      item.id === updatedSeat.id
-                        ? updatedSeat
-                        : item
-                    )
-                  );
-                } catch (err: any) {
-                  setError(
-                    err?.response?.data?.message ??
-                    'Unable to save workstation position.'
-                  );
-
-                  throw err;
-                }
-              } : undefined}
-            />
-          )}
-
-          <DialogFooter>
-            {mapFloor && canEdit && (
-              <Button
-                variant={mapAddSeatMode ? 'default' : 'outline'}
-                onClick={() =>
-                  setMapAddSeatMode((current) => !current)
-                }
-              >
-                <Plus className="mr-2 h-4 w-4" />
-
-                {mapAddSeatMode ? 'Cancel Add Seat' : 'Add Seat Here'}
-              </Button>
-            )}
-
-            {mapFloor && canEdit && (
-              <Button
-                variant="outline"
-                disabled={
-                  mapUploadingFloorId === mapFloor.id
-                }
-                onClick={() =>
-                  selectFloorMapFile(mapFloor)
-                }
-              >
-                <Upload className="mr-2 h-4 w-4" />
-
-                {mapUploadingFloorId === mapFloor.id
-                  ? 'Uploading...'
-                  : 'Replace Map'}
-              </Button>
-            )}
-
-            <Button
-              onClick={() => setMapDialog(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
+                    } : undefined}
+                  />
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

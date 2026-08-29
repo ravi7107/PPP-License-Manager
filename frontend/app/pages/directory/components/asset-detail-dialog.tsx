@@ -1,13 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Landmark, Laptop, MapPin, Pencil, Plus, Trash2, User as UserIcon } from 'lucide-react';
+import { Landmark, Laptop, MapPin, Pencil, Plus, Trash2, User as UserIcon, X } from 'lucide-react';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -127,6 +120,29 @@ export function AssetDetailDialog({
   // record with no relation to who a license is formally allocated to).
   const [allocatedLicenses, setAllocatedLicenses] = useState<ResourceAllocation[]>([]);
   const [allocatedLicensesLoading, setAllocatedLicensesLoading] = useState(false);
+
+  // This panel is deliberately not a modal Dialog (see the render below)
+  // so it doesn't block map interaction while open - which also means it
+  // doesn't get Radix's built-in Escape-to-close behavior for free, so
+  // it's wired up by hand here instead. Skipped while either nested
+  // Radix dialog (Raise Reallocation Request / Add-Edit Software) is
+  // open - those are genuine Radix Dialogs and already handle their own
+  // Escape correctly; without this guard, one Escape press would close
+  // the nested dialog AND this panel underneath it in the same
+  // keystroke, which isn't what a single Escape should do.
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (requestOpen || softwareFormOpen) return;
+
+      onOpenChange(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onOpenChange, requestOpen, softwareFormOpen]);
 
   const loadInstalledSoftware = async (assetId: number) => {
     setInstalledLoading(true);
@@ -371,19 +387,69 @@ export function AssetDetailDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
+      {/*
+        Slide-in details panel - deliberately NOT a Radix Dialog. The
+        map redesign's whole point is SEARCH -> LOCATE -> ZOOM ->
+        HIGHLIGHT -> SHOW DETAILS with the map staying pannable/
+        zoomable the entire time this is open, and a modal Dialog's own
+        backdrop would trap focus and block exactly that interaction.
+        Instead this is a plain fixed-position panel that slides in
+        from the right (CSS transform, not conditional mounting) and
+        overlays the map without an underlying scrim. It's fixed to the
+        viewport rather than positioned relative to its DOM parent, so
+        it slides in from the true right edge of the screen regardless
+        of where this component happens to be mounted (inside the
+        full-screen floor map dialog). Closing it - the X button below,
+        Escape (see the effect above), or the caller flipping `open`
+        off some other way - never reads or writes any zoom/pan state;
+        that lives entirely in OfficeFloorMap, so the map's current
+        view is exactly as the user left it when this closes.
+      */}
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-label={seat?.seatCode ?? 'Workstation details'}
+        // Marks this panel so the full-screen map Dialog (a Radix
+        // modal in office-locations-page.tsx) can recognize clicks
+        // inside it as NOT an "outside click" - see that Dialog's own
+        // onPointerDownOutside/onInteractOutside/onEscapeKeyDown
+        // handlers, which look for this exact attribute. Without it,
+        // Radix's dismissable-layer logic treats this panel (a plain
+        // div, not a Radix layer) as outside the map dialog entirely,
+        // and closes the whole map the instant anything in here is
+        // clicked.
+        data-asset-detail-panel="true"
+        className={[
+          'fixed inset-y-0 right-0 z-[200] flex w-full max-w-md flex-col',
+          'border-l bg-background shadow-2xl',
+          'transition-transform duration-300 ease-in-out',
+          open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
+        ].join(' ')}
+      >
+        <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate font-semibold">
               {seat?.seatCode ?? 'Workstation'}
-            </DialogTitle>
-            <DialogDescription>
+            </p>
+
+            <p className="text-xs text-muted-foreground">
               {seat?.assetId
                 ? 'System, installed software, and current holder for this workstation.'
                 : 'This workstation is vacant - no asset is currently placed here.'}
-            </DialogDescription>
-          </DialogHeader>
+            </p>
+          </div>
 
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            aria-label="Close"
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
           {error && (
             <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
@@ -403,7 +469,7 @@ export function AssetDetailDialog({
           )}
 
           {!loading && !error && detail && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-4">
               <div className="rounded-lg border p-3">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                   <Laptop className="h-4 w-4" />
@@ -494,7 +560,7 @@ export function AssetDetailDialog({
                 )}
               </div>
 
-              <div className="rounded-lg border p-3 sm:col-span-2">
+              <div className="rounded-lg border p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-sm font-semibold">
                     Installed Applications / License Copies
@@ -515,6 +581,7 @@ export function AssetDetailDialog({
                     No software has been recorded as installed on this asset.
                   </p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -566,10 +633,11 @@ export function AssetDetailDialog({
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </div>
 
-              <div className="rounded-lg border p-3 sm:col-span-2">
+              <div className="rounded-lg border p-3">
                 <div className="mb-2 text-sm font-semibold">
                   Allocated Licenses
                 </div>
@@ -581,6 +649,7 @@ export function AssetDetailDialog({
                     No license is currently allocated directly to this asset.
                   </p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -609,11 +678,12 @@ export function AssetDetailDialog({
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </div>
 
               {canRequestReallocation && detail.userId && (
-                <div className="sm:col-span-2">
+                <div>
                   <Button onClick={openReallocationRequest}>
                     Raise Reallocation Request
                   </Button>
@@ -621,8 +691,8 @@ export function AssetDetailDialog({
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+      </div>
 
       <AssetReallocationRequestDialog
         open={requestOpen}

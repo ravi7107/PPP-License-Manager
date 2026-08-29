@@ -1,18 +1,19 @@
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
 } from 'react';
 
 import {
+  HelpCircle,
+  Home,
   MapPin,
   Map,
   Minus,
-  Move,
   Plus,
-  RotateCcw,
-  Search,
   X,
 } from 'lucide-react';
 
@@ -22,9 +23,6 @@ import {
   zoomIdentity,
   type ZoomBehavior,
 } from 'd3-zoom';
-
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 
 import type {
   OfficeFloor,
@@ -36,6 +34,13 @@ interface OfficeFloorMapProps {
   seats: OfficeSeat[];
   apiBaseUrl?: string;
   selectedSeatId?: number | null;
+
+  // Controlled from the parent's sticky header search box now, instead
+  // of this component owning its own search input - lets the header
+  // drive both the on-map highlight below AND a results dropdown at the
+  // same time from one shared value. Defaults to '' (no filtering) for
+  // any consumer that doesn't pass it.
+  searchText?: string;
 
   onSeatClick?: (seat: OfficeSeat) => void;
 
@@ -56,6 +61,16 @@ interface OfficeFloorMapProps {
   // guessing X/Y numbers in a form.
   addMode?: boolean;
   onMapClick?: (xPosition: number, yPosition: number) => void;
+}
+
+// Imperative API the parent (sticky header) drives directly - fitMap()
+// for the Fit Map control / auto-fit-on-load-or-resize, focusSeat() for
+// "search result clicked -> pan, zoom, and highlight that workstation."
+// A ref instead of props because both are one-shot camera commands, not
+// values this component needs to keep rendering against.
+export interface OfficeFloorMapHandle {
+  fitMap: () => void;
+  focusSeat: (seatId: number) => void;
 }
 
 function buildMapUrl(
@@ -87,11 +102,18 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-function isOccupied(seat: OfficeSeat) {
+function clampScale(value: number) {
+  return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value));
+}
+
+// Exported so the parent's sticky header can compute the same
+// occupied/vacant counts and search-result list shown on the map,
+// without duplicating this logic.
+export function isOccupied(seat: OfficeSeat) {
   return Boolean(seat.userId && seat.assetId);
 }
 
-function matchesSearch(
+export function matchesSearch(
   seat: OfficeSeat,
   search: string
 ) {
@@ -120,11 +142,22 @@ function matchesSearch(
 // Zoom in this ratio per click on the +/- buttons.
 const ZOOM_STEP = 1.4;
 
-// 1 = the map at its natural (un-zoomed) size, matching the pre-zoom
-// baseline exactly. 6 = close enough to make small text/labels on a
-// dense floor plan legible.
-const MIN_SCALE = 1;
+// The map image is rendered at CSS width:100% of the viewport
+// (regardless of zoom), so k=1 means "image width == viewport width,"
+// not "natural pixel size" - a genuinely tall/narrow floor plan can
+// still overflow the viewport's height at k=1. MIN_SCALE used to be
+// pinned at 1 (never zoom out past width-fit), which meant Fit Map
+// could never actually shrink such a plan enough to show it in full.
+// 0.2 gives Fit Map room to do that while still stopping well short of
+// making the map illegibly small. 6 = close enough to make small
+// text/labels on a dense floor plan legible.
+const MIN_SCALE = 0.2;
 const MAX_SCALE = 6;
+
+// Padding applied around the whole map when Fit Map centers it, and the
+// zoom level focusSeat() settles on when jumping to a search result.
+const FIT_PADDING_RATIO = 0.07;
+const FOCUS_SEAT_SCALE = 3;
 
 // The minimap (and the zoom-% readout next to the controls) only add
 // value once the user has actually zoomed in - at 1x the whole map is
@@ -136,17 +169,21 @@ const MINIMAP_WIDTH = 160;
 const MINIMAP_MIN_HEIGHT = 60;
 const MINIMAP_MAX_HEIGHT = 220;
 
-export default function OfficeFloorMap({
+const OfficeFloorMap = forwardRef<
+  OfficeFloorMapHandle,
+  OfficeFloorMapProps
+>(function OfficeFloorMap({
   floor,
   seats,
   apiBaseUrl,
   selectedSeatId,
+  searchText = '',
   onSeatClick,
   onSeatDoubleClick,
   onSeatMove,
   addMode,
   onMapClick,
-}: OfficeFloorMapProps) {
+}, ref) {
   const mapRef = useRef<HTMLDivElement | null>(null);
 
   // A native double-click still fires two ordinary 'click' events before
@@ -220,13 +257,16 @@ export default function OfficeFloorMap({
   const [zoomScale, setZoomScale] = useState(1);
 
   // The zoom viewport's own on-screen size at rest (i.e. with no zoom
-  // applied). A CSS transform never changes the box a parent uses to
-  // size itself around a transformed child, so this rect is stable
-  // across every zoom/pan state - it only actually changes on a real
-  // resize (window resize, sidebar toggle, or the floor image finishing
-  // its initial load). Used to bound panning to the map image itself
-  // (translateExtent) and to size the minimap with the right aspect
-  // ratio.
+  // applied) - this is now a fixed full-height box (see the "absolute
+  // inset-0" comment on the viewport div below), NOT the image's own
+  // rendered size, so anything that needs the image's actual content
+  // dimensions (drag/click coordinate math, pan bounds, the minimap)
+  // must go through renderedHeightAtScale1 below instead of this
+  // directly. Still used as-is for d3-zoom's own `extent` (the
+  // viewport's real screen box - that one genuinely wants the on-screen
+  // size, not the image's) and as the width input renderedHeightAtScale1
+  // is derived from (image width == viewport width always holds, by
+  // construction, unlike height).
   const [viewportSize, setViewportSize] = useState({
     width: 0,
     height: 0,
@@ -243,8 +283,46 @@ export default function OfficeFloorMap({
   const [savingSeatId, setSavingSeatId] =
     useState<number | null>(null);
 
-  const [searchText, setSearchText] =
-    useState('');
+  // The floor image's own pixel dimensions, captured once it loads -
+  // needed (alongside viewportSize below) to compute a Fit Map scale
+  // that accounts for the image's real aspect ratio, not just its
+  // CSS-rendered width. Reset to zero whenever the map image itself
+  // changes (see the [mapUrl] effect below) so a stale previous floor's
+  // size can never be used to fit the new one before its own onLoad
+  // fires.
+  const [imageNaturalSize, setImageNaturalSize] = useState({
+    width: 0,
+    height: 0,
+  });
+
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // The image's actual rendered height at zoom scale 1 - i.e. the real
+  // height of the floor plan's own content box, as opposed to
+  // viewportSize.height (the surrounding viewport's fixed on-screen
+  // box, which the redesign made independent of the image's aspect
+  // ratio - see the viewportSize comment above). Width doesn't need an
+  // equivalent: the image is always rendered at CSS width:100% of the
+  // viewport, so image width and viewport width match by construction
+  // at every zoom level. Height doesn't, whenever the floor plan's
+  // aspect ratio isn't identical to the viewport's - which is the
+  // normal case, not an edge case. Everything that needs to convert
+  // between a screen position and a position ON THE IMAGE (drag-to-
+  // reposition, add-seat-mode clicks, pan-to-here on the minimap, and
+  // the pan bounds that keep the image from being dragged fully off-
+  // screen) needs to divide/multiply by this, not by viewportSize.height
+  // - using viewportSize.height there would silently compute the wrong
+  // Y position/bound whenever the two aspect ratios differ. Falls back
+  // to viewportSize.height before the image has loaded (imageNaturalSize
+  // still zero) purely so translateExtent/extent don't collapse to a
+  // zero-size box in that brief window - fitMap/focusSeat already guard
+  // themselves separately and simply no-op until the real value is
+  // known.
+  const renderedHeightAtScale1 =
+    viewportSize.width && imageNaturalSize.width && imageNaturalSize.height
+      ? viewportSize.width *
+        (imageNaturalSize.height / imageNaturalSize.width)
+      : viewportSize.height;
 
   const mapUrl = useMemo(
     () => buildMapUrl(floor.mapImagePath, apiBaseUrl),
@@ -276,14 +354,10 @@ export default function OfficeFloorMap({
     );
   }, [positionedSeats, searchText]);
 
-  const occupiedCount = useMemo(
-    () =>
-      positionedSeats.filter(isOccupied).length,
-    [positionedSeats]
-  );
-
-  const vacantCount =
-    positionedSeats.length - occupiedCount;
+  // Occupied/vacant counts are no longer rendered here - the parent's
+  // sticky header computes the same numbers itself (via the exported
+  // isOccupied() above, against getFloorSeats()) for its compact stats,
+  // so this component doesn't need to duplicate that state.
 
   const searchActive =
     searchText.trim().length > 0;
@@ -329,6 +403,13 @@ export default function OfficeFloorMap({
 
     viewportSelection.call(behavior);
     zoomBehaviorRef.current = behavior;
+
+    // A new floor's image hasn't loaded yet at this point, so its real
+    // natural size is unknown - clear out whatever the previous floor's
+    // image reported. The fit-on-ready effect further below only runs
+    // once this is populated again (by the new image's onLoad), so it
+    // can never fit against a stale, mismatched size in between.
+    setImageNaturalSize({ width: 0, height: 0 });
 
     // Double-click-to-zoom isn't a requested feature, and it would
     // otherwise fire on a double-click landing on a seat marker too
@@ -406,12 +487,22 @@ export default function OfficeFloorMap({
     }
 
     behavior
+      // extent = the viewport's own screen box - d3-zoom uses this to
+      // compute things like zoom-toward-pointer, so it genuinely wants
+      // the real on-screen dimensions here, not the image's.
       .extent([[0, 0], [viewportSize.width, viewportSize.height]])
+      // translateExtent = how far the CONTENT (the image, at scale 1)
+      // can be panned - this has to be expressed in the image's own
+      // coordinate space, i.e. [imageWidth, imageHeight], not the
+      // viewport's screen box. Using renderedHeightAtScale1 here (not
+      // viewportSize.height) is what keeps panning correctly bounded to
+      // the actual floor plan whenever its aspect ratio doesn't match
+      // the viewport's.
       .translateExtent([
         [0, 0],
-        [viewportSize.width, viewportSize.height],
+        [viewportSize.width, renderedHeightAtScale1],
       ]);
-  }, [viewportSize]);
+  }, [viewportSize, renderedHeightAtScale1]);
 
   const getPosition = (
     clientX: number,
@@ -424,7 +515,22 @@ export default function OfficeFloorMap({
     const rect =
       container.getBoundingClientRect();
 
-    if (!rect.width || !rect.height) {
+    // rect.height is now the viewport's fixed full-height box (see the
+    // viewportSize/renderedHeightAtScale1 comments above), not the
+    // image's own rendered height - dividing localY by it directly
+    // (like this used to, before the full-screen redesign) would
+    // silently compute the wrong Y percentage whenever the floor plan's
+    // aspect ratio doesn't exactly match the viewport's. rect.width is
+    // still correct as-is: the image is always CSS width:100% of the
+    // viewport, so image width and viewport width match at every zoom
+    // level - only height needed the swap to renderedHeightAtScale1.
+    // Requiring it to be known (not falling back like the effect above
+    // does) is deliberate here: a drag/click that lands before the
+    // image has actually loaded has nothing real to compute a position
+    // against yet, so returning null (rather than a wrong number) is
+    // the safe outcome - finishDrag() already falls back to the seat's
+    // pre-drag position whenever getPosition() returns null.
+    if (!rect.width || !renderedHeightAtScale1) {
       return null;
     }
 
@@ -442,7 +548,7 @@ export default function OfficeFloorMap({
       (clientY - rect.top - transform.y) / transform.k;
 
     const x = (localX / rect.width) * 100;
-    const y = (localY / rect.height) * 100;
+    const y = (localY / renderedHeightAtScale1) * 100;
 
     return {
       x: Number(clamp(x).toFixed(3)),
@@ -554,17 +660,133 @@ export default function OfficeFloorMap({
       .call(behavior.scaleBy, factor);
   };
 
-  const resetView = () => {
+  // Centers the WHOLE floor plan in the viewport with padding on every
+  // side, computed from the image's real aspect ratio (imageNaturalSize)
+  // rather than assuming it matches the viewport's - see the MIN_SCALE
+  // comment above for why k=1 alone doesn't already guarantee this.
+  // Silently no-ops until both the image has loaded and the viewport has
+  // been measured at least once (both required inputs below).
+  const fitMap = () => {
     const viewport = zoomViewportRef.current;
     const behavior = zoomBehaviorRef.current;
 
-    if (!viewport || !behavior) return;
+    if (
+      !viewport ||
+      !behavior ||
+      !viewportSize.width ||
+      !viewportSize.height ||
+      !imageNaturalSize.width ||
+      !imageNaturalSize.height
+    ) {
+      return;
+    }
+
+    // renderedHeightAtScale1 here is the component-level value declared
+    // above (not recomputed) - the guard clause just above already
+    // guarantees imageNaturalSize/viewportSize.width are both known, so
+    // it's already the real image-derived height, not the viewportSize
+    // fallback.
+    const availableWidth =
+      viewportSize.width * (1 - FIT_PADDING_RATIO * 2);
+
+    const availableHeight =
+      viewportSize.height * (1 - FIT_PADDING_RATIO * 2);
+
+    const fitScale = clampScale(
+      Math.min(
+        availableWidth / viewportSize.width,
+        availableHeight / renderedHeightAtScale1
+      )
+    );
+
+    const renderedWidthAtFit = viewportSize.width * fitScale;
+    const renderedHeightAtFit = renderedHeightAtScale1 * fitScale;
+
+    const x = (viewportSize.width - renderedWidthAtFit) / 2;
+    const y = (viewportSize.height - renderedHeightAtFit) / 2;
 
     select(viewport)
       .transition()
       .duration(300)
-      .call(behavior.transform, zoomIdentity);
+      .call(
+        behavior.transform,
+        zoomIdentity.translate(x, y).scale(fitScale)
+      );
   };
+
+  // Pans and zooms to a specific workstation (a search-result click) and
+  // settles at a close-up but not-maxed-out scale so its neighbors stay
+  // visible for context. Highlighting the seat itself is the caller's
+  // job (via the selectedSeatId prop) - this only ever moves the camera.
+  const focusSeat = (seatId: number) => {
+    const viewport = zoomViewportRef.current;
+    const behavior = zoomBehaviorRef.current;
+    const seat = positionedSeats.find((item) => item.id === seatId);
+
+    if (
+      !viewport ||
+      !behavior ||
+      !seat ||
+      !viewportSize.width ||
+      !viewportSize.height ||
+      !imageNaturalSize.width ||
+      !imageNaturalSize.height
+    ) {
+      return;
+    }
+
+    // renderedHeightAtScale1 here is the component-level value declared
+    // above (not recomputed) - see the same note in fitMap().
+    const targetScale = clampScale(FOCUS_SEAT_SCALE);
+
+    const pointX =
+      (clamp(Number(seat.xPosition)) / 100) * viewportSize.width;
+
+    const pointY =
+      (clamp(Number(seat.yPosition)) / 100) * renderedHeightAtScale1;
+
+    const x = viewportSize.width / 2 - pointX * targetScale;
+    const y = viewportSize.height / 2 - pointY * targetScale;
+
+    select(viewport)
+      .transition()
+      .duration(400)
+      .call(
+        behavior.transform,
+        zoomIdentity.translate(x, y).scale(targetScale)
+      );
+  };
+
+  useImperativeHandle(ref, () => ({
+    fitMap,
+    focusSeat,
+  }));
+
+  // Fit Map runs automatically once there's actually something to fit
+  // (the image has loaded AND the viewport has been measured), and again
+  // on every subsequent viewportSize change - which covers all of
+  // "initial load," "floor changes" (imageNaturalSize resets to 0 on
+  // mapUrl change above, so this only fires again once the NEW image
+  // reports its size), and "browser window is resized." An explicit
+  // click on the Fit Map button calls fitMap() directly instead.
+  useEffect(() => {
+    if (!viewportSize.width || !viewportSize.height) return;
+    if (!imageNaturalSize.width || !imageNaturalSize.height) return;
+
+    fitMap();
+    // Deliberately keyed only on the actual inputs fitMap's math
+    // depends on, not on fitMap itself (a plain function redefined
+    // every render) - otherwise this would re-fit on every unrelated
+    // re-render (e.g. a seat being dragged), fighting the user's
+    // current pan/zoom for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    mapUrl,
+    imageNaturalSize.width,
+    imageNaturalSize.height,
+    viewportSize.width,
+    viewportSize.height,
+  ]);
 
   const panTo = (
     contentFractionX: number,
@@ -577,18 +799,24 @@ export default function OfficeFloorMap({
       !viewport ||
       !behavior ||
       !viewportSize.width ||
-      !viewportSize.height
+      !renderedHeightAtScale1
     ) {
       return;
     }
 
+    // translateTo's x/y are in the image's own coordinate space (see
+    // the translateExtent comment above) - contentFractionY therefore
+    // has to scale against renderedHeightAtScale1 (the image's real
+    // rendered height), not viewportSize.height, or a click on the
+    // minimap would center the wrong point whenever the floor plan's
+    // aspect ratio doesn't match the viewport's.
     select(viewport)
       .transition()
       .duration(300)
       .call(
         behavior.translateTo,
         clamp01(contentFractionX) * viewportSize.width,
-        clamp01(contentFractionY) * viewportSize.height
+        clamp01(contentFractionY) * renderedHeightAtScale1
       );
   };
 
@@ -608,17 +836,31 @@ export default function OfficeFloorMap({
       (-transform.x / transform.k / viewportSize.width) * 100
     );
 
+    // Same content-space-vs-viewport-space distinction as
+    // translateExtent/panTo above - the visible region's top edge, as a
+    // percentage of the image's real height, needs renderedHeightAtScale1
+    // as the denominator, not viewportSize.height.
     const topPct = clamp(
-      (-transform.y / transform.k / viewportSize.height) * 100
+      (-transform.y / transform.k / renderedHeightAtScale1) * 100
     );
 
+    // widthPct can get away with the simpler 100/k form because
+    // content-width equals viewportSize.width by construction (the
+    // image is always CSS width:100% of the viewport), so that ratio
+    // already cancels out. heightPct doesn't have that shortcut -
+    // content-height is renderedHeightAtScale1, not viewportSize.height
+    // (same distinction as topPct just above), so the visible slice's
+    // screen-space height (viewportSize.height / k) has to be expressed
+    // as a percentage of renderedHeightAtScale1 explicitly, or this
+    // rectangle comes out the wrong height whenever the floor plan's
+    // aspect ratio doesn't match the viewport's.
     const widthPct = Math.min(
       100 / transform.k,
       100 - leftPct
     );
 
     const heightPct = Math.min(
-      100 / transform.k,
+      ((viewportSize.height / transform.k) / renderedHeightAtScale1) * 100,
       100 - topPct
     );
 
@@ -626,7 +868,7 @@ export default function OfficeFloorMap({
     // zoomScale is read only to force this to recompute on every zoom
     // event (zoomTransformRef itself doesn't trigger re-renders).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOverview, zoomScale, viewportSize]);
+  }, [showOverview, zoomScale, viewportSize, renderedHeightAtScale1]);
 
   const minimapHeight = viewportSize.width
     ? Math.max(
@@ -654,7 +896,7 @@ export default function OfficeFloorMap({
 
   if (!mapUrl) {
     return (
-      <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+      <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
         <Map className="mb-3 h-10 w-10 text-muted-foreground" />
 
         <p className="font-medium">
@@ -670,142 +912,41 @@ export default function OfficeFloorMap({
   }
 
   return (
-    <div className="space-y-3">
-
-      {/* HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="font-medium">
-            {floor.floorName} Map
-          </p>
-
-          <p className="text-xs text-muted-foreground">
-            {floor.mapOriginalFileName ??
-              'Floor plan'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">
-            {positionedSeats.length} workstations
-          </Badge>
-
-          <Badge variant="secondary">
-            {occupiedCount} occupied
-          </Badge>
-
-          <Badge variant="secondary">
-            {vacantCount} vacant
-          </Badge>
-        </div>
-      </div>
-
-      {/* SEARCH */}
-      <div className="rounded-lg border bg-muted/10 p-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-            <Input
-              value={searchText}
-              onChange={(event) =>
-                setSearchText(event.target.value)
-              }
-              placeholder="Search employee, hostname, asset, department or seat..."
-              className="pl-9 pr-9"
-            />
-
-            {searchText && (
-              <button
-                type="button"
-                onClick={() =>
-                  setSearchText('')
-                }
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full border border-white bg-green-500 shadow" />
-              <span>Occupied</span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full border border-white bg-gray-400 shadow" />
-              <span>Vacant / Unassigned</span>
-            </div>
-
-          </div>
-        </div>
-
-        {searchActive && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            {matchingSeatIds.size === 0
-              ? 'No matching workstation found.'
-              : `${matchingSeatIds.size} matching workstation${
-                  matchingSeatIds.size === 1
-                    ? ''
-                    : 's'
-                } found.`}
-          </div>
-        )}
-      </div>
-
-      {/* ADD-SEAT MESSAGE */}
-      {addMode && onMapClick ? (
-        <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
-          <MapPin className="h-4 w-4" />
-          Click anywhere on the map to place a new workstation there.
-        </div>
-      ) : (
-        <>
-          {/* DRAG MESSAGE */}
-          {onSeatMove && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <Move className="h-4 w-4" />
-              Drag a workstation dot to reposition it.
-              The new position is saved automatically.
-            </div>
-          )}
-
-          {onSeatDoubleClick && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              Double-click a workstation to see the system, installed software,
-              and who it&apos;s assigned to.
-            </div>
-          )}
-        </>
-      )}
+    // Full-height/width shell - the parent (the sticky-header dialog
+    // shell in office-locations-page.tsx) is what actually reserves the
+    // viewport space; this component just fills whatever box it's
+    // given. No header/search/legend text blocks live here any more -
+    // those moved to the parent's sticky header (floor name, workstation/
+    // occupied/vacant stats, search input) so the map itself gets
+    // maximum space instead of being squeezed by stacked chrome above
+    // it. overflow-hidden here is what guarantees "no page scrolling to
+    // reach the map" - everything below is either the map itself or an
+    // absolutely-positioned overlay on top of it.
+    <div className="relative flex h-full w-full flex-col overflow-hidden">
 
       {/* MAP */}
-      <div className="overflow-auto rounded-lg border bg-muted/20 p-2">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20">
         {/*
-          This wrapper (not overflow-hidden) is what the zoom controls
-          and minimap are positioned against. It sits OUTSIDE the
-          overflow-hidden/zoom-managed viewport below, so neither
-          overlay is ever clipped by it, and neither one is a
-          descendant of the element d3-zoom attaches its wheel/pointer
-          listeners to - clicking a control can never also start a pan.
+          This wrapper (not overflow-hidden) is what the zoom controls,
+          minimap, Help popover, and floating legend are positioned
+          against. It sits OUTSIDE the overflow-hidden/zoom-managed
+          viewport below, so none of those overlays are ever clipped by
+          it, and none of them are a descendant of the element d3-zoom
+          attaches its wheel/pointer listeners to - clicking a control
+          can never also start a pan. It's pinned to fill this flex-1
+          area exactly (absolute inset-0, not the old mx-auto/max-width
+          block) - that's the fixed box viewportSize/fitMap's math is
+          computed against, and it's what makes the map a true
+          full-viewport surface instead of a capped-width column.
         */}
-        <div
-          className="relative mx-auto w-full"
-          style={{ maxWidth: '1400px' }}
-        >
+        <div className="absolute inset-0">
           <div
             ref={(element) => {
               mapRef.current = element;
               zoomViewportRef.current = element;
             }}
             className={[
-              'relative w-full overflow-hidden rounded-md bg-background',
+              'absolute inset-0 overflow-hidden rounded-md bg-background',
               addMode && onMapClick ? 'cursor-crosshair' : '',
             ].join(' ')}
             style={{
@@ -834,6 +975,20 @@ export default function OfficeFloorMap({
                 alt={`${floor.floorName} floor plan`}
                 className="pointer-events-none block h-auto w-full select-none"
                 draggable={false}
+                onLoad={(event) => {
+                  // The zoom layer's height is (and always was) driven
+                  // purely by the img's own aspect ratio at CSS
+                  // width:100% - see the MIN_SCALE comment above. This
+                  // is the one place that ratio becomes known, so
+                  // fitMap()/focusSeat() (and the auto-fit effect that
+                  // calls fitMap on mount) stay no-ops until it fires.
+                  const target = event.currentTarget;
+
+                  setImageNaturalSize({
+                    width: target.naturalWidth,
+                    height: target.naturalHeight,
+                  });
+                }}
               />
 
               {positionedSeats.map((seat) => {
@@ -1088,6 +1243,106 @@ export default function OfficeFloorMap({
             </div>
           </div>
 
+          {/* EMPTY STATE - overlaid centered on the map instead of a
+              block stacked below it, so it never costs the map any of
+              its full-height layout space (it only ever appears when
+              there's nothing to actually see on the map anyway). */}
+          {positionedSeats.length === 0 && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-[100] flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-dashed bg-background/95 px-3 py-2 text-sm text-muted-foreground shadow-sm">
+              <MapPin className="h-4 w-4" />
+              No workstations have been positioned on this
+              floor map yet.
+            </div>
+          )}
+
+          {/* ADD-SEAT BANNER - only visible in add-seat mode, replaces
+              the old full-width instruction block with a small pill
+              overlaid on the map so it never takes layout space away
+              from the map itself. */}
+          {addMode && onMapClick && (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-[100] -translate-x-1/2 flex items-center gap-2 rounded-full border border-primary/40 bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium shadow-md">
+              <MapPin className="h-3.5 w-3.5" />
+              Click anywhere on the map to place a new workstation there.
+            </div>
+          )}
+
+          {/* HELP - replaces the two old always-visible instruction
+              boxes (drag-to-move, double-click-for-details) with a
+              single small button that only shows that guidance when
+              asked for. */}
+          <div className="pointer-events-auto absolute left-3 top-3 z-[100]">
+            <button
+              type="button"
+              onClick={() => setHelpOpen((open) => !open)}
+              className="flex h-9 w-9 items-center justify-center rounded-md border bg-background shadow-md hover:bg-muted"
+              aria-label="Help"
+              title="Help"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+
+            {helpOpen && (
+              <div className="absolute left-0 top-11 w-72 rounded-md border bg-background p-3 text-xs shadow-lg">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium">
+                    Using the map
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Close help"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <ul className="space-y-1.5 text-muted-foreground">
+                  <li>
+                    Scroll or use +/- to zoom. Drag an empty part of
+                    the map to pan. Click ⌂ to fit the whole floor
+                    back on screen.
+                  </li>
+
+                  <li>
+                    Search by employee, hostname, asset, department,
+                    or seat to jump straight to a workstation.
+                  </li>
+
+                  {onSeatMove && (
+                    <li>
+                      Drag a workstation dot to reposition it - the
+                      new position saves automatically.
+                    </li>
+                  )}
+
+                  {onSeatDoubleClick && (
+                    <li>
+                      Double-click a workstation to see the system,
+                      installed software, allocated licenses, and who
+                      it&apos;s assigned to.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* FLOATING LEGEND - same colors/meaning as before, just a
+              small corner overlay instead of a full-width bar. */}
+          <div className="pointer-events-none absolute bottom-3 left-3 z-[100] flex items-center gap-3 rounded-md border bg-background/95 px-2.5 py-1.5 text-[11px] shadow-md">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full border border-white bg-green-500 shadow" />
+              <span>Occupied</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full border border-white bg-gray-400 shadow" />
+              <span>Vacant</span>
+            </div>
+          </div>
+
           {/* ZOOM CONTROLS */}
           <div className="pointer-events-auto absolute right-3 top-3 z-[100] flex flex-col overflow-hidden rounded-md border bg-background shadow-md">
             <button
@@ -1116,12 +1371,12 @@ export default function OfficeFloorMap({
 
             <button
               type="button"
-              onClick={resetView}
+              onClick={fitMap}
               className="flex h-9 w-9 items-center justify-center hover:bg-muted"
-              aria-label="Reset view"
-              title="Reset view"
+              aria-label="Fit Map"
+              title="Fit Map"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <Home className="h-3.5 w-3.5" />
             </button>
 
             {zoomScale > OVERVIEW_VISIBLE_ABOVE_SCALE && (
@@ -1166,14 +1421,8 @@ export default function OfficeFloorMap({
         </div>
       </div>
 
-      {positionedSeats.length === 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          <MapPin className="h-4 w-4" />
-          No workstations have been positioned on this
-          floor map yet.
-        </div>
-      )}
-
     </div>
   );
-}
+});
+
+export default OfficeFloorMap;
