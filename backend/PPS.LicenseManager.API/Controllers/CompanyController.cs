@@ -5,12 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-// "Entities" module in the frontend (frontend/lib/auth/roles.ts
-// MODULE_ACCESS.entities) - Super Admin/IT Admin only, matching every
-// other Directory admin module. Was bare [Authorize], letting any
-// authenticated user (Team Lead, Manager, Employee) read/create/edit/
-// delete company records the UI never even shows them.
-[Authorize(Roles = "Super Admin,IT Admin")]
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class CompanyController : BaseController
@@ -23,6 +18,18 @@ public class CompanyController : BaseController
     }
 
     // GET: api/Company
+    //
+    // Reads stay open to any authenticated user - company/"Entity" names
+    // are read as a lookup/filter by many pages outside the Entities
+    // admin module itself (Office Locations, Hardware, Licenses,
+    // Purchase Requisitions, Material Movement, Users, and a couple of
+    // request-loading helpers), across roles well beyond Super
+    // Admin/IT Admin. Restricting this class-wide (as it briefly was)
+    // broke every one of those pages for any other role. Only
+    // Create/Update/Delete below are restricted to the "Entities"
+    // module's own audience (frontend/lib/auth/roles.ts
+    // MODULE_ACCESS.entities) - matching the pattern already used
+    // correctly by AssetController/ResourceAllocationController.
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -44,6 +51,7 @@ public class CompanyController : BaseController
     }
 
     // POST: api/Company
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPost]
     public async Task<IActionResult> Create(CreateCompanyRequest request)
     {
@@ -57,6 +65,7 @@ public class CompanyController : BaseController
     }
 
     // PUT: api/Company/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
         int id,
@@ -71,6 +80,7 @@ public class CompanyController : BaseController
     }
 
     // DELETE: api/Company/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

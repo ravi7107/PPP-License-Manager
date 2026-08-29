@@ -5,9 +5,7 @@ using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-// "Clients" module - Super Admin/IT Admin only, matching
-// frontend/lib/auth/roles.ts MODULE_ACCESS.clients.
-[Authorize(Roles = "Super Admin,IT Admin")]
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ClientController : BaseController
@@ -20,6 +18,16 @@ public class ClientController : BaseController
     }
 
     // GET: api/Client
+    //
+    // Reads stay open to any authenticated user - client names are read
+    // as a lookup/filter by pages outside the Clients admin module itself
+    // (Licenses, and a request-loading helper), across roles well beyond
+    // Super Admin/IT Admin. Restricting this class-wide (as it briefly
+    // was) broke every one of those pages for any other role. Only
+    // Create/Update/Delete below are restricted to the Clients module's
+    // own audience (frontend/lib/auth/roles.ts MODULE_ACCESS.clients) -
+    // matching the pattern already used correctly by
+    // AssetController/ResourceAllocationController.
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -45,6 +53,7 @@ public class ClientController : BaseController
     }
 
     // POST: api/Client
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPost]
     public async Task<IActionResult> Create(
         CreateClientRequest request)
@@ -59,6 +68,7 @@ public class ClientController : BaseController
     }
 
     // PUT: api/Client/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
         int id,
@@ -75,6 +85,7 @@ public class ClientController : BaseController
     }
 
     // DELETE: api/Client/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

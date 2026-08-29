@@ -5,9 +5,7 @@ using PPS.LicenseManager.API.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-// "Departments" module - Super Admin/IT Admin only, matching
-// frontend/lib/auth/roles.ts MODULE_ACCESS.departments.
-[Authorize(Roles = "Super Admin,IT Admin")]
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class DepartmentController : BaseController
@@ -20,6 +18,17 @@ public class DepartmentController : BaseController
     }
 
     // GET: api/Department
+    //
+    // Reads stay open to any authenticated user - department names are
+    // read as a lookup/filter by many pages outside the Departments admin
+    // module itself (Office Locations, Users, Licenses, Material
+    // Movement, and a couple of request-loading helpers), across roles
+    // well beyond Super Admin/IT Admin. Restricting this class-wide (as
+    // it briefly was) broke every one of those pages for any other role.
+    // Only Create/Update/Delete below are restricted to the Departments
+    // module's own audience (frontend/lib/auth/roles.ts
+    // MODULE_ACCESS.departments) - matching the pattern already used
+    // correctly by AssetController/ResourceAllocationController.
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -45,6 +54,7 @@ public class DepartmentController : BaseController
     }
 
     // POST: api/Department
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPost]
     public async Task<IActionResult> Create(
         CreateDepartmentRequest request)
@@ -59,6 +69,7 @@ public class DepartmentController : BaseController
     }
 
     // PUT: api/Department/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
         int id,
@@ -75,6 +86,7 @@ public class DepartmentController : BaseController
     }
 
     // DELETE: api/Department/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

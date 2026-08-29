@@ -5,9 +5,7 @@ using PPS.LicenseManager.API.Services.Interfaces;
 
 namespace PPS.LicenseManager.API.Controllers;
 
-// "Vendors" module - Super Admin/IT Admin only, matching
-// frontend/lib/auth/roles.ts MODULE_ACCESS.vendors.
-[Authorize(Roles = "Super Admin,IT Admin")]
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class VendorController : BaseController
@@ -20,6 +18,16 @@ public class VendorController : BaseController
     }
 
     // GET: api/Vendor
+    //
+    // Reads stay open to any authenticated user - vendor names are read
+    // as a lookup/filter by pages outside the Vendors admin module itself
+    // (Hardware, Purchase Requisitions, Material Movement), across roles
+    // well beyond Super Admin/IT Admin. Restricting this class-wide (as
+    // it briefly was) broke every one of those pages for any other role.
+    // Only Create/Update/Delete below are restricted to the Vendors
+    // module's own audience (frontend/lib/auth/roles.ts
+    // MODULE_ACCESS.vendors) - matching the pattern already used
+    // correctly by AssetController/ResourceAllocationController.
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -45,6 +53,7 @@ public class VendorController : BaseController
     }
 
     // POST: api/Vendor
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPost]
     public async Task<IActionResult> Create(
         CreateVendorRequest request)
@@ -59,6 +68,7 @@ public class VendorController : BaseController
     }
 
     // PUT: api/Vendor/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
         int id,
@@ -75,6 +85,7 @@ public class VendorController : BaseController
     }
 
     // DELETE: api/Vendor/5
+    [Authorize(Roles = "Super Admin,IT Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
