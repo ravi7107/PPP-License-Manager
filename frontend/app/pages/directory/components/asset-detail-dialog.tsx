@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Landmark, Laptop, MapPin, Pencil, Plus, Trash2, User as UserIcon, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Landmark,
+  Laptop,
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+  User as UserIcon,
+  X,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -121,6 +132,15 @@ export function AssetDetailDialog({
   const [allocatedLicenses, setAllocatedLicenses] = useState<ResourceAllocation[]>([]);
   const [allocatedLicensesLoading, setAllocatedLicensesLoading] = useState(false);
 
+  // Compact-view collapse state for the two data-table sections. Both
+  // default to collapsed so System + Assigned To - the two sections a
+  // user needs on every open - fit inside the panel without needing to
+  // scroll at all, sidestepping the panel's own wheel-scroll entirely
+  // for the common case. Reset to collapsed on every new seat/asset open
+  // below so a previous seat's expanded state doesn't carry over.
+  const [installedAppsExpanded, setInstalledAppsExpanded] = useState(false);
+  const [allocatedLicensesExpanded, setAllocatedLicensesExpanded] = useState(false);
+
   // The scrollable body below the header (System / Assigned To /
   // Installed Applications / Allocated Licenses). Wired up by hand below
   // for the same underlying reason as the Escape handling above: this
@@ -239,6 +259,14 @@ export function AssetDetailDialog({
       setInstalledLoading(false);
     }
   };
+
+  // Collapse both data-table sections again whenever a different seat's
+  // panel opens, so an earlier seat's "expanded" choice doesn't carry
+  // over and silently defeat the compact default for the next one.
+  useEffect(() => {
+    setInstalledAppsExpanded(false);
+    setAllocatedLicensesExpanded(false);
+  }, [seat?.assetId]);
 
   useEffect(() => {
     if (!open || !seat?.assetId) {
@@ -666,10 +694,25 @@ export function AssetDetailDialog({
               </div>
 
               <div className="rounded-lg border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="text-sm font-semibold">
-                    Installed Applications / License Copies
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInstalledAppsExpanded((v) => !v)}
+                    aria-expanded={installedAppsExpanded}
+                    className="flex flex-1 items-center gap-2 text-left text-sm font-semibold"
+                  >
+                    {installedAppsExpanded ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span>Installed Applications / License Copies</span>
+                    {!installedLoading && (
+                      <Badge variant="secondary" className="ml-1">
+                        {installedSoftware.length}
+                      </Badge>
+                    )}
+                  </button>
 
                   {canEdit && (
                     <Button size="sm" variant="outline" onClick={openAddSoftware}>
@@ -679,110 +722,133 @@ export function AssetDetailDialog({
                   )}
                 </div>
 
-                {installedLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading…</p>
-                ) : installedSoftware.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No software has been recorded as installed on this asset.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Software</TableHead>
-                        <TableHead>Version</TableHead>
-                        <TableHead>License Key</TableHead>
-                        <TableHead>Status</TableHead>
-                        {canEdit && <TableHead className="text-right">Actions</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {installedSoftware.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.softwareName}</TableCell>
-                          <TableCell>{item.version || '—'}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {item.licenseKey || '—'}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={item.status === 'Removed' ? 'outline' : 'default'}
-                            >
-                              {item.status}
-                            </Badge>
-                          </TableCell>
-                          {canEdit && (
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => openEditSoftware(item)}
+                {installedAppsExpanded && (
+                  <div className="mt-2">
+                    {installedLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading…</p>
+                    ) : installedSoftware.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No software has been recorded as installed on this asset.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Software</TableHead>
+                            <TableHead>Version</TableHead>
+                            <TableHead>License Key</TableHead>
+                            <TableHead>Status</TableHead>
+                            {canEdit && <TableHead className="text-right">Actions</TableHead>}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {installedSoftware.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>{item.softwareName}</TableCell>
+                              <TableCell>{item.version || '—'}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {item.licenseKey || '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={item.status === 'Removed' ? 'outline' : 'default'}
                                 >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteSoftware(item)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-red-600" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                                  {item.status}
+                                </Badge>
+                              </TableCell>
+                              {canEdit && (
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => openEditSoftware(item)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeleteSoftware(item)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
               <div className="rounded-lg border p-3">
-                <div className="mb-2 text-sm font-semibold">
-                  Allocated Licenses
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setAllocatedLicensesExpanded((v) => !v)}
+                  aria-expanded={allocatedLicensesExpanded}
+                  className="flex w-full items-center gap-2 text-left text-sm font-semibold"
+                >
+                  {allocatedLicensesExpanded ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span>Allocated Licenses</span>
+                  {!allocatedLicensesLoading && (
+                    <Badge variant="secondary" className="ml-1">
+                      {allocatedLicenses.length}
+                    </Badge>
+                  )}
+                </button>
 
-                {allocatedLicensesLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading…</p>
-                ) : allocatedLicenses.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No license is currently allocated directly to this asset.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Software</TableHead>
-                        <TableHead>License</TableHead>
-                        <TableHead>Allocated To</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Allocated On</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allocatedLicenses.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.softwareName}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {item.licenseAliasCode}
-                          </TableCell>
-                          <TableCell>{item.userName}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {item.allocatedOn.slice(0, 10)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                {allocatedLicensesExpanded && (
+                  <div className="mt-2">
+                    {allocatedLicensesLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading…</p>
+                    ) : allocatedLicenses.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No license is currently allocated directly to this asset.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Software</TableHead>
+                            <TableHead>License</TableHead>
+                            <TableHead>Allocated To</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Allocated On</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {allocatedLicenses.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>{item.softwareName}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {item.licenseAliasCode}
+                              </TableCell>
+                              <TableCell>{item.userName}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{item.status}</Badge>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {item.allocatedOn.slice(0, 10)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
