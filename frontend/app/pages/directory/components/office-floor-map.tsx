@@ -156,7 +156,13 @@ const MAX_SCALE = 6;
 
 // Padding applied around the whole map when Fit Map centers it, and the
 // zoom level focusSeat() settles on when jumping to a search result.
-const FIT_PADDING_RATIO = 0.07;
+// Kept small (as opposed to something like 0.10+) because Fit Map
+// already has to shrink a portrait-oriented floor plan a lot more than
+// this to keep it fully visible inside a landscape viewport without
+// distorting it - every extra point here comes directly out of the
+// map's visible size on exactly those floor plans, so there's no
+// reason to add more than a slim breathing margin.
+const FIT_PADDING_RATIO = 0.04;
 const FOCUS_SEAT_SCALE = 3;
 
 // The minimap (and the zoom-% readout next to the controls) only add
@@ -946,7 +952,16 @@ const OfficeFloorMap = forwardRef<
               zoomViewportRef.current = element;
             }}
             className={[
-              'absolute inset-0 overflow-hidden rounded-md bg-background',
+              // A light neutral backdrop, not bg-background (near-white,
+              // same as the floor plan's own white canvas) - a floor
+              // plan whose proportions don't match the viewport's
+              // (portrait plan, landscape screen) leaves visible margin
+              // on one axis once fully fit (see the FIT_PADDING_RATIO
+              // comment). Against a same-white backdrop that margin
+              // reads as broken/empty space; against a slightly tinted
+              // one, plus the shadow/ring on the image itself below, it
+              // reads as a deliberately framed page instead.
+              'absolute inset-0 overflow-hidden rounded-md bg-muted',
               addMode && onMapClick ? 'cursor-crosshair' : '',
             ].join(' ')}
             style={{
@@ -973,7 +988,14 @@ const OfficeFloorMap = forwardRef<
               <img
                 src={mapUrl}
                 alt={`${floor.floorName} floor plan`}
-                className="pointer-events-none block h-auto w-full select-none"
+                // shadow/ring are purely cosmetic framing (they don't
+                // change the image's own box size or position, so
+                // getPosition()'s coordinate math and fitMap/focusSeat
+                // are unaffected) - this is what makes a portrait floor
+                // plan's side margins in a landscape viewport read as a
+                // deliberately framed page instead of empty/broken
+                // space, alongside the backdrop color above.
+                className="pointer-events-none block h-auto w-full select-none rounded-sm shadow-lg ring-1 ring-black/10"
                 draggable={false}
                 onLoad={(event) => {
                   // The zoom layer's height is (and always was) driven
