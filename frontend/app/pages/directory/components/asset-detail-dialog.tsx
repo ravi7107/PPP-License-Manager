@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Landmark, Laptop, MapPin, Pencil, Plus, Trash2, User as UserIcon, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -121,6 +121,21 @@ export function AssetDetailDialog({
   const [allocatedLicenses, setAllocatedLicenses] = useState<ResourceAllocation[]>([]);
   const [allocatedLicensesLoading, setAllocatedLicensesLoading] = useState(false);
 
+  // The scrollable body below the header (System / Assigned To /
+  // Installed Applications / Allocated Licenses). Wired up by hand below
+  // for the same underlying reason as the Escape handling above: this
+  // panel renders as a plain div OUTSIDE the map Dialog's own DOM
+  // subtree (see the render comment near the bottom of this file), so
+  // Radix's modal scroll-lock - which only recognizes elements inside
+  // the Dialog it manages - doesn't know this element is meant to
+  // scroll. Left to native `overflow-y-auto` scrolling alone, mouse-
+  // wheel/trackpad scroll gestures over this panel get swallowed by
+  // that outer lock before they ever move this element, which reads to
+  // a user as "scrolling does nothing" (or, since the lock is fighting
+  // the gesture, an inconsistent partial scroll that can *feel* like
+  // the whole map closing under them).
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // This panel is deliberately not a modal Dialog (see the render below)
   // so it doesn't block map interaction while open - which also means it
   // doesn't get Radix's built-in Escape-to-close behavior for free, so
@@ -143,6 +158,73 @@ export function AssetDetailDialog({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, onOpenChange, requestOpen, softwareFormOpen]);
+
+  // Drive the body's scrolling manually instead of relying on the
+  // browser's native wheel-scroll (see the scrollContainerRef comment
+  // above for why native scroll alone isn't reliable here). A native,
+  // non-passive listener is required - React's own onWheel prop is
+  // always attached passively, so calling preventDefault() from it is a
+  // silent no-op. We don't actually need preventDefault to succeed for
+  // the scrolling itself (scrollTop/scrollLeft are set directly below,
+  // regardless of what any other listener decided about the event), but
+  // it's still requested so a stray page-level scroll/bounce can't fire
+  // alongside our own manual one.
+  //
+  // The "Installed Applications" and "Allocated Licenses" tables below
+  // each sit inside their own `overflow-x-auto` wrapper, since this
+  // panel is only max-w-md wide. Without the branch below, every wheel
+  // event bubbling up through this container - including a horizontal
+  // trackpad swipe or shift+wheel meant to scroll one of those tables
+  // sideways - would be treated as a vertical scroll of the whole panel,
+  // silently breaking horizontal scrolling on those tables. So a
+  // horizontal-dominant gesture over a genuinely horizontally-
+  // scrollable table is handled by scrolling THAT element's scrollLeft
+  // instead, and only falls through to the panel-wide vertical handling
+  // below when it isn't one (e.g. a horizontal gesture over plain text,
+  // or a table that isn't actually overflowing).
+  useEffect(() => {
+    if (!open) return;
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const horizontalDominant = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+
+      if (horizontalDominant) {
+        const target = event.target as HTMLElement | null;
+        const scroller = target?.closest<HTMLElement>('.overflow-x-auto') ?? null;
+        const maxScrollLeft = scroller ? scroller.scrollWidth - scroller.clientWidth : 0;
+
+        if (scroller && container.contains(scroller) && maxScrollLeft > 0) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          scroller.scrollLeft = Math.min(
+            Math.max(scroller.scrollLeft + event.deltaX, 0),
+            maxScrollLeft,
+          );
+          return;
+        }
+        // Not a genuinely horizontally-scrollable target - treat it as a
+        // vertical scroll of the panel instead, same as any other gesture.
+      }
+
+      const maxScrollTop = container.scrollHeight - container.clientHeight;
+      if (maxScrollTop <= 0) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      container.scrollTop = Math.min(
+        Math.max(container.scrollTop + event.deltaY, 0),
+        maxScrollTop,
+      );
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [open]);
 
   const loadInstalledSoftware = async (assetId: number) => {
     setInstalledLoading(true);
@@ -420,7 +502,16 @@ export function AssetDetailDialog({
         // clicked.
         data-asset-detail-panel="true"
         className={[
-          'fixed inset-y-0 right-0 z-[200] flex w-full max-w-md flex-col',
+          // overflow-hidden here is deliberate, not just tidy: without
+          // it, the flex-1 body below - if its own min-h-0 ever regresses,
+          // or on some future long-content case that slips past it - would
+          // be free to grow past this panel's own height and spill into
+          // normal document flow, which (since this element is
+          // position:fixed with no explicit height) can make the WHOLE
+          // PAGE scrollable to reveal that spillover. Clipping it here
+          // means any such overflow is simply cut off visually instead of
+          // ever reaching the page, whatever the cause.
+          'fixed inset-y-0 right-0 z-[200] flex w-full max-w-md flex-col overflow-hidden',
           'border-l bg-background shadow-2xl',
           'transition-transform duration-300 ease-in-out',
           open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
@@ -449,7 +540,21 @@ export function AssetDetailDialog({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        {/*
+          min-h-0 is required here, not optional Tailwind polish: a flex
+          item's default min-height is `auto`, which resolves to its
+          content's height - so without this, this flex-1 child would
+          refuse to shrink below the full height of everything inside it
+          (System/Assigned To/Installed Applications/Allocated Licenses),
+          and overflow-y-auto would never actually have anything to clip
+          or scroll; the content would just push the fixed panel above
+          taller than the viewport instead. min-h-0 lets this element
+          actually be constrained to the space the header leaves it,
+          which is what makes overflow-y-auto (and the manual wheel
+          handler above, which needs a genuine scrollHeight > clientHeight
+          to do anything) work at all.
+        */}
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto p-4">
           {error && (
             <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
