@@ -224,6 +224,40 @@ export default function OfficeLocationsPage() {
     void loadData();
   }, []);
 
+  // Belt-and-suspenders body-scroll lock for the full-screen map dialog.
+  //
+  // Radix's own modal scroll-lock (active by default on <Dialog>) only
+  // intercepts wheel/touch-driven scroll attempts - it does not actually
+  // set `overflow: hidden` on <body>, so the underlying page (this one,
+  // which can genuinely be taller than one viewport once it has enough
+  // locations/floors/seats listed) keeps its own native scrollbar
+  // visible and draggable the whole time the map is open. Dragging that
+  // scrollbar's thumb doesn't fire a wheel event at all, so it slips
+  // right past Radix's lock, scrolls this page underneath the map, and -
+  // since that drag's pointerdown target is this page's own DOM, not
+  // anything inside the map dialog or its seat-details panel - Radix's
+  // own onPointerDownOutside correctly (if confusingly, from a user's
+  // perspective) treats it as an outside click and closes the whole map,
+  // dropping the user back on this page. That's what a user is
+  // describing when they say scrolling "exits" or "closes" the map.
+  //
+  // Explicitly hiding overflow on <body> here removes that native
+  // scrollbar entirely for as long as the map is open, so there's
+  // nothing left to accidentally drag - closing off this whole class of
+  // mis-click regardless of how tall this page's own content happens to
+  // be. Restored on close/unmount so this page scrolls normally again
+  // the instant the map isn't in the way.
+  useEffect(() => {
+    if (!mapDialog) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mapDialog]);
+
   const visibleLocations = useMemo(() => {
     if (selectedCompanyId === 'all') return locations;
 
