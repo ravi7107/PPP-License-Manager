@@ -101,6 +101,7 @@ public class UserService : IUserService
             DepartmentId = request.DepartmentId,
             ReportsToUserId = request.ReportsToUserId,
             IsActive = request.IsActive,
+            MustChangePassword = request.MustChangePassword,
             CreatedAt = DateTime.UtcNow
         };
 

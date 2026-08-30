@@ -31,4 +31,12 @@ public class CreateUserRequest
     public int? ReportsToUserId { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    // Defaults false so the existing single-user "Add User" form's behavior
+    // is byte-for-byte unchanged (it never sends this field). The bulk
+    // Users Excel import sets this true for every row it creates, since an
+    // imported user starts on a shared temporary password they didn't
+    // choose themselves - see User.MustChangePassword's own doc comment
+    // for the redirect-to-change-password flow this flag already drives.
+    public bool MustChangePassword { get; set; } = false;
 }

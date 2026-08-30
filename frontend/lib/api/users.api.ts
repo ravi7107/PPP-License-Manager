@@ -47,6 +47,11 @@ export interface CreateUserRequest {
   reportsToUserId: number | null;
 
   isActive: boolean;
+
+  // Optional - omitted by the single-user "Add User" form (defaults false
+  // on the backend). The bulk Users Excel import sets this true, since an
+  // imported user starts on a shared temporary password.
+  mustChangePassword?: boolean;
 }
 
 export interface UpdateUserRequest {

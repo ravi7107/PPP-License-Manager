@@ -6,6 +6,8 @@ import {
   KeyRound,
   RefreshCw,
   X,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 import {
@@ -22,12 +24,22 @@ import { Input } from '@/components/ui/input';
 import { getCompanies, type Company } from '@/lib/api/companies.api';
 import { getDepartments, type Department } from '@/lib/api/departments.api';
 
+import { UserImportDialog, type UserImportResult } from '@/app/pages/directory/components/user-import-dialog';
+import { exportUsersToExcel, type ImportedUserRow } from '@/lib/utils/user-excel';
+
+// A 6th role ("Facility") exists in the live Roles table (added by a later
+// raw-SQL migration, not the seed list this constant was originally copied
+// from) but was missing here - meaning it couldn't be assigned through
+// this page's own Role dropdown, or matched by the Users import below.
+// Fixed here rather than left broken, since building the import's own
+// Role lookup against this exact list is what surfaced the gap.
 const ROLES = [
   { id: 1, name: 'Super Admin' },
   { id: 2, name: 'IT Admin' },
   { id: 3, name: 'Team Lead' },
   { id: 4, name: 'Manager' },
   { id: 5, name: 'Employee' },
+  { id: 6, name: 'Facility' },
 ];
 
 interface UserFormValues {
@@ -74,6 +86,9 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -107,6 +122,148 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  // Each row resolves its own Role (required - fails the row if missing or
+  // unrecognized, since roleId is non-nullable server-side) and Reports To
+  // (optional, matched by Employee Code against both already-existing users
+  // and rows already imported earlier in this same batch - so listing
+  // managers before their direct reports lets that link resolve in one pass;
+  // a manager listed later just leaves ReportsTo blank rather than failing
+  // the row, the same graceful-degradation pattern the Asset import uses for
+  // an unmatched Vendor).
+  //
+  // Entity/Department are resolved as a single all-or-nothing pair, never
+  // partially: UserService.ValidateOrganizationAsync rejects sending one
+  // without the other, so any row where Entity is blank, or doesn't match an
+  // existing Company by name, or Department is blank, or doesn't match an
+  // existing Department (scoped to that Company) by name, falls back to
+  // leaving the user fully unassigned (both null) instead of failing the
+  // row - mirroring the Asset import's graceful handling of an unmatched
+  // Vendor, rather than surfacing a confusing partial-assignment error from
+  // the backend or blocking the row over an org-mapping typo.
+  //
+  // A row failing to resolve doesn't abort the batch - Users.CreateAsync
+  // already rejects a duplicate Email/Employee Code outright, so
+  // re-uploading the same file after fixing one bad row is safe:
+  // already-created rows fail again harmlessly instead of being duplicated.
+  async function handleImport(
+    rows: ImportedUserRow[],
+    temporaryPassword: string,
+    mustChangePassword: boolean,
+  ): Promise<UserImportResult> {
+    const failed: UserImportResult['failed'] = [];
+    let succeeded = 0;
+
+    const knownByCode = new Map<string, number>(
+      users
+        .filter((u) => u.employeeCode)
+        .map((u) => [u.employeeCode.trim().toLowerCase(), u.id]),
+    );
+
+    setImporting(true);
+    try {
+      for (const row of rows) {
+        try {
+          const employeeCode = row.employeeCode.trim();
+          const fullName = row.fullName.trim();
+          const email = row.email.trim();
+          const roleInput = row.role.trim();
+
+          if (!employeeCode) throw new Error('Employee Code is required.');
+          if (!fullName) throw new Error('Full Name is required.');
+          if (!email) throw new Error('Email is required.');
+          if (!roleInput) throw new Error('Role is required (see the "Role" column).');
+
+          const role = ROLES.find(
+            (r) => r.name.toLowerCase() === roleInput.toLowerCase(),
+          );
+          if (!role) {
+            throw new Error(
+              `Role "${roleInput}" was not recognized. Use one of: ${ROLES.map((r) => r.name).join(', ')}.`,
+            );
+          }
+
+          const entityInput = row.entity.trim();
+          const departmentInput = row.department.trim();
+
+          // Resolved together, all-or-nothing - see the comment above this
+          // function for why a partial or unmatched pair falls back to
+          // "unassigned" instead of throwing.
+          let companyId: number | null = null;
+          let departmentId: number | null = null;
+
+          if (entityInput && departmentInput) {
+            const company = companies.find(
+              (c) => c.name.trim().toLowerCase() === entityInput.toLowerCase(),
+            );
+            const department = company
+              ? departments.find(
+                  (d) =>
+                    d.companyId === company.id &&
+                    d.departmentName.trim().toLowerCase() === departmentInput.toLowerCase(),
+                )
+              : undefined;
+
+            if (company && department) {
+              companyId = company.id;
+              departmentId = department.id;
+            }
+            // Company or Department didn't match an existing record: leave
+            // both null (unassigned) rather than failing the row.
+          }
+          // Entity filled with Department blank (or vice versa) also falls
+          // through to unassigned, since the backend rejects a partial pair.
+
+          const reportsToInput = row.reportsToEmployeeCode.trim();
+          const reportsToUserId = reportsToInput
+            ? knownByCode.get(reportsToInput.toLowerCase()) ?? null
+            : null;
+
+          const created = await createUser({
+            fullName,
+            employeeCode,
+            email,
+            password: temporaryPassword,
+            roleId: role.id,
+            companyId,
+            departmentId,
+            reportsToUserId,
+            isActive: true,
+            mustChangePassword,
+          });
+
+          knownByCode.set(employeeCode.toLowerCase(), created.id);
+          succeeded += 1;
+        } catch (err: any) {
+          const apiErrors = err?.response?.data?.errors;
+          const message =
+            (Array.isArray(apiErrors) && apiErrors.length > 0 ? apiErrors.join(' ') : null) ||
+            err?.response?.data?.message ||
+            err?.message ||
+            'Failed to create this user.';
+
+          failed.push({ row, message });
+        }
+      }
+    } finally {
+      setImporting(false);
+    }
+
+    if (succeeded > 0) {
+      // A refresh failure here (e.g. a transient network blip) must not
+      // hide a completed import from the operator - succeeded/failed are
+      // already final at this point, so this is best-effort only. The next
+      // manual reload of the page (or another action that calls
+      // loadUsers()) picks up the newly imported rows regardless.
+      try {
+        await loadUsers();
+      } catch {
+        // Intentionally swallowed - see comment above.
+      }
+    }
+
+    return { succeeded, failed };
+  }
 
   const activeCompanies = useMemo(
     () => companies.filter((company) => company.isActive),
@@ -415,12 +572,46 @@ export default function UsersPage() {
         </div>
 
         <div className="nova-cmdbar-actions">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              exportUsersToExcel(
+                users.map((u) => ({
+                  employeeCode: u.employeeCode,
+                  fullName: u.fullName,
+                  email: u.email,
+                  role: u.role,
+                  companyName: u.companyName,
+                  departmentName: u.departmentName,
+                  reportsToEmployeeCode:
+                    users.find((r) => r.id === u.reportsToUserId)?.employeeCode ?? null,
+                })),
+              )
+            }
+          >
+            <Download className="mr-1.5 h-4 w-4" />
+            Export
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import Excel
+          </Button>
+
           <Button size="sm" onClick={openCreateUser}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add User
           </Button>
         </div>
       </div>
+
+      <UserImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        importing={importing}
+        onImport={handleImport}
+      />
 
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
