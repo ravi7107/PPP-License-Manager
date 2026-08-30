@@ -8,12 +8,15 @@ import {
 } from 'react';
 
 import {
+  Building2,
   HelpCircle,
   Home,
+  Laptop,
   MapPin,
   Map,
   Minus,
   Plus,
+  User,
   X,
 } from 'lucide-react';
 
@@ -933,7 +936,24 @@ const OfficeFloorMap = forwardRef<
     // it. overflow-hidden here is what guarantees "no page scrolling to
     // reach the map" - everything below is either the map itself or an
     // absolutely-positioned overlay on top of it.
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
+    //
+    // data-floor-map-root marks this whole subtree for the full-screen
+    // map Dialog in office-locations-page.tsx (see its own
+    // onPointerDownOutside/onInteractOutside handlers), which treat any
+    // interaction inside this marker as NOT an outside click. This is a
+    // belt-and-suspenders guard on top of the per-control
+    // stopPropagation fix already applied to the minimap and zoom
+    // buttons: live testing showed a plain click directly on the map's
+    // own blank background (not any specific control, and not mid any
+    // zoom/pan animation) could also occasionally get misclassified by
+    // Radix as an outside click and close the whole dialog. Rather than
+    // keep chasing individual descendants one at a time, this covers
+    // the entire map surface at once, the same way data-asset-detail-
+    // panel already covers the details panel.
+    <div
+      data-floor-map-root="true"
+      className="relative flex h-full w-full flex-col overflow-hidden"
+    >
 
       {/* MAP */}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20">
@@ -1188,17 +1208,28 @@ const OfficeFloorMap = forwardRef<
                       ].join(' ')}
                     />
 
-                    {/* TOOLTIP */}
+                    {/* TOOLTIP - color-coded to match the dot's own
+                        occupied (green) / vacant (slate) status, since
+                        on a black-and-white floor plan this card is the
+                        only thing on screen with any color at all, and
+                        it used to be a plain white/gray box that didn't
+                        stand out against the line-art underneath it. A
+                        light background tint (not a dark/heavy header)
+                        is the main signal here, per explicit feedback -
+                        the solid-color status pill still gives a strong
+                        at-a-glance read without the whole header being
+                        dark. */}
                     {!isDragging && (
                       <span
                         className={[
                           'pointer-events-none absolute',
                           'left-1/2 top-7',
                           '-translate-x-1/2',
-                          'min-w-[210px]',
-                          'rounded-md border',
-                          'bg-background px-3 py-2',
-                          'text-left text-xs shadow-lg',
+                          'min-w-[220px] overflow-hidden',
+                          'rounded-lg border shadow-xl',
+                          occupied
+                            ? 'border-emerald-300 bg-emerald-50'
+                            : 'border-slate-300 bg-slate-50',
 
                           searchMatch ||
                           selected
@@ -1208,57 +1239,87 @@ const OfficeFloorMap = forwardRef<
                         ].join(' ')}
                       >
 
-                        <span className="mb-1 block font-semibold">
-                          {seat.userName ??
-                            'Unassigned user'}
+                        {/* Header band - a light tint (not a solid dark
+                            fill) carrying the user's name and a status
+                            pill, so status is still legible at a glance
+                            before reading any row below. */}
+                        <span
+                          className={[
+                            'flex items-center justify-between gap-2 border-b px-3 py-1.5',
+                            occupied
+                              ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+                              : 'border-slate-300 bg-slate-200 text-slate-700',
+                          ].join(' ')}
+                        >
+                          <span className="truncate font-semibold">
+                            {seat.userName ??
+                              'Unassigned user'}
+                          </span>
+
+                          <span
+                            className={[
+                              'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white',
+                              occupied
+                                ? 'bg-emerald-500'
+                                : 'bg-slate-400',
+                            ].join(' ')}
+                          >
+                            {occupied ? 'Occupied' : 'Vacant'}
+                          </span>
                         </span>
 
-                        {seat.employeeCode && (
-                          <span className="block">
-                            <span className="text-muted-foreground">
-                              Employee:{' '}
+                        <span className="block space-y-1 px-3 py-2">
+                          {seat.employeeCode && (
+                            <span className="flex items-center gap-1.5">
+                              <User className="h-3 w-3 shrink-0 text-emerald-600" />
+                              <span className="text-muted-foreground">
+                                Employee:
+                              </span>
+                              <span className="font-medium text-slate-800">
+                                {seat.employeeCode}
+                              </span>
                             </span>
+                          )}
 
-                            {seat.employeeCode}
-                          </span>
-                        )}
-
-                        <span className="block">
-                          <span className="text-muted-foreground">
-                            Hostname:{' '}
-                          </span>
-
-                          {seat.hostName ?? '—'}
-                        </span>
-
-                        <span className="block">
-                          <span className="text-muted-foreground">
-                            Department:{' '}
+                          <span className="flex items-center gap-1.5">
+                            <Laptop className="h-3 w-3 shrink-0 text-sky-600" />
+                            <span className="text-muted-foreground">
+                              Hostname:
+                            </span>
+                            <span className="font-medium text-slate-800">
+                              {seat.hostName ?? '—'}
+                            </span>
                           </span>
 
-                          {seat.departmentName ?? '—'}
-                        </span>
-
-                        <span className="block">
-                          <span className="text-muted-foreground">
-                            Asset:{' '}
+                          <span className="flex items-center gap-1.5">
+                            <Building2 className="h-3 w-3 shrink-0 text-amber-600" />
+                            <span className="text-muted-foreground">
+                              Department:
+                            </span>
+                            <span className="font-medium text-slate-800">
+                              {seat.departmentName ?? '—'}
+                            </span>
                           </span>
 
-                          {seat.assetTag ?? '—'}
-                        </span>
-
-                        <span className="block">
-                          <span className="text-muted-foreground">
-                            Seat:{' '}
+                          <span className="flex items-center gap-1.5">
+                            <Laptop className="h-3 w-3 shrink-0 text-violet-600" />
+                            <span className="text-muted-foreground">
+                              Asset:
+                            </span>
+                            <span className="font-medium text-slate-800">
+                              {seat.assetTag ?? '—'}
+                            </span>
                           </span>
 
-                          {seat.seatCode}
-                        </span>
-
-                        <span className="mt-1 block text-[10px] text-muted-foreground">
-                          {occupied
-                            ? 'Occupied workstation'
-                            : 'Vacant / unassigned'}
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3 shrink-0 text-rose-600" />
+                            <span className="text-muted-foreground">
+                              Seat:
+                            </span>
+                            <span className="font-medium text-slate-800">
+                              {seat.seatCode}
+                            </span>
+                          </span>
                         </span>
 
                       </span>
