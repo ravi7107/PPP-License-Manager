@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { LucideIcon } from 'lucide-react';
 
 import {
@@ -21,6 +22,7 @@ interface KpiCardProps {
   suffix?: string;
   prefix?: string;
   animate?: boolean;
+  href?: string;
 }
 
 /*
@@ -82,19 +84,20 @@ export function KpiCard({
   suffix,
   prefix,
   animate = true,
+  href,
 }: KpiCardProps) {
   const numericValue =
     typeof value === 'number' &&
     Number.isFinite(value);
 
-  return (
+  const card = (
     <Card
       className={cn(
-        'group relative overflow-hidden',
+        'group relative min-h-[118px] overflow-hidden',
         'border-border/70 bg-card',
-        'transition-all duration-300',
-        'hover:-translate-y-0.5 hover:border-border',
-        'hover:shadow-md',
+        'transition-colors duration-200',
+        'hover:border-border',
+        href && 'cursor-pointer',
 
         tone === 'warning' &&
           'border-amber-200/80 dark:border-amber-900/60',
@@ -129,7 +132,7 @@ export function KpiCard({
 
         <div
           className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
             'transition-transform duration-300',
             'group-hover:scale-105',
 
@@ -146,7 +149,7 @@ export function KpiCard({
               'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
           )}
         >
-          <Icon className="h-[18px] w-[18px]" />
+          <Icon className="h-3.5 w-3.5" />
         </div>
       </CardHeader>
 
@@ -158,7 +161,7 @@ export function KpiCard({
             </span>
           )}
 
-          <div className="text-[28px] font-bold leading-none tracking-tight text-foreground md:text-[30px]">
+          <div className="text-[26px] font-semibold leading-none tracking-tight text-foreground">
             {numericValue && animate ? (
               <AnimatedValue value={value as number} />
             ) : numericValue ? (
@@ -216,5 +219,13 @@ export function KpiCard({
         )}
       </CardContent>
     </Card>
+  );
+
+  if (!href) return card;
+
+  return (
+    <Link to={href} className="block rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {card}
+    </Link>
   );
 }
