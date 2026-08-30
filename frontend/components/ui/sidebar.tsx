@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -318,7 +318,7 @@ const SidebarTrigger = React.forwardRef<
           aria-expanded={expanded}
           title={label}
           className={cn(
-            "h-7 w-7 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            "h-7 w-7 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground",
             className
           )}
           onClick={(event) => {
@@ -328,9 +328,9 @@ const SidebarTrigger = React.forwardRef<
           {...props}
         >
           {expanded ? (
-            <PanelLeftClose className="size-4" />
+            <ChevronLeft className="size-4" />
           ) : (
-            <PanelLeftOpen className="size-4" />
+            <ChevronRight className="size-4" />
           )}
           <span className="sr-only">{label}</span>
         </Button>

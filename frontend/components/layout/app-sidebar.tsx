@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, Search, Settings } from 'lucide-react';
+import { ChevronDown, ChevronRight, LogOut, Search, Settings } from 'lucide-react';
 
 import {
   Sidebar,
@@ -8,7 +8,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInput,
   SidebarMenu,
@@ -31,8 +30,6 @@ import * as navConfig from '@/lib/nav-config';
 import { NavItem } from '@/lib/nav-config';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 import { useAuth } from '@/lib/auth/auth-context';
-
-const GROUP_STORAGE_KEY = 'smartasset-sidebar-groups';
 
 type NavGroup = { label: string; keys: ModuleKey[] };
 
@@ -63,19 +60,6 @@ function initials(name: string | undefined): string {
     .toUpperCase();
 }
 
-function loadCollapsedGroups(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-
-  try {
-    const raw = window.localStorage.getItem(GROUP_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed : []);
-  } catch {
-    return new Set();
-  }
-}
-
 export function AppSidebar({
   roles,
   accessOverride,
@@ -90,7 +74,7 @@ export function AppSidebar({
   const searchRef = useRef<HTMLInputElement>(null);
   const [navSearch, setNavSearch] = useState('');
   const [logoFailed, setLogoFailed] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(loadCollapsedGroups);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const iconOnly = state === 'collapsed' && !isMobile;
   const groups = useMemo(() => resolveNavGroups(), []);
@@ -109,17 +93,6 @@ export function AppSidebar({
 
   const searchQuery = navSearch.trim().toLowerCase();
   const searching = searchQuery.length > 0;
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        GROUP_STORAGE_KEY,
-        JSON.stringify([...collapsedGroups])
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [collapsedGroups]);
 
   const userName = user?.fullName || user?.email || 'User';
   const userRole = roles[0] ?? user?.role ?? 'No role';
@@ -169,7 +142,7 @@ export function AppSidebar({
               SmartAsset
             </div>
           </div>
-          <SidebarTrigger className="ml-auto hidden md:inline-flex group-data-[collapsible=icon]:ml-0" />
+          <SidebarTrigger className="ml-auto md:inline-flex group-data-[collapsible=icon]:ml-0" />
         </div>
 
         {iconOnly ? (
@@ -211,39 +184,51 @@ export function AppSidebar({
 
           if (groupItems.length === 0) return null;
 
-          const groupCollapsed = !iconOnly && !searching && collapsedGroups.has(group.label);
+          const hasActiveChild = groupItems.some((item) =>
+            item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path)
+          );
+          const groupOpen = iconOnly || searching || !collapsedGroups.has(group.label) || hasActiveChild;
 
           return (
             <SidebarGroup key={group.label}>
-              <SidebarGroupLabel
-                className="cursor-pointer select-none hover:text-sidebar-foreground"
+              <button
+                type="button"
                 onClick={() => toggleGroup(group.label)}
+                aria-expanded={groupOpen}
+                className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden"
               >
-                {group.label}
-              </SidebarGroupLabel>
-              {!groupCollapsed ? (
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {groupItems.map((item) => (
-                      <SidebarMenuItem key={item.key}>
-                        <SidebarMenuButton
-                          asChild
-                          tooltip={item.label}
-                          isActive={
-                            item.path === '/'
-                              ? location.pathname === '/'
-                              : location.pathname.startsWith(item.path)
-                          }
-                        >
-                          <NavLink to={item.path} end={item.path === '/'}>
-                            <item.icon />
-                            <span>{item.label}</span>
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
+                <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                {groupOpen ? (
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+              {groupOpen ? (
+              <SidebarGroupContent>
+                <SidebarMenu className="border-l border-sidebar-border/80 ml-3 pl-2 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:pl-0">
+                  {groupItems.map((item) => (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.label}
+                        isActive={
+                          item.path === '/'
+                            ? location.pathname === '/'
+                            : location.pathname.startsWith(item.path)
+                        }
+                      >
+                        <NavLink to={item.path} end={item.path === '/'}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
               ) : null}
             </SidebarGroup>
           );
