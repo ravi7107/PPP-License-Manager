@@ -1215,37 +1215,41 @@ export default function OfficeLocationsPage() {
       >
         <DialogContent
           className="flex h-[95vh] max-h-[95vh] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[95vw]"
-          // The workstation-details slide-in panel (AssetDetailDialog)
-          // renders as a plain fixed-position div OUTSIDE this
-          // DialogContent's own DOM subtree (it's a sibling further
-          // down this file, not nested here) - deliberately, so the map
-          // stays interactive while it's open. Radix's own outside-
-          // click/Escape handling doesn't know about that panel, so
-          // without these three guards, clicking anything inside the
-          // panel (its Close button, a table row, "Add Software"...) or
-          // pressing Escape while it's open would register as
-          // dismissing THIS dialog and close the whole map out from
-          // under the panel. Each guard checks for the panel's own
-          // data-asset-detail-panel marker (see that component) and, if
-          // the interaction is inside it, prevents Radix's default
-          // close - the panel's own onOpenChange/Escape handling still
-          // runs independently and closes just the panel.
+          // The workstation-details panel (AssetDetailDialog) is now a
+          // genuine, nested Radix Dialog, opened on top of this one -
+          // exactly like the "Raise Reallocation Request" and "Add/Edit
+          // Software" dialogs it can in turn open on top of itself, and
+          // just like those, it needs no special-case guard here: Radix
+          // tracks open dialogs as a layer stack, not by DOM
+          // containment, so a click or Escape press inside a
+          // higher (later-opened) layer is automatically NOT treated as
+          // an "outside" interaction on a lower one. (It used to be a
+          // plain fixed-position div instead, specifically so the map
+          // stayed interactive while it was open - that required the
+          // hand-rolled guards this comment used to describe, and their
+          // gaps are what let clicking things like a dropdown or "Raise
+          // Reallocation Request" inside that panel close this whole
+          // map dialog out from under it.)
+          //
+          // data-floor-map-root remains a real, still-needed guard: it's
+          // a marker on OfficeFloorMap's own root (a genuine DOM
+          // descendant of this DialogContent, not portaled elsewhere),
+          // covering an unrelated finding from live testing that an
+          // ordinary click on the map's own surface - not on any
+          // specific control, not during any zoom/pan animation - could
+          // still occasionally get misread as an outside click and
+          // close this dialog.
           onPointerDownOutside={(event) => {
             const target = event.target as HTMLElement | null;
 
-            if (target?.closest('[data-asset-detail-panel]')) {
+            if (target?.closest('[data-floor-map-root]')) {
               event.preventDefault();
             }
           }}
           onInteractOutside={(event) => {
             const target = event.target as HTMLElement | null;
 
-            if (target?.closest('[data-asset-detail-panel]')) {
-              event.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(event) => {
-            if (detailDialog) {
+            if (target?.closest('[data-floor-map-root]')) {
               event.preventDefault();
             }
           }}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,11 +9,17 @@ import {
   Plus,
   Trash2,
   User as UserIcon,
-  X,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -141,110 +147,35 @@ export function AssetDetailDialog({
   const [installedAppsExpanded, setInstalledAppsExpanded] = useState(false);
   const [allocatedLicensesExpanded, setAllocatedLicensesExpanded] = useState(false);
 
-  // The scrollable body below the header (System / Assigned To /
-  // Installed Applications / Allocated Licenses). Wired up by hand below
-  // for the same underlying reason as the Escape handling above: this
-  // panel renders as a plain div OUTSIDE the map Dialog's own DOM
-  // subtree (see the render comment near the bottom of this file), so
-  // Radix's modal scroll-lock - which only recognizes elements inside
-  // the Dialog it manages - doesn't know this element is meant to
-  // scroll. Left to native `overflow-y-auto` scrolling alone, mouse-
-  // wheel/trackpad scroll gestures over this panel get swallowed by
-  // that outer lock before they ever move this element, which reads to
-  // a user as "scrolling does nothing" (or, since the lock is fighting
-  // the gesture, an inconsistent partial scroll that can *feel* like
-  // the whole map closing under them).
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  // This panel is deliberately not a modal Dialog (see the render below)
-  // so it doesn't block map interaction while open - which also means it
-  // doesn't get Radix's built-in Escape-to-close behavior for free, so
-  // it's wired up by hand here instead. Skipped while either nested
-  // Radix dialog (Raise Reallocation Request / Add-Edit Software) is
-  // open - those are genuine Radix Dialogs and already handle their own
-  // Escape correctly; without this guard, one Escape press would close
-  // the nested dialog AND this panel underneath it in the same
-  // keystroke, which isn't what a single Escape should do.
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (requestOpen || softwareFormOpen) return;
-
-      onOpenChange(false);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange, requestOpen, softwareFormOpen]);
-
-  // Drive the body's scrolling manually instead of relying on the
-  // browser's native wheel-scroll (see the scrollContainerRef comment
-  // above for why native scroll alone isn't reliable here). A native,
-  // non-passive listener is required - React's own onWheel prop is
-  // always attached passively, so calling preventDefault() from it is a
-  // silent no-op. We don't actually need preventDefault to succeed for
-  // the scrolling itself (scrollTop/scrollLeft are set directly below,
-  // regardless of what any other listener decided about the event), but
-  // it's still requested so a stray page-level scroll/bounce can't fire
-  // alongside our own manual one.
+  // This panel is a genuine Radix Dialog (see the render below), stacked
+  // on top of the full-screen map Dialog it's opened from - exactly the
+  // same nesting pattern already used successfully by the "Raise
+  // Reallocation Request" and "Add/Edit Software" dialogs launched from
+  // within this same panel further down this file. Radix tracks open
+  // dialogs as a layer stack (not by DOM containment), so this gets, for
+  // free and without any hand-rolled guards: Escape closes only the
+  // topmost open layer; a click anywhere NOT inside the topmost layer -
+  // including on a <Select> dropdown or another dialog portalled
+  // elsewhere in the DOM - is correctly attributed to that layer instead
+  // of misfiring an "outside click" on a dialog further down the stack;
+  // background (map) scroll/interaction is locked while this is open;
+  // and the content area below scrolls natively via plain
+  // `overflow-y-auto`, no manual wheel/touch handling required.
   //
-  // The "Installed Applications" and "Allocated Licenses" tables below
-  // each sit inside their own `overflow-x-auto` wrapper, since this
-  // panel is only max-w-md wide. Without the branch below, every wheel
-  // event bubbling up through this container - including a horizontal
-  // trackpad swipe or shift+wheel meant to scroll one of those tables
-  // sideways - would be treated as a vertical scroll of the whole panel,
-  // silently breaking horizontal scrolling on those tables. So a
-  // horizontal-dominant gesture over a genuinely horizontally-
-  // scrollable table is handled by scrolling THAT element's scrollLeft
-  // instead, and only falls through to the panel-wide vertical handling
-  // below when it isn't one (e.g. a horizontal gesture over plain text,
-  // or a table that isn't actually overflowing).
-  useEffect(() => {
-    if (!open) return;
-
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleWheel = (event: WheelEvent) => {
-      const horizontalDominant = Math.abs(event.deltaX) > Math.abs(event.deltaY);
-
-      if (horizontalDominant) {
-        const target = event.target as HTMLElement | null;
-        const scroller = target?.closest<HTMLElement>('.overflow-x-auto') ?? null;
-        const maxScrollLeft = scroller ? scroller.scrollWidth - scroller.clientWidth : 0;
-
-        if (scroller && container.contains(scroller) && maxScrollLeft > 0) {
-          event.preventDefault();
-          event.stopPropagation();
-
-          scroller.scrollLeft = Math.min(
-            Math.max(scroller.scrollLeft + event.deltaX, 0),
-            maxScrollLeft,
-          );
-          return;
-        }
-        // Not a genuinely horizontally-scrollable target - treat it as a
-        // vertical scroll of the panel instead, same as any other gesture.
-      }
-
-      const maxScrollTop = container.scrollHeight - container.clientHeight;
-      if (maxScrollTop <= 0) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      container.scrollTop = Math.min(
-        Math.max(container.scrollTop + event.deltaY, 0),
-        maxScrollTop,
-      );
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [open]);
+  // This replaces an earlier "plain fixed-position div" version of this
+  // panel that deliberately avoided being a real Dialog so the map could
+  // stay interactive underneath it. That approach needed hand-written
+  // guards to stop the map's own Dialog from treating clicks inside this
+  // panel as "outside clicks," and those guards only work for elements
+  // that are actual DOM descendants of the panel - which a dropdown menu
+  // or a nested dialog portalled to the document body is not. That gap
+  // is exactly what let clicking things like "Raise Reallocation
+  // Request" or a dropdown inside this panel close the whole map dialog
+  // underneath it. Making this a real, properly nested Dialog removes
+  // the guesswork entirely: viewing a seat's details is now a deliberate
+  // action the user opens and closes explicitly, and the map simply
+  // isn't interactive while it's open - matching how every other modal
+  // in this app already behaves.
 
   const loadInstalledSoftware = async (assetId: number) => {
     setInstalledLoading(true);
@@ -498,91 +429,59 @@ export function AssetDetailDialog({
   return (
     <>
       {/*
-        Slide-in details panel - deliberately NOT a Radix Dialog. The
-        map redesign's whole point is SEARCH -> LOCATE -> ZOOM ->
-        HIGHLIGHT -> SHOW DETAILS with the map staying pannable/
-        zoomable the entire time this is open, and a modal Dialog's own
-        backdrop would trap focus and block exactly that interaction.
-        Instead this is a plain fixed-position panel that slides in
-        from the right (CSS transform, not conditional mounting) and
-        overlays the map without an underlying scrim. It's fixed to the
-        viewport rather than positioned relative to its DOM parent, so
-        it slides in from the true right edge of the screen regardless
-        of where this component happens to be mounted (inside the
-        full-screen floor map dialog). Closing it - the X button below,
-        Escape (see the effect above), or the caller flipping `open`
-        off some other way - never reads or writes any zoom/pan state;
-        that lives entirely in OfficeFloorMap, so the map's current
-        view is exactly as the user left it when this closes.
+        A genuine, nested Radix Dialog - stacked on top of the
+        full-screen map Dialog it's opened from - rather than the plain
+        fixed-position "stay open alongside the map" panel this used to
+        be. See the comment above this component's state declarations
+        for why: that version needed hand-rolled outside-click guards
+        that couldn't see clicks on anything portalled elsewhere in the
+        DOM (a dropdown, a nested dialog), which is exactly what let
+        clicking things like "Raise Reallocation Request" close the
+        whole map underneath this panel. Being a real Dialog means the
+        map is deliberately not interactive while this is open - opening
+        seat details is now a focused, deliberate action the user closes
+        explicitly (X, Escape, or clicking the overlay), matching every
+        other modal in this app.
       */}
-      <div
-        role="dialog"
-        aria-modal="false"
-        aria-label={seat?.seatCode ?? 'Workstation details'}
-        // Marks this panel so the full-screen map Dialog (a Radix
-        // modal in office-locations-page.tsx) can recognize clicks
-        // inside it as NOT an "outside click" - see that Dialog's own
-        // onPointerDownOutside/onInteractOutside/onEscapeKeyDown
-        // handlers, which look for this exact attribute. Without it,
-        // Radix's dismissable-layer logic treats this panel (a plain
-        // div, not a Radix layer) as outside the map dialog entirely,
-        // and closes the whole map the instant anything in here is
-        // clicked.
-        data-asset-detail-panel="true"
-        className={[
-          // overflow-hidden here is deliberate, not just tidy: without
-          // it, the flex-1 body below - if its own min-h-0 ever regresses,
-          // or on some future long-content case that slips past it - would
-          // be free to grow past this panel's own height and spill into
-          // normal document flow, which (since this element is
-          // position:fixed with no explicit height) can make the WHOLE
-          // PAGE scrollable to reveal that spillover. Clipping it here
-          // means any such overflow is simply cut off visually instead of
-          // ever reaching the page, whatever the cause.
-          'fixed inset-y-0 right-0 z-[200] flex w-full max-w-md flex-col overflow-hidden',
-          'border-l bg-background shadow-2xl',
-          'transition-transform duration-300 ease-in-out',
-          open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
-        ].join(' ')}
-      >
-        <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate font-semibold">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-10 text-left">
+            <DialogTitle className="truncate text-base">
               {seat?.seatCode ?? 'Workstation'}
-            </p>
+            </DialogTitle>
 
-            <p className="text-xs text-muted-foreground">
+            <DialogDescription>
               {seat?.assetId
                 ? 'System, installed software, and current holder for this workstation.'
                 : 'This workstation is vacant - no asset is currently placed here.'}
-            </p>
-          </div>
+            </DialogDescription>
+          </DialogHeader>
 
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close"
-            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          {/*
+            min-h-0 is required here, not optional Tailwind polish: a
+            flex item's default min-height is `auto`, which resolves to
+            its content's height - so without this, this flex-1 child
+            would refuse to shrink below the full height of everything
+            inside it (System/Assigned To/Installed Applications/
+            Allocated Licenses), and overflow-y-auto would never
+            actually have anything to clip or scroll; the content would
+            instead push DialogContent's own max-h-[85vh] cap open.
+            min-h-0 lets this element actually be constrained to the
+            space the header leaves it within that cap.
+
+            Plain native overflow-y-auto scrolling is all that's needed
+            here - no manual wheel handling, since this is now a real
+            modal layer and there's nothing "underneath" for a wheel
+            gesture to leak into. overscrollBehavior: 'contain' is kept
+            as a lightweight belt-and-suspenders against rubber-band
+            scroll chaining at the top/bottom of this content, though
+            Radix's own modal scroll-lock already keeps everything
+            behind the overlay from moving.
+          */}
+          <div
+            className="min-h-0 flex-1 overflow-y-auto p-4"
+            style={{ overscrollBehavior: 'contain' }}
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/*
-          min-h-0 is required here, not optional Tailwind polish: a flex
-          item's default min-height is `auto`, which resolves to its
-          content's height - so without this, this flex-1 child would
-          refuse to shrink below the full height of everything inside it
-          (System/Assigned To/Installed Applications/Allocated Licenses),
-          and overflow-y-auto would never actually have anything to clip
-          or scroll; the content would just push the fixed panel above
-          taller than the viewport instead. min-h-0 lets this element
-          actually be constrained to the space the header leaves it,
-          which is what makes overflow-y-auto (and the manual wheel
-          handler above, which needs a genuine scrollHeight > clientHeight
-          to do anything) work at all.
-        */}
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto p-4">
           {error && (
             <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
@@ -863,7 +762,8 @@ export function AssetDetailDialog({
             </div>
           )}
         </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       <AssetReallocationRequestDialog
         open={requestOpen}
