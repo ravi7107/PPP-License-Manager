@@ -381,7 +381,7 @@ export default function DashboardPage() {
       <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
         <div className="absolute inset-x-0 top-0 h-[3px] bg-primary" />
 
-        <div className="flex flex-col gap-5 p-5 md:p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-5 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
 
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -543,6 +543,7 @@ export default function DashboardPage() {
               value={assetKpis.totalAssets}
               icon={HardDrive}
               hint="All tracked hardware"
+              href="/hardware"
             />
 
             <KpiCard
@@ -550,6 +551,7 @@ export default function DashboardPage() {
               value={assetKpis.allocatedAssets}
               icon={PackageCheck}
               hint="Currently in active use"
+              href="/hardware?status=Allocated"
             />
 
             <KpiCard
@@ -557,6 +559,7 @@ export default function DashboardPage() {
               value={assetKpis.availableAssets}
               icon={PackageOpen}
               hint="Ready for assignment"
+              href="/hardware?status=Available"
             />
 
             <KpiCard
@@ -569,6 +572,7 @@ export default function DashboardPage() {
                   ? 'warning'
                   : 'default'
               }
+              href="/hardware?status=Maintenance"
             />
           </>
         )}
@@ -585,6 +589,7 @@ export default function DashboardPage() {
               value={licenseKpis.totalLicenseSeats}
               icon={KeySquare}
               hint="Total seats across all software"
+              href="/licenses"
             />
 
             <KpiCard
@@ -592,6 +597,7 @@ export default function DashboardPage() {
               value={licenseKpis.availableLicenseSeats}
               icon={Share2}
               hint="Unassigned seats in pool"
+              href="/licenses?status=Available"
             />
           </>
         )}
@@ -616,7 +622,8 @@ export default function DashboardPage() {
                 ? 'warning'
                 : 'default'
             }
-          />
+              href="/approvals"
+            />
         )}
 
 
@@ -633,7 +640,8 @@ export default function DashboardPage() {
                 ? 'danger'
                 : 'default'
             }
-          />
+              href="/licenses?expiring=1"
+            />
         )}
       </div>
 
