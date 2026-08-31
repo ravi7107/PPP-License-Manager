@@ -74,7 +74,7 @@ export function AppSidebar({
   const searchRef = useRef<HTMLInputElement>(null);
   const [navSearch, setNavSearch] = useState('');
   const [logoFailed, setLogoFailed] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const iconOnly = state === 'collapsed' && !isMobile;
   const groups = useMemo(() => resolveNavGroups(), []);
@@ -103,7 +103,7 @@ export function AppSidebar({
   }
 
   function toggleGroup(label: string) {
-    setCollapsedGroups((previous) => {
+    setExpandedGroups((previous) => {
       const next = new Set(previous);
       if (next.has(label)) next.delete(label);
       else next.add(label);
@@ -189,7 +189,7 @@ export function AppSidebar({
               ? location.pathname === '/'
               : location.pathname.startsWith(item.path)
           );
-          const groupOpen = iconOnly || searching || !collapsedGroups.has(group.label) || hasActiveChild;
+          const groupOpen = iconOnly || searching || expandedGroups.has(group.label) || hasActiveChild;
 
           return (
             <SidebarGroup key={group.label}>
