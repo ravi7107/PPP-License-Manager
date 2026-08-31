@@ -30,6 +30,8 @@ const CATEGORIES = [
   'Utilization',
   'Maintenance',
   'People',
+  'Clients',
+  'Material Movement',
   'Projects',
   'Administration',
 ] as const;

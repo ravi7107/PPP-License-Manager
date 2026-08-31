@@ -1,6 +1,7 @@
 import { getCompanies, Company } from '@/lib/api/companies.api';
 import { getDepartments, Department } from '@/lib/api/departments.api';
 import { getSoftware, Software } from '@/lib/api/software.api';
+import { getClients, Client } from '@/lib/api/clients.api';
 import api from '@/lib/api/client';
 
 export interface NamedLookup {
@@ -43,8 +44,9 @@ export async function loadReportLookups(): Promise<{
   locations: NamedLookup[];
   vendors: NamedLookup[];
   software: Software[];
+  clients: Client[];
 }> {
-  const [companies, departments, locations, vendors, software] = await Promise.all([
+  const [companies, departments, locations, vendors, software, clients] = await Promise.all([
     getCompanies().catch(() => [] as Company[]),
     getDepartments().catch(() => [] as Department[]),
     tryList(
@@ -70,7 +72,8 @@ export async function loadReportLookups(): Promise<{
       }
     ),
     getSoftware().catch(() => [] as Software[]),
+    getClients().catch(() => [] as Client[]),
   ]);
 
-  return { companies, departments, locations, vendors, software };
+  return { companies, departments, locations, vendors, software, clients };
 }

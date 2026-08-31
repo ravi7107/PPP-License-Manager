@@ -12,6 +12,7 @@ import { ReportFilterField, ReportQueryRequest } from '@/lib/api/report-center.a
 import { Company } from '@/lib/api/companies.api';
 import { Department } from '@/lib/api/departments.api';
 import { Software } from '@/lib/api/software.api';
+import { Client } from '@/lib/api/clients.api';
 import { NamedLookup } from '@/lib/reports/lookups';
 
 const ALL = '__all__';
@@ -48,6 +49,7 @@ export function ReportFilterPanel({
   locations,
   vendors,
   software,
+  clients = [],
 }: {
   filters: ReportFilterField[];
   query: ReportQueryRequest;
@@ -57,6 +59,7 @@ export function ReportFilterPanel({
   locations: NamedLookup[];
   vendors: NamedLookup[];
   software: Software[];
+  clients: Client[];
 }) {
   const departmentOptions = query.companyId
     ? departments.filter((department) => department.companyId === query.companyId)
@@ -73,7 +76,7 @@ export function ReportFilterPanel({
   }
 
   function selectNumber(
-    key: 'companyId' | 'departmentId' | 'locationId' | 'vendorId' | 'softwareId',
+    key: 'companyId' | 'departmentId' | 'locationId' | 'vendorId' | 'softwareId' | 'clientId',
     value: string
   ) {
     const parsed = value === ALL ? null : Number(value);
@@ -206,6 +209,29 @@ export function ReportFilterPanel({
           );
         }
 
+        if (field.type === 'client') {
+          return (
+            <FilterField key={field.key} label={field.label}>
+              <Select
+                value={query.clientId != null ? String(query.clientId) : ALL}
+                onValueChange={(value) => selectNumber('clientId', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={String(client.id)}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
+          );
+        }
+
         if (field.type === 'dateRange') {
           return (
             <FilterField key={field.key} label={field.label} className="sm:col-span-2">
@@ -232,7 +258,11 @@ export function ReportFilterPanel({
         if (field.type === 'status' || field.type === 'select') {
           const options = field.options ?? [];
           const current =
-            field.key === 'groupBy' ? query.groupBy : query.status;
+            field.key === 'groupBy'
+              ? query.groupBy
+              : field.key === 'movementType'
+                ? query.movementType
+                : query.status;
           return (
             <FilterField key={field.key} label={field.label}>
               <Select
@@ -241,7 +271,9 @@ export function ReportFilterPanel({
                   patch(
                     field.key === 'groupBy'
                       ? { groupBy: value === ALL ? null : value }
-                      : { status: value === ALL ? null : value }
+                      : field.key === 'movementType'
+                        ? { movementType: value === ALL ? null : value }
+                        : { status: value === ALL ? null : value }
                   )
                 }
               >

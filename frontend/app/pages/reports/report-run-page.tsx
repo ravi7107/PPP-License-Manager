@@ -34,6 +34,7 @@ import { loadReportLookups, NamedLookup } from '@/lib/reports/lookups';
 import { Company } from '@/lib/api/companies.api';
 import { Department } from '@/lib/api/departments.api';
 import { Software } from '@/lib/api/software.api';
+import { Client } from '@/lib/api/clients.api';
 import {
   getFavoriteIds,
   recordRecentUse,
@@ -53,6 +54,7 @@ function queryFromSearch(params: URLSearchParams, pageSize = 20): Partial<Report
     'locationId',
     'vendorId',
     'softwareId',
+    'clientId',
     'page',
     'pageSize',
   ] as const;
@@ -61,7 +63,7 @@ function queryFromSearch(params: URLSearchParams, pageSize = 20): Partial<Report
     const value = params.get(key);
     if (value) (next as Record<string, number>)[key] = Number(value);
   });
-  ['status', 'search', 'assetType', 'groupBy', 'dateFrom', 'dateTo', 'sortBy', 'sortDirection'].forEach(
+  ['status', 'search', 'assetType', 'movementType', 'groupBy', 'dateFrom', 'dateTo', 'sortBy', 'sortDirection'].forEach(
     (key) => {
       const value = params.get(key);
       if (value) (next as Record<string, string>)[key] = value;
@@ -104,12 +106,14 @@ export default function ReportRunPage() {
     locations: NamedLookup[];
     vendors: NamedLookup[];
     software: Software[];
+    clients: Client[];
   }>({
     companies: [],
     departments: [],
     locations: [],
     vendors: [],
     software: [],
+    clients: [],
   });
 
   const report = catalog.find((item) => item.id === reportId);
@@ -298,6 +302,7 @@ export default function ReportRunPage() {
           locations={lookups.locations}
           vendors={lookups.vendors}
           software={lookups.software}
+          clients={lookups.clients}
         />
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" onClick={resetFilters}>

@@ -53,7 +53,9 @@ export interface ReportQueryRequest {
   search?: string | null;
   vendorId?: number | null;
   softwareId?: number | null;
+  clientId?: number | null;
   assetType?: string | null;
+  movementType?: string | null;
   groupBy?: string | null;
   page?: number;
   pageSize?: number;
