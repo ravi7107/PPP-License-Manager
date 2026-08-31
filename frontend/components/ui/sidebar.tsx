@@ -32,25 +32,6 @@ const SIDEBAR_WIDTH_ICON = "4.5rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 const SIDEBAR_TRANSITION = "duration-[220ms] ease-out"
 
-function readStoredSidebarOpen(fallback: boolean): boolean {
-  if (typeof window === "undefined") return fallback
-
-  try {
-    const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
-    if (stored === "true") return false
-    if (stored === "false") return true
-  } catch {
-    /* ignore quota / private mode */
-  }
-
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${SIDEBAR_COOKIE_NAME}=(true|false)`)
-  )
-  if (match) return match[1] === "true"
-
-  return window.innerWidth >= 1200 ? fallback : false
-}
-
 function persistSidebarOpen(open: boolean) {
   document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
   try {
@@ -106,33 +87,37 @@ const SidebarProvider = React.forwardRef<
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
-    const [_open, _setOpen] = React.useState(() =>
-      readStoredSidebarOpen(defaultOpen)
-    )
+    const [_open, _setOpen] = React.useState(true)
     const open = openProp ?? _open
     const setOpen = React.useCallback(
       (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value
+        // Desktop nav stays expanded; collapse is not offered.
+        const openState = isMobile
+          ? typeof value === "function"
+            ? value(open)
+            : value
+          : true
         if (setOpenProp) {
           setOpenProp(openState)
         } else {
           _setOpen(openState)
         }
 
-        persistSidebarOpen(openState)
+        persistSidebarOpen(true)
       },
-      [setOpenProp, open]
+      [setOpenProp, open, isMobile]
     )
 
-    // Helper to toggle the sidebar.
+    // Mobile sheet only. Desktop width is fixed.
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+      if (isMobile) {
+        setOpenMobile((open) => !open)
+      }
+    }, [isMobile, setOpenMobile])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
+      if (!isMobile) return
+
       const handleKeyDown = (event: KeyboardEvent) => {
         if (
           event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
@@ -145,7 +130,7 @@ const SidebarProvider = React.forwardRef<
 
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleSidebar])
+    }, [isMobile, toggleSidebar])
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.

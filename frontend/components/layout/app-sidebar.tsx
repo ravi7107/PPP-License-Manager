@@ -13,9 +13,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
-  SidebarTrigger,
-  useSidebar,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -67,7 +64,6 @@ export function AppSidebar({
   roles: AppRole[];
   accessOverride?: Record<string, AppRole[]> | null;
 }) {
-  const { state, isMobile, setOpen } = useSidebar();
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -76,7 +72,6 @@ export function AppSidebar({
   const [logoFailed, setLogoFailed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  const iconOnly = state === 'collapsed' && !isMobile;
   const groups = useMemo(() => resolveNavGroups(), []);
   const itemByKey = useMemo(
     () => new Map(navConfig.navItems.map((item) => [item.key, item])),
@@ -111,19 +106,10 @@ export function AppSidebar({
     });
   }
 
-  function openNavigationSearch() {
-    if (iconOnly) {
-      setOpen(true);
-      window.setTimeout(() => searchRef.current?.focus(), 220);
-      return;
-    }
-    searchRef.current?.focus();
-  }
-
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1.5">
+        <div className="flex items-center gap-2 px-1">
           {logoFailed ? (
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#1d4ed8] text-[10px] font-semibold tracking-wide text-white">
               PPS
@@ -136,41 +122,25 @@ export function AppSidebar({
               onError={() => setLogoFailed(true)}
             />
           )}
-          <div className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
+          <div className="min-w-0 flex-1 leading-tight">
             <div className="truncate text-[13px] font-semibold">PPS</div>
             <div className="truncate text-[11px] text-muted-foreground">
               SmartAsset
             </div>
           </div>
-          <SidebarTrigger className="ml-auto md:inline-flex group-data-[collapsible=icon]:ml-0" />
         </div>
 
-        {iconOnly ? (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                tooltip="Search navigation"
-                onClick={openNavigationSearch}
-                aria-label="Search navigation"
-              >
-                <Search />
-                <span>Find a page</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        ) : (
-          <div className="relative px-1 pb-0.5">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <SidebarInput
-              ref={searchRef}
-              value={navSearch}
-              onChange={(event) => setNavSearch(event.target.value)}
-              placeholder="Find a page..."
-              aria-label="Find a page"
-              className="h-8 pl-8 text-[13px]"
-            />
-          </div>
-        )}
+        <div className="relative px-1 pb-0.5">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <SidebarInput
+            ref={searchRef}
+            value={navSearch}
+            onChange={(event) => setNavSearch(event.target.value)}
+            placeholder="Find a page..."
+            aria-label="Find a page"
+            className="h-8 pl-8 text-[13px]"
+          />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -189,7 +159,7 @@ export function AppSidebar({
               ? location.pathname === '/'
               : location.pathname.startsWith(item.path)
           );
-          const groupOpen = iconOnly || searching || expandedGroups.has(group.label) || hasActiveChild;
+          const groupOpen = searching || expandedGroups.has(group.label) || hasActiveChild;
 
           return (
             <SidebarGroup key={group.label}>
@@ -197,7 +167,7 @@ export function AppSidebar({
                 type="button"
                 onClick={() => toggleGroup(group.label)}
                 aria-expanded={groupOpen}
-                className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden"
+                className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent"
               >
                 <span className="min-w-0 flex-1 truncate">{group.label}</span>
                 {groupOpen ? (
@@ -208,7 +178,7 @@ export function AppSidebar({
               </button>
               {groupOpen ? (
               <SidebarGroupContent>
-                <SidebarMenu className="border-l border-sidebar-border/80 ml-3 pl-2 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:pl-0">
+                <SidebarMenu className="ml-3 border-l border-sidebar-border/80 pl-2">
                   {groupItems.map((item) => (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton
@@ -240,16 +210,15 @@ export function AppSidebar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               aria-label={userName}
-              title={iconOnly ? userName : undefined}
             >
               <Avatar className="size-8">
                 <AvatarFallback className="text-[10px] font-medium">
                   {initials(userName)}
                 </AvatarFallback>
               </Avatar>
-              <span className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
+              <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-[13px] font-medium">
                   {userName}
                 </span>
@@ -259,7 +228,7 @@ export function AppSidebar({
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side={iconOnly ? 'right' : 'top'} align="start" className="w-56">
+          <DropdownMenuContent side="top" align="start" className="w-56">
             <DropdownMenuLabel>{userName}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>
@@ -277,8 +246,6 @@ export function AppSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>
-
-      <SidebarRail />
     </Sidebar>
   );
 }
