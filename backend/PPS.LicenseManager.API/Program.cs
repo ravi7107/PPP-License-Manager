@@ -15,6 +15,7 @@ using PPS.LicenseManager.API.Services;
 using System.Text;
 using PPS.LicenseManager.API.Repositories.Interfaces;
 using PPS.LicenseManager.API.Services.Interfaces;
+using PPS.LicenseManager.API.Services.ReportCenter;
 using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -235,6 +236,16 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IPurchaseRequisitionSettingsService,
     PurchaseRequisitionSettingsService>();
+
+
+// Report Center - catalog, preview, and ClosedXML export.
+builder.Services.AddScoped<
+    IReportExcelExportService,
+    ReportExcelExportService>();
+
+builder.Services.AddScoped<
+    IReportCenterService,
+    ReportCenterService>();
 
 // Software License Utilization & Analytics module
 builder.Services.AddScoped<
