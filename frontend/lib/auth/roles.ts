@@ -23,6 +23,8 @@ export type ModuleKey =
   | 'clients'
   | 'officeLocations'
   | 'accessManagement'
+  | 'savedReports'
+  | 'reportHistory'
   | 'purchaseRequisitions'
   | 'purchaseRequisitionApprovals'
   | 'purchaseRequisitionContacts'
@@ -101,6 +103,7 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'Super Admin',
     'IT Admin',
     'Manager',
+    'Team Lead',
   ],
 
   search: [
@@ -153,6 +156,21 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   accessManagement: [
     'Super Admin',
   ],
+
+  savedReports: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+  ],
+
+  reportHistory: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+  ],
+
 
   // Any employee can raise a purchase requisition - it's not gated to a
   // specific role the way Hardware/Licenses admin actions are.

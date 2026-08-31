@@ -1,7 +1,7 @@
 'use client';
 
 import '@/index.css';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AppLayout } from '@/app/layout/app-layout';
 import ProtectedRoute from '@/components/auth/protected-route';
@@ -11,6 +11,10 @@ import DashboardPage from '@/app/pages/dashboard/dashboard-page';
 import HardwarePage from '@/app/pages/hardware/hardware-page';
 import LicensesPage from '@/app/pages/licenses/licenses-page';
 import ReportsPage from '@/app/pages/reports/reports-page';
+import ReportCenterPage from '@/app/pages/reports/report-center-page';
+import ReportRunPage from '@/app/pages/reports/report-run-page';
+import SavedReportsPage from '@/app/pages/reports/saved-reports-page';
+import ReportHistoryPage from '@/app/pages/reports/report-history-page';
 import AllocationsPage from '@/app/pages/allocations/allocations-page';
 import PurchaseRequisitionsPage from '@/app/pages/purchase-requisitions/purchase-requisitions-page';
 import PendingApprovalsPage from '@/app/pages/purchase-requisitions/pending-approvals-page';
@@ -83,7 +87,12 @@ function App() {
           <Route path="my-requests" element={<MyRequestsPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="executive" element={<ExecutiveDashboardPage />} />
-          <Route path="reports" element={<ReportsPage />} />
+          <Route path="reports" element={<Navigate to="/report-center" replace />} />
+          <Route path="report-center" element={<ReportCenterPage />} />
+          <Route path="report-center/:reportId" element={<ReportRunPage />} />
+          <Route path="saved-reports" element={<SavedReportsPage />} />
+          <Route path="report-history" element={<ReportHistoryPage />} />
+
           <Route path="users" element={<UsersPage />} />
           <Route path="departments" element={<DepartmentsPage />} />
           <Route path="entities" element={<EntitiesPage />} />

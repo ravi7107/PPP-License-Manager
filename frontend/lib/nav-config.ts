@@ -14,8 +14,7 @@ import {
   Landmark,
   Briefcase,
   ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight,
-  Contact, Settings, UploadCloud, PieChart, SlidersHorizontal
-} from 'lucide-react';
+  Contact, Settings, UploadCloud, PieChart, SlidersHorizontal, Bookmark, History } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
 export interface NavItem {
@@ -60,7 +59,9 @@ export const navItems: NavItem[] = [
   { key: 'officeLocations', label: 'Office Locations', path: '/office-locations', icon: MapPinned },
   { key: 'accessManagement', label: 'Access Management', path: '/access-management', icon: ShieldCheck },
   { key: 'search', label: 'Global Search', path: '/search', icon: Search },
-  { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3 },
+  { key: 'reports', label: 'Report Center', path: '/report-center', icon: BarChart3 },
+  { key: 'savedReports', label: 'Saved Reports', path: '/saved-reports', icon: Bookmark },
+  { key: 'reportHistory', label: 'Report History', path: '/report-history', icon: History },
 ];
 
 /*
@@ -115,7 +116,8 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
       'materialApprovalWorkflows'
     ],
   },
-  { label: 'Tools', keys: ['search', 'reports'] },
+  { label: 'Reporting', keys: ['reports', 'savedReports', 'reportHistory'] },
+  { label: 'Tools', keys: ['search'] },
 ];
 
 export function getNavGroupLabel(key: ModuleKey): string | undefined {
