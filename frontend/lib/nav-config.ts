@@ -74,7 +74,7 @@ export const navItems: NavItem[] = [
  */
 export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
   { label: 'Overview', keys: ['dashboard', 'executive'] },
-  { label: 'Assets', keys: ['hardware', 'licenses', 'allocations'] },
+  { label: 'Assets', keys: ['hardware', 'officeLocations', 'licenses', 'allocations'] },
   {
     label: 'Utilization Analytics',
     keys: ['utilizationDashboard', 'utilizationUpload', 'utilizationSettings'],
@@ -85,7 +85,7 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
       'purchaseRequisitions',
       'purchaseRequisitionApprovals',
       'purchaseRequisitionContacts',
-      'purchaseRequisitionSettings',
+      'purchaseRequisitionSettings'
     ],
   },
   {
@@ -100,8 +100,8 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
       'entities',
       'clients',
       'vendors',
-      'officeLocations',
-      'accessManagement',
+
+      'accessManagement'
     ],
   },
   {
@@ -112,7 +112,7 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
       'materialItems',
       'materialCostCenters',
       'materialTransporters',
-      'materialApprovalWorkflows',
+      'materialApprovalWorkflows'
     ],
   },
   { label: 'Tools', keys: ['search', 'reports'] },

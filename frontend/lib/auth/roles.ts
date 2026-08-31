@@ -140,6 +140,7 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
     'IT Admin',
     'Team Lead',
     'Manager',
+    'Employee',
   ],
 
   // Vendor master list administration - same access level as the other
