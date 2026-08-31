@@ -32,6 +32,14 @@ function key(userKey: string, suffix: string): string {
   return `${PREFIX}:${userKey}:${suffix}`;
 }
 
+function newId(): string {
+  const cryptoObj = globalThis.crypto as Crypto | undefined;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID();
+  }
+  return `rc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function readJson<T>(storageKey: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(storageKey);
@@ -83,7 +91,7 @@ export function getSavedReports(userKey: string): SavedReport[] {
 export function saveReport(userKey: string, report: Omit<SavedReport, 'id' | 'createdAt'>): SavedReport {
   const entry: SavedReport = {
     ...report,
-    id: crypto.randomUUID(),
+    id: newId(),
     createdAt: new Date().toISOString(),
   };
   writeJson(key(userKey, 'saved'), [entry, ...getSavedReports(userKey)]);
@@ -105,7 +113,7 @@ export function recordReportHistory(
   entry: Omit<ReportHistoryEntry, 'id'>
 ): ReportHistoryEntry[] {
   const next = [
-    { ...entry, id: crypto.randomUUID() },
+    { ...entry, id: newId() },
     ...getReportHistory(userKey),
   ].slice(0, 50);
   writeJson(key(userKey, 'history'), next);
