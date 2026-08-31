@@ -245,7 +245,7 @@ const Sidebar = React.forwardRef<
               <SheetTitle>Sidebar</SheetTitle>
               <SheetDescription>Displays the mobile sidebar.</SheetDescription>
             </SheetHeader>
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">{children}</div>
           </SheetContent>
         </Sheet>
       )
@@ -273,7 +273,7 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            `fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ${SIDEBAR_TRANSITION} md:flex`,
+            `fixed inset-y-0 z-10 hidden h-svh min-h-0 w-[--sidebar-width] transition-[left,right,width] ${SIDEBAR_TRANSITION} md:flex md:flex-col`,
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -287,7 +287,7 @@ const Sidebar = React.forwardRef<
         >
           <div
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
+            className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
           >
             {children}
           </div>
@@ -416,7 +416,7 @@ const SidebarHeader = React.forwardRef<
     <div
       ref={ref}
       data-sidebar="header"
-      className={cn("flex flex-col gap-1.5 p-2", className)}
+      className={cn("flex shrink-0 flex-col gap-1.5 p-2", className)}
       {...props}
     />
   )
@@ -431,7 +431,7 @@ const SidebarFooter = React.forwardRef<
     <div
       ref={ref}
       data-sidebar="footer"
-      className={cn("flex flex-col gap-2 p-2", className)}
+      className={cn("flex shrink-0 flex-col gap-2 border-t border-sidebar-border p-2", className)}
       {...props}
     />
   )
@@ -462,7 +462,7 @@ const SidebarContent = React.forwardRef<
       ref={ref}
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:transparent_transparent] hover:[scrollbar-color:hsl(var(--border))_transparent] group-data-[collapsible=icon]:overflow-y-auto",
+        "sidebar-nav-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-1 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgb(9_9_11_/_0.32)_transparent] group-data-[collapsible=icon]:overflow-y-auto",
         className
       )}
       {...props}
