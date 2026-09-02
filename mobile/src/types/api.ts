@@ -27,12 +27,19 @@ export interface LoginResponse {
 
 // backend/PPS.LicenseManager.API/Models/Role.cs seed data /
 // frontend/lib/auth/roles.ts's AppRole union - single role per user.
+// 'Facility' (renamed from 'Security' - Migrations/
+// 20260826150000_RenameSecurityRoleToFacility.cs) was missing from this
+// union entirely until Extension 4 added Gate Pass scanning - the role
+// already existed server-side and gated
+// MaterialMovementController's by-gate-pass/transfer/receive endpoints,
+// this app just had no way to represent it.
 export type AppRole =
   | 'Super Admin'
   | 'IT Admin'
   | 'Team Lead'
   | 'Manager'
-  | 'Employee';
+  | 'Employee'
+  | 'Facility';
 
 // What StoredSession persists locally (see lib/auth-context.tsx) - the
 // login response minus the token, which lives in SecureStore instead.
@@ -107,6 +114,14 @@ export interface AssetResponse {
 // a "Asset Tag 'X' already exists." message - see AssetService.CreateAsync
 // and Middleware/ExceptionMiddleware.cs's InvalidOperationException
 // handling), never re-implemented client-side.
+// Extension 4, Phase 22 added purchaseRequisitionLineItemId/purchaseCost/
+// ownershipType/vendorId/rentalStartDate/rentalEndDate below - these
+// already existed on the backend DTO (Phase 1 PR/PO traceability + the
+// rental-tracking migration) but were missing from this type entirely
+// until now; the mobile Add Asset form had no way to send them.
+// dualMonitor also exists on the backend DTO but has no mobile UI yet -
+// deliberately left off here rather than added unused, to avoid
+// scope-creep beyond what was asked for.
 export interface CreateAssetRequest {
   assetTag: string;
   assetName: string;
@@ -124,6 +139,12 @@ export interface CreateAssetRequest {
   purchaseDate?: string | null;
   warrantyExpiry?: string | null;
   remarks?: string | null;
+  purchaseRequisitionLineItemId?: number | null;
+  purchaseCost?: number | null;
+  ownershipType?: string | null;
+  vendorId?: number | null;
+  rentalStartDate?: string | null;
+  rentalEndDate?: string | null;
 }
 
 export interface AssetFilterRequest {
@@ -367,6 +388,118 @@ export interface AssetAuditScanResponse {
   item: AssetAuditItemResponse;
   wasDuplicate: boolean;
   audit: AssetAuditResponse;
+}
+
+// ---------------------------------------------------------------------
+// Material Movement (Gate Pass scan / Transfer / Receive) - Extension 4,
+// Phase 21. Backend: DTOs/MaterialMovement/*.cs,
+// Controllers/MaterialMovementController.cs's "MOBILE: GATE PASS LOOKUP
+// / TRANSFER / RECEIVE (Phase 5)" section - built in an earlier phase of
+// this engagement and, until now, never called from this app. Only the
+// fields this app's screens actually render are mirrored here (the full
+// backend DTO carries a few more read-only fields, e.g. cost-center
+// names, that this app has no use for yet).
+// ---------------------------------------------------------------------
+
+export interface MaterialMovementItemResponse {
+  id: number;
+  itemId: number;
+  itemCode: string;
+  itemName: string;
+  materialType: string;
+  assetId?: number | null;
+  assetTag?: string | null;
+  assetName?: string | null;
+  quantity: number;
+  unitOfMeasure?: string | null;
+  serialNumbers?: string | null;
+  condition?: string | null;
+  remarks?: string | null;
+}
+
+export interface MaterialMovementDispatchResponse {
+  id: number;
+  dispatchedByUserId: number;
+  dispatchedByUserName: string;
+  dispatchedAt: string;
+  transporterName?: string | null;
+  vehicleNumber?: string | null;
+  gatePassNumber?: string | null;
+  transferredByUserId?: number | null;
+  transferredByUserName?: string | null;
+  transferredAt?: string | null;
+  hasGatePassPdf: boolean;
+}
+
+// Status values relevant to the mobile Gate Pass flow specifically -
+// the backend's full Status set (Models/MaterialMovement.cs) has more
+// values (Draft, Submitted, PendingApproval, Rejected, Cancelled, etc.)
+// that this app never acts on, only displays as plain text.
+export type MaterialMovementStatus =
+  | 'AwaitingTransfer'
+  | 'Dispatched'
+  | 'InTransit'
+  | 'Received'
+  | 'Completed'
+  | string;
+
+export interface MaterialMovementResponse {
+  id: number;
+  movementNumber?: string | null;
+  movementType: string;
+  status: MaterialMovementStatus;
+  fromCompanyName?: string | null;
+  fromLocationName?: string | null;
+  fromDepartmentName?: string | null;
+  toCompanyName?: string | null;
+  toLocationName?: string | null;
+  toDepartmentName?: string | null;
+  vendorName?: string | null;
+  requestedByUserName: string;
+  requestedAt: string;
+  purpose?: string | null;
+  items: MaterialMovementItemResponse[];
+  dispatch?: MaterialMovementDispatchResponse | null;
+}
+
+export interface ReceiveMaterialMovementItemRequest {
+  movementItemId: number;
+  quantityReceived?: number | null;
+  condition?: string | null;
+  discrepancyNotes?: string | null;
+}
+
+export interface ReceiveMaterialMovementRequest {
+  discrepancyNotes?: string | null;
+  items?: ReceiveMaterialMovementItemRequest[] | null;
+}
+
+// ---------------------------------------------------------------------
+// Vendor - backend/PPS.LicenseManager.API/Models/Vendor.cs,
+// Controllers/VendorController.cs. Only the fields the mobile Rental
+// vendor picker (Extension 4, Phase 22) needs.
+// ---------------------------------------------------------------------
+
+export interface VendorResponse {
+  id: number;
+  vendorCode: string;
+  vendorName: string;
+}
+
+// ---------------------------------------------------------------------
+// Purchase Requisition line-linking (Extension 4, Phase 22) - backend
+// DTOs/PurchaseRequisition/PurchaseRequisitionAvailableLineResponse.cs,
+// Controllers/PurchaseRequisitionController.cs's GET available-lines.
+// ---------------------------------------------------------------------
+
+export interface PurchaseRequisitionAvailableLineResponse {
+  lineItemId: number;
+  purchaseRequisitionId: number;
+  prNumber: string;
+  itemDescription: string;
+  quantity: number;
+  fulfilledQuantity: number;
+  remainingQuantity: number;
 }
 
 // ---------------------------------------------------------------------

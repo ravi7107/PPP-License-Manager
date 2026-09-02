@@ -33,6 +33,29 @@ export function toneForAssetStatus(status: string): StatusTone {
   return 'neutral';
 }
 
+// Extension 4, Phase 21 - Material Movement status colors for the Gate
+// Pass detail screen. Only the statuses relevant to Facility's mobile
+// flow get a distinct tone; every earlier-lifecycle status (Draft,
+// Submitted, PendingApproval, InApproval) this app never shows falls
+// through to 'neutral'.
+export function toneForMovementStatus(status: string): StatusTone {
+  switch (status) {
+    case 'AwaitingTransfer':
+      return 'pending';
+    case 'Dispatched':
+    case 'InTransit':
+      return 'info';
+    case 'Received':
+    case 'Completed':
+      return 'success';
+    case 'Rejected':
+    case 'Cancelled':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
+}
+
 export function toneForAuditResult(state: string): StatusTone {
   switch (state) {
     case 'Found':

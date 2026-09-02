@@ -9,8 +9,16 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { QrCode, Search, ClipboardCheck, History, LogOut, PackagePlus } from 'lucide-react-native';
-import { useAuth, canManageAssets } from '@/lib/auth-context';
+import {
+  QrCode,
+  Search,
+  ClipboardCheck,
+  History,
+  LogOut,
+  PackagePlus,
+  ScanLine,
+} from 'lucide-react-native';
+import { useAuth, canManageAssets, canHandleGatePass } from '@/lib/auth-context';
 import { getRecentAudits } from '@/api/audits';
 import { getRecentScans, RecentScanEntry } from '@/lib/recent-scans';
 import { Panel } from '@/components/Panel';
@@ -22,6 +30,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const canManage = canManageAssets(user?.role);
+  const canGatePass = canHandleGatePass(user?.role);
   const [recentScans, setRecentScans] = useState<RecentScanEntry[]>([]);
 
   const loadRecentScans = useCallback(() => {
@@ -103,6 +112,13 @@ export default function DashboardScreen() {
             icon={<PackagePlus size={20} color={colors.blue600} />}
             label="Add Asset"
             onPress={() => router.push('/(app)/asset/new')}
+          />
+        ) : null}
+        {canGatePass ? (
+          <QuickAction
+            icon={<ScanLine size={20} color={colors.blue600} />}
+            label="Gate Pass"
+            onPress={() => router.push('/(app)/gate-pass/scan')}
           />
         ) : null}
         <QuickAction

@@ -169,3 +169,15 @@ export function useAuth(): AuthContextValue {
 export function canManageAssets(role: StoredUser['role'] | undefined): boolean {
   return role === 'Super Admin' || role === 'IT Admin';
 }
+
+// Extension 4, Phase 21 - Gate Pass scan / Transfer / Receive is a
+// separate permission from canManageAssets above, not an extension of
+// it: Facility must NOT gain Add-Asset access, and Super Admin/IT Admin
+// keep the override they already have server-side. Matches
+// MaterialMovementController's [Authorize(Roles = "Facility,Super
+// Admin,IT Admin")] on GetByGatePassNumber/Transfer/Receive exactly -
+// same "server is the final authority, this only controls whether the
+// UI offers the action" caveat as canManageAssets above.
+export function canHandleGatePass(role: StoredUser['role'] | undefined): boolean {
+  return role === 'Facility' || role === 'Super Admin' || role === 'IT Admin';
+}

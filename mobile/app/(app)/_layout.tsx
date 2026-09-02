@@ -44,6 +44,15 @@ export default function AppLayout() {
       <Stack.Screen name="asset/[id]/transfer" options={{ title: 'Transfer Asset' }} />
       <Stack.Screen name="audit/index" options={{ title: 'Audit' }} />
       <Stack.Screen name="audit/[id]" options={{ title: 'Audit Session' }} />
+      <Stack.Screen
+        name="gate-pass/scan"
+        options={{ title: 'Scan Gate Pass', presentation: 'fullScreenModal' }}
+      />
+      <Stack.Screen name="gate-pass/[gatePassNumber]" options={{ title: 'Gate Pass' }} />
+      <Stack.Screen
+        name="asset/scan-pr"
+        options={{ title: 'Scan PR / PO', presentation: 'fullScreenModal' }}
+      />
     </Stack>
   );
 }
