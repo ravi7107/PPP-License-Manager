@@ -252,6 +252,34 @@ public class PurchaseRequisitionPdfDocument : IDocument
             {
                 column.Item().Element(c => ComposeSection(c, "9. Supporting Documents", ComposeAttachmentsTable));
             }
+
+            column.Item().Element(c => ComposeSection(c, "10. QR Verification", ComposeQrVerification));
+        });
+    }
+
+    // Extension 4 - mirrors MaterialMovementGatePassPdfDocument's own
+    // QR section exactly: the QR encodes nothing but the bare PrNumber
+    // (same content-only convention as the gate pass QR encoding
+    // GatePassNumber), scanned by the mobile app to look up this PR's
+    // open lines. Unlike the gate pass doc, no placeholder/fallback
+    // branch is needed here - this PDF is only ever generated once the
+    // PR reaches Approved (see GetPdfFileAsync), and PrNumber is always
+    // assigned well before that (on Submit), so it's never null by the
+    // time this renders.
+    private void ComposeQrVerification(IContainer container)
+    {
+        var qrSvg = AssetQrCodeGenerator.GenerateSvg(_pr.PrNumber!);
+
+        container.Background(Colors.Grey.Lighten4).Padding(10).Row(row =>
+        {
+            row.ConstantItem(64).AlignMiddle().AspectRatio(1).Svg(qrSvg);
+
+            row.RelativeItem().PaddingLeft(12).Column(c =>
+            {
+                c.Item().Text("Scan to look up this purchase requisition, or use the PR Number below.")
+                    .FontSize(9).FontColor(Colors.Grey.Darken2);
+                c.Item().PaddingTop(6).Text(_pr.PrNumber!).FontSize(13).Bold();
+            });
         });
     }
 

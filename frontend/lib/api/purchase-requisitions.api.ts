@@ -443,6 +443,22 @@ export async function downloadPurchaseRequisitionPdf(
   };
 }
 
+// Extension 4 - the PR's own QR (raw <svg>...</svg> markup, same
+// content-only convention as the PDF's QR section), rendered inline on
+// the detail dialog below. Same authenticated-only reasoning as the PDF
+// above - fetched as text rather than linked as a plain <img src>, since
+// the browser wouldn't attach the JWT to a bare image request either.
+// 404s (Draft PR, no PrNumber yet) are left for the caller to catch and
+// hide the section - this call doesn't swallow errors itself.
+export async function getPurchaseRequisitionQrSvg(id: number): Promise<string> {
+  const response = await api.get(`/PurchaseRequisition/${id}/qr`, {
+    responseType: 'text',
+    transformResponse: (data) => data,
+  });
+
+  return response.data;
+}
+
 // Same "not a static file, has to be fetched as a blob" reasoning as
 // downloadPurchaseRequisitionPdf above - the PO document lives under the
 // same private, non-wwwroot storage area (see the backend's

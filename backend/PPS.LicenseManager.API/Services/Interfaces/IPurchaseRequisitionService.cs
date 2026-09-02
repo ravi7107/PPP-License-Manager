@@ -16,7 +16,22 @@ public interface IPurchaseRequisitionService
     // Available-to-link PR lines for the Asset/License purchase creation
     // forms' optional "link to a Purchase Requisition" picker - see
     // PurchaseRequisitionService's own comment on the implementation.
-    Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync();
+    // Optional prNumber scopes the result to a single PR (used by the
+    // mobile app's scan-a-PR-QR flow); omit/null for the unscoped
+    // system-wide list every other caller already uses.
+    Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync(
+        string? prNumber = null);
+
+    // Renders the PR's QR (its bare PrNumber, same content-only convention
+    // as the Material Movement gate pass QR) as an SVG string for the web
+    // detail page and the mobile scan-to-link flow. Same access rule as
+    // GetByIdAsync - owner, an assigned approver, or a privileged user -
+    // since it's surfaced from the same detail page. Returns null when the
+    // PR has no PrNumber yet (still Draft, pre-Submit).
+    Task<string?> GetQrSvgAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged);
 
     // The audit/reconciliation report - see PurchaseRequisitionService's
     // own comment on the implementation.

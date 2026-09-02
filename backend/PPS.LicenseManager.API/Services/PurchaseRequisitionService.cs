@@ -346,6 +346,41 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         return response;
     }
 
+    // The PR's own QR - same access rule as GetByIdAsync (owner/assigned
+    // approver/privileged), and the same content-only convention Material
+    // Movement gate passes already use (MaterialMovementService's
+    // QrPayload = gatePassNumber): the QR encodes nothing but the bare
+    // PrNumber, scanned by the mobile app to look up that PR's open lines
+    // via GetAvailableLinesForLinkingAsync(prNumber). AssetQrCodeGenerator
+    // is a generic content->SVG encoder despite its name (confirmed by
+    // reading it - no asset-specific logic), so it's reused here directly
+    // rather than adding a second, near-duplicate generator class.
+    public async Task<string?> GetQrSvgAsync(
+        int id,
+        int requestingUserId,
+        bool isPrivileged)
+    {
+        var record = await _context.PurchaseRequisitions
+            .Include(x => x.ApprovalSteps)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (record == null)
+            return null;
+
+        var isOwner = record.RequestedByUserId == requestingUserId;
+        var isAssignedApprover = record.ApprovalSteps
+            .Any(s => s.AssignedApproverUserId == requestingUserId);
+
+        if (!isOwner && !isPrivileged && !isAssignedApprover)
+            throw new UnauthorizedAccessException(
+                "You don't have access to this purchase requisition.");
+
+        if (string.IsNullOrWhiteSpace(record.PrNumber))
+            return null;
+
+        return AssetQrCodeGenerator.GenerateSvg(record.PrNumber);
+    }
+
     // "Fulfilled by" section on the PR detail view - every Asset/
     // LicensePurchase actually created against this PR so far. Only
     // called from the single-PR GetByIdAsync (not any list endpoint), so
@@ -414,11 +449,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     // open lines only), so the two aggregate queries plus in-memory join
     // below are simpler and cheap enough rather than a single hand-rolled
     // SQL LEFT JOIN.
-    public async Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync()
+    //
+    // prNumber is optional and additive - the mobile app's "scan this PR's
+    // QR, then pick one of its open lines" flow (Report Center-adjacent
+    // Extension 4) passes it to scope the result to a single PR; every
+    // existing caller (the web app's own unscoped "link to a PR" picker)
+    // keeps passing null and sees identical results to before this
+    // parameter existed.
+    public async Task<List<PurchaseRequisitionAvailableLineResponse>> GetAvailableLinesForLinkingAsync(
+        string? prNumber = null)
     {
         var lines = await _context.PurchaseRequisitionLineItems
             .Include(l => l.PurchaseRequisition)
-            .Where(l => l.PurchaseRequisition.Status == "Approved")
+            .Where(l => l.PurchaseRequisition.Status == "Approved" &&
+                (prNumber == null || l.PurchaseRequisition.PrNumber == prNumber))
             .OrderByDescending(l => l.PurchaseRequisition.ApprovedAt)
             .ThenBy(l => l.LineNumber)
             .ToListAsync();

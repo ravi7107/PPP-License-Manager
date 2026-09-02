@@ -123,10 +123,15 @@ public class PurchaseRequisitionController : BaseController
     // further role-gated, since it exposes no more than item
     // descriptions/quantities that anyone able to create an Asset or
     // License purchase would already need to see.
+    // prNumber is optional - the mobile app's "scan a PR's QR, then pick
+    // one of its open lines" flow (Extension 4) passes it to scope the
+    // result to a single PR; the web app's own unscoped picker keeps
+    // calling this with no query string and sees identical results to
+    // before this parameter existed.
     [HttpGet("available-lines")]
-    public async Task<IActionResult> GetAvailableLines()
+    public async Task<IActionResult> GetAvailableLines([FromQuery] string? prNumber)
     {
-        var result = await _service.GetAvailableLinesForLinkingAsync();
+        var result = await _service.GetAvailableLinesForLinkingAsync(prNumber);
 
         return Success(result, "Available purchase requisition lines retrieved successfully.");
     }
@@ -166,6 +171,35 @@ public class PurchaseRequisitionController : BaseController
                 return NotFoundResponse("Purchase requisition not found.");
 
             return Success(result, "Purchase requisition retrieved successfully.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    // The PR's own QR (Extension 4) - renders inline on the web detail
+    // page, and is what a mobile "scan a PR to link a new asset" flow
+    // reads off the printed PDF (see PurchaseRequisitionPdfDocument's new
+    // QR section) or this same image. Same access rule as GetById - only
+    // the owner, an assigned approver, or a privileged user. 404 while
+    // the PR is still Draft (no PrNumber assigned yet, see
+    // GetQrSvgAsync's own comment).
+    [HttpGet("{id:int}/qr")]
+    public async Task<IActionResult> GetQr(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var svg = await _service.GetQrSvgAsync(
+                id, currentUserId, IsPrivileged());
+
+            if (svg == null)
+                return NotFoundResponse(
+                    "No QR is available for this purchase requisition yet.");
+
+            return Content(svg, "image/svg+xml");
         }
         catch (UnauthorizedAccessException ex)
         {

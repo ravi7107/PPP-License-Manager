@@ -50,6 +50,7 @@ import {
   downloadPurchaseRequisitionPoDocument,
   downloadPurchaseRequisitionPoUploadDocument,
   downloadPurchaseRequisitionInvoiceDocument,
+  getPurchaseRequisitionQrSvg,
   PurchaseRequisition,
 } from '@/lib/api/purchase-requisitions.api';
 
@@ -143,6 +144,7 @@ export function PrDetailDialog({
   const [invoiceDate, setInvoiceDate] = useState('');
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceNotes, setInvoiceNotes] = useState('');
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -157,6 +159,38 @@ export function PrDetailDialog({
       setInvoiceNotes('');
     }
   }, [open, purchaseRequisition?.id]);
+
+  // Extension 4 - the QR is a nice-to-have on this dialog (the PDF's own
+  // QR section is the primary printable/scannable artifact), so a
+  // failure here (404 while Draft, or any transient error) just leaves
+  // qrSvg null and the section stays hidden rather than surfacing a
+  // second error banner alongside the PDF/PO download ones above.
+  useEffect(() => {
+    // Clear immediately on every id/status change, not just when closed
+    // or Draft - otherwise switching to a different (non-Draft) PR while
+    // the dialog stays open (e.g. via a "Fulfilled By" deep link) would
+    // leave the previous PR's QR rendered - decoding to the wrong PR
+    // number - until the new fetch resolves.
+    setQrSvg(null);
+
+    if (!open || !purchaseRequisition || purchaseRequisition.status === 'Draft') {
+      return;
+    }
+
+    let cancelled = false;
+
+    getPurchaseRequisitionQrSvg(purchaseRequisition.id)
+      .then((svg) => {
+        if (!cancelled) setQrSvg(svg);
+      })
+      .catch(() => {
+        if (!cancelled) setQrSvg(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, purchaseRequisition?.id, purchaseRequisition?.status]);
 
   if (!purchaseRequisition) {
     return null;
@@ -519,6 +553,41 @@ export function PrDetailDialog({
                 })}
               </TableBody>
             </Table>
+          </div>
+        ) : null}
+
+        {/* QR VERIFICATION (Extension 4) - lets a mobile scan (e.g. the
+            "PPS Asset Scanner" app's Add Asset -> "Link to Purchase
+            Requisition" flow) resolve straight to this PR's open lines.
+            Hidden while Draft (no PrNumber yet) or if the fetch hasn't
+            resolved - same hidden-when-empty convention as the other
+            optional sections on this dialog. */}
+
+        {qrSvg ? (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">QR Verification</h3>
+            <div className="flex items-center gap-4 rounded-md border bg-muted/30 p-3">
+              {/* Rendered as an <img> off a data: URI rather than
+                  dangerouslySetInnerHTML - the SVG's content ultimately
+                  traces back to an admin-editable Company.Code (via
+                  PrNumber's "PR-{companyCode}-..." format), and an <img>
+                  never executes script/event-handler markup even if a
+                  future ZXing.Net version ever echoed content into the
+                  rendered SVG, whereas innerHTML would. */}
+              <img
+                src={`data:image/svg+xml;utf8,${encodeURIComponent(qrSvg)}`}
+                alt={`QR code for ${pr.prNumber}`}
+                className="h-16 w-16 shrink-0"
+              />
+              <div className="text-sm text-muted-foreground">
+                Scan with the PPS Asset Scanner mobile app to link a new
+                asset to this PR's open lines, or read the PR Number
+                below.
+                <div className="mt-1 font-semibold text-foreground">
+                  {pr.prNumber}
+                </div>
+              </div>
+            </div>
           </div>
         ) : null}
 
