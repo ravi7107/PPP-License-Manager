@@ -67,7 +67,10 @@ export default function AssetDetailsScreen() {
   }
 
   if (assetQuery.isError || !assetQuery.data) {
-    const apiError = assetQuery.error as ApiError | undefined;
+    // react-query's default query-error type is `Error | null`, which
+    // doesn't overlap enough with our custom ApiError shape for a direct
+    // cast - route through `unknown` first, per tsc's own suggestion.
+    const apiError = assetQuery.error as unknown as ApiError | undefined;
     return (
       <View style={styles.screen}>
         <ErrorBanner message={apiError?.message ?? 'Could not load this asset.'} />

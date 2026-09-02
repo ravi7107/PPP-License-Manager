@@ -43,7 +43,10 @@ export default function SearchScreen() {
     enabled: debouncedQuery.length >= 2,
   });
 
-  const apiError = resultsQuery.error as ApiError | undefined;
+  // See the identical cast in asset/[id].tsx - react-query's default
+  // Error | null doesn't overlap enough with ApiError for a direct
+  // cast; route through unknown first.
+  const apiError = resultsQuery.error as unknown as ApiError | undefined;
 
   return (
     <View style={styles.screen}>

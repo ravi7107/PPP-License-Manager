@@ -73,7 +73,10 @@ export default function GatePassDetailScreen() {
   }
 
   if (movementQuery.isError || !movementQuery.data) {
-    const apiError = movementQuery.error as ApiError | undefined;
+    // See the identical cast in asset/[id].tsx - react-query's default
+    // Error | null doesn't overlap enough with ApiError for a direct
+    // cast; route through unknown first.
+    const apiError = movementQuery.error as unknown as ApiError | undefined;
     return (
       <View style={styles.screen}>
         <ErrorBanner

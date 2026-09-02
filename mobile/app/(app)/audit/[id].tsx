@@ -212,7 +212,10 @@ export default function AuditSessionScreen() {
   }
 
   if (auditQuery.isError || !auditQuery.data) {
-    const apiError = auditQuery.error as ApiError | undefined;
+    // See the identical cast in asset/[id].tsx - react-query's default
+    // Error | null doesn't overlap enough with ApiError for a direct
+    // cast; route through unknown first.
+    const apiError = auditQuery.error as unknown as ApiError | undefined;
     return (
       <View style={styles.centered}>
         <ErrorBanner
