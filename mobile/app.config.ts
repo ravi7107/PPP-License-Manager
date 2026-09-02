@@ -79,15 +79,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
   ],
-  extra: {
+    extra: {
     // Read via src/lib/env.ts, not directly - keeps every call site
     // agnostic to whether a value came from EXPO_PUBLIC_* or here.
     apiUrl,
     apiEnvName,
     eas: {
-      // Fill in after `eas init` if/when you set up EAS Build - not
-      // required for local development or a bare `expo start`.
-      projectId: process.env.EAS_PROJECT_ID ?? undefined,
+      // Filled in after eas init linked this app to the
+      // pps-smartassets-team / pps-asset-scanner EAS project.
+      projectId: process.env.EAS_PROJECT_ID ?? '7812fa5f-0f74-42a5-a111-2edee811fa7e',
     },
   },
 });
