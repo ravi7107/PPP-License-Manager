@@ -59,6 +59,7 @@ export interface AssetRecord {
   // "Sourced from PR" card shows at all; the rest are drawn from that PR's
   // own PO fields (see PurchaseRequisitionService's PO Date/Amount, Phase 6).
   purchaseRequisitionId?: number;
+  purchaseRequisitionLineItemId?: number;
   prNumber?: string;
   poNumber?: string;
   poDate?: string;
@@ -108,6 +109,8 @@ export interface AssetFormValues {
   rentalEndDate: string;
 
   dualMonitor: boolean;
+
+  purchaseRequisitionLineItemId: string;
 }
 
 export const OWNERSHIP_TYPES: OwnershipType[] = ["Owned", "Rented"];
@@ -156,4 +159,6 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
   rentalEndDate: "",
 
   dualMonitor: false,
+
+  purchaseRequisitionLineItemId: "",
 };

@@ -40,6 +40,8 @@ import {
   LookupOption,
 } from "@/app/pages/hardware/types";
 
+import { PurchaseRequisitionAvailableLine } from "@/lib/api/purchase-requisitions.api";
+
 interface VendorOption {
   id: number;
   vendorName: string;
@@ -110,6 +112,8 @@ const assetFormSchema = z.object({
   rentalEndDate: z.string().default(""),
 
   dualMonitor: z.boolean().default(false),
+
+  purchaseRequisitionLineItemId: z.string().default(""),
 });
 
 interface AssetFormDialogProps {
@@ -123,6 +127,8 @@ interface AssetFormDialogProps {
   departments: LookupOption[];
 
   vendors: VendorOption[];
+
+  purchaseRequisitionLines: PurchaseRequisitionAvailableLine[];
 
   saving: boolean;
 
@@ -181,6 +187,8 @@ function toFormValues(
       rentalStartDate: EMPTY_ASSET_FORM.rentalStartDate ?? "",
       rentalEndDate: EMPTY_ASSET_FORM.rentalEndDate ?? "",
       dualMonitor: EMPTY_ASSET_FORM.dualMonitor ?? false,
+      purchaseRequisitionLineItemId:
+        EMPTY_ASSET_FORM.purchaseRequisitionLineItemId ?? "",
     };
   }
 
@@ -236,6 +244,17 @@ function toFormValues(
       : "",
 
     dualMonitor: asset.dualMonitor ?? false,
+
+    // Read-only carry-through - there is no UI control to change an
+    // existing asset's PR/PO link once set (the picker below only
+    // appears when creating a new asset), so this must round-trip
+    // whatever the asset already has. Defaulting it to "" here instead
+    // would make every edit submit purchaseRequisitionLineItemId=null,
+    // which AssetService.UpdateAsync treats as "the link changed" and
+    // silently clears an existing link on every save.
+    purchaseRequisitionLineItemId: asset.purchaseRequisitionLineItemId
+      ? String(asset.purchaseRequisitionLineItemId)
+      : "",
   };
 }
 
@@ -246,6 +265,7 @@ export function AssetFormDialog({
   isAssigned = false,
   departments,
   vendors,
+  purchaseRequisitionLines,
   saving,
   onSubmit,
   error,
@@ -282,6 +302,9 @@ export function AssetFormDialog({
   const safeVendors: VendorOption[] = Array.isArray(vendors)
     ? vendors
     : [];
+
+  const safePurchaseRequisitionLines: PurchaseRequisitionAvailableLine[] =
+    Array.isArray(purchaseRequisitionLines) ? purchaseRequisitionLines : [];
 
   return (
     <Dialog
@@ -863,6 +886,68 @@ export function AssetFormDialog({
                 />
               </div>
             </div>
+
+            {/* PURCHASE REQUISITION LINK */}
+
+            {!isEditing && (
+              <div>
+                <h3 className="mb-3 text-sm font-semibold">
+                  Link to Purchase Requisition (optional)
+                </h3>
+
+                <FormField
+                  control={form.control}
+                  name="purchaseRequisitionLineItemId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Purchase Requisition Line</FormLabel>
+
+                      <Select
+                        value={field.value || "none"}
+                        onValueChange={(v) =>
+                          field.onChange(v === "none" ? "" : v)
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Not linked to a PR" />
+                          </SelectTrigger>
+                        </FormControl>
+
+                        <SelectContent>
+                          <SelectItem value="none">
+                            Not linked to a PR
+                          </SelectItem>
+
+                          {safePurchaseRequisitionLines.length === 0 ? (
+                            <div className="px-2 py-3 text-sm text-muted-foreground">
+                              No approved PRs with open lines
+                            </div>
+                          ) : (
+                            safePurchaseRequisitionLines.map((l) => (
+                              <SelectItem
+                                key={l.lineItemId}
+                                value={String(l.lineItemId)}
+                              >
+                                {l.prNumber} — {l.itemDescription} (Qty left: {l.remainingQuantity})
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Optional. Linking this asset to an approved PR/PO line
+                  automatically carries over its PR Number, PO Number, PO
+                  Date, and PO Amount — nothing else needs to be re-entered.
+                </p>
+              </div>
+            )}
 
             {/* PURCHASE / WARRANTY */}
 

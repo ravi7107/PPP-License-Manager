@@ -76,6 +76,11 @@ public string? CompanyName { get; set; }
 // no database access to compute them from.
 public int? PurchaseRequisitionId { get; set; }
 
+// Read-only carry-through for the web Create/Edit Asset form - lets the
+// picker preload/preserve which specific PR line an asset is linked to
+// (PurchaseRequisitionId alone only identifies the PR, not the line).
+public int? PurchaseRequisitionLineItemId { get; set; }
+
 public string? PrNumber { get; set; }
 
 public string? PoNumber { get; set; }
