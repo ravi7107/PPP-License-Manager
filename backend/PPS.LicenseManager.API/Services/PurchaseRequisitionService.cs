@@ -2465,6 +2465,7 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("<p style=\"margin:10px 0 0;font-size:13px;line-height:1.55;color:" + EmailMutedText + ";\">" + summaryDescription + "</p>");
+        sb.Append("<p style=\"margin:8px 0 0;font-size:14px;font-weight:700;color:" + EmailSlateStrong + ";\">" + Enc(record.Title) + "</p>");
         // A revision only ever comes from an already-APPROVED PR
         // (CreateRevisionAsync enforces that), never a rejected one - so
         // this deliberately never says "rejected".
@@ -2500,19 +2501,19 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // number); PurchaseRequisition has no separate Category field. ====
         sb.Append("<tr><td style=\"background-color:#ffffff;border-top:1px solid " + EmailBorderColor + ";border-bottom:1px solid " + EmailBorderColor + ";\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
-        sb.Append(MetaCard(Icon("icon-document-navy.png"), EmailIconBlueBg, "PR Number", Enc(prLabel), Enc(record.Title), "", EmailSlateStrong));
+        sb.Append(MetaCard("PR Number", Enc(prLabel), "", "", EmailSlateStrong));
         sb.Append(Divider());
-        sb.Append(MetaCard(Icon("icon-person-navy.png"), EmailIconBlueBg, "Requested By", Enc(requesterName),
+        sb.Append(MetaCard("Requested By", Enc(requesterName),
             string.IsNullOrWhiteSpace(employeeCode) ? "" : "(" + Enc(employeeCode) + ")", "", EmailSlateStrong));
         sb.Append(Divider());
-        sb.Append(MetaCard(Icon("icon-building-navy.png"), EmailIconBlueBg, "Entity",
+        sb.Append(MetaCard("Entity",
             string.IsNullOrWhiteSpace(companyName) ? "Not Specified" : Enc(companyName),
             string.IsNullOrWhiteSpace(gstin) ? "" : "GSTIN: " + Enc(gstin), "", EmailSlateStrong));
         sb.Append(Divider());
-        sb.Append(MetaCard(Icon("icon-vendor-navy.png"), EmailIconBlueBg, "Vendor",
+        sb.Append(MetaCard("Vendor",
             string.IsNullOrWhiteSpace(vendorName) ? "Not Specified" : Enc(vendorName), "", "", EmailSlateStrong));
         sb.Append(Divider());
-        sb.Append(MetaCard(Icon("icon-calendar-navy.png"), EmailIconBlueBg, "Submitted On", submittedLabel, "", "", EmailSlateStrong));
+        sb.Append(MetaCard("Submitted On", submittedLabel, "", "", EmailSlateStrong));
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
@@ -2536,12 +2537,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             foreach (var a in shownAttachments)
             {
                 var docUrl = publicApiBaseUrl + a.StoredPath;
-                sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:12px;\"><tr>");
-                sb.Append("<td style=\"width:22px;\" valign=\"top\"><img src=\"" + Icon("icon-document-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:block;margin-top:2px;width:16px;height:16px;\" /></td>");
-                sb.Append("<td valign=\"top\">");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";line-height:1.4;\">" + Enc(a.FileName) + "</div>");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";margin-top:1px;\">" + Enc(FriendlyAttachmentType(a.AttachmentType)) + " &nbsp;&middot;&nbsp; " + AttachmentFormatLabel(a.FileName) + " &nbsp;&middot;&nbsp; <a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View</a></div>");
-                sb.Append("</td></tr></table>");
+                sb.Append("<div style=\"margin-bottom:8px;font-family:" + EmailFontStack + ";font-size:12.5px;line-height:1.45;\">");
+                sb.Append("<a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:700;text-decoration:none;\">" + Enc(a.FileName) + "</a>");
+                sb.Append("<span style=\"color:" + EmailMutedText + ";\"> (" + AttachmentFormatLabel(a.FileName) + ")</span>");
+                sb.Append("</div>");
             }
             if (remainingAttachmentCount > 0)
             {
@@ -2666,21 +2665,16 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // cell, used by the single unified metadata strip above - kept
         // local since they close over EmailFontStack/color constants and
         // aren't needed elsewhere.
-        static string MetaCard(string iconUrl, string bg, string label, string value, string sub, string pendingHtml, string valueColor)
+        static string MetaCard(string label, string value, string sub, string pendingHtml, string valueColor)
         {
             var subHtml = string.IsNullOrEmpty(sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:1px;\">" + sub + "</div>";
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:2px;\">" + sub + "</div>";
             return "<td style=\"padding:14px 10px;\" align=\"center\" valign=\"top\">" +
-                "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-                "<td style=\"width:34px;height:34px;border-radius:17px;background-color:" + bg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">" +
-                "<img src=\"" + iconUrl + "\" width=\"17\" height=\"17\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:17px;height:17px;\" />" +
-                "</td>" +
-                "<td style=\"padding-left:8px;\" valign=\"middle\" align=\"left\">" +
                 "<div style=\"font-family:" + EmailFontStack + ";font-size:9.5px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:3px;\">" + value + "</div>" +
                 subHtml + pendingHtml +
-                "</td></tr></table></td>";
+                "</td>";
         }
 
         static string Divider() =>
