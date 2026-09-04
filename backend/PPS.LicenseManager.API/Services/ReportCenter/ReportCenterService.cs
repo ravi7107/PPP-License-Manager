@@ -262,6 +262,10 @@ public class ReportCenterService : IReportCenterService
         PurchaseDate = a.PurchaseDate,
         WarrantyExpiry = a.WarrantyExpiry,
         PurchaseCost = a.PurchaseCost,
+        PrNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PrNumber : null,
+        PoNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoNumber : null,
+        PoDate = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoDate : null,
+        PoAmount = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoAmount : null,
         IsActive = a.IsActive,
     };
 
@@ -274,6 +278,7 @@ public class ReportCenterService : IReportCenterService
             .Include(a => a.Department).ThenInclude(d => d!.Company)
             .Include(a => a.CurrentLocation)
             .Include(a => a.Vendor)
+            .Include(a => a.PurchaseRequisition)
             .Where(a => a.IsActive);
 
         if (effectiveCompanyId.HasValue)
@@ -340,6 +345,10 @@ public class ReportCenterService : IReportCenterService
         new() { Header = "Purchase Date", ValueSelector = r => r.PurchaseDate, Format = ExcelNumberFormat.Date },
         new() { Header = "Warranty Expiry", ValueSelector = r => r.WarrantyExpiry, Format = ExcelNumberFormat.Date },
         new() { Header = "Purchase Cost", ValueSelector = r => r.PurchaseCost, Format = ExcelNumberFormat.Currency },
+        new() { Header = "PR Number", ValueSelector = r => r.PrNumber },
+        new() { Header = "PO Number", ValueSelector = r => r.PoNumber },
+        new() { Header = "PO Date", ValueSelector = r => r.PoDate, Format = ExcelNumberFormat.Date },
+        new() { Header = "PO Amount", ValueSelector = r => r.PoAmount, Format = ExcelNumberFormat.Currency },
     };
 
     public async Task<object> GetAssetRegisterPreviewAsync(

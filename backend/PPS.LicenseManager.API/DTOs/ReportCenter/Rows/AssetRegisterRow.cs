@@ -32,5 +32,17 @@ public class AssetRegisterRow
 
     public decimal? PurchaseCost { get; set; }
 
+    // Populated only when this asset was created linked to a Purchase
+    // Requisition line (see Asset.PurchaseRequisitionId's model comment -
+    // linking is always optional, so these are null for most assets).
+    // PoDate/PoAmount are drawn from that PR's own PO fields (Phase 6).
+    public string? PrNumber { get; set; }
+
+    public string? PoNumber { get; set; }
+
+    public DateTime? PoDate { get; set; }
+
+    public decimal? PoAmount { get; set; }
+
     public bool IsActive { get; set; }
 }
