@@ -40,6 +40,7 @@ import MaterialCostCentersPage from '@/app/pages/material-movement/masters/mater
 import MaterialTransportersPage from '@/app/pages/material-movement/masters/material-transporters-page';
 import MaterialApprovalWorkflowsPage from '@/app/pages/material-movement/masters/material-approval-workflows-page';
 import MaterialMovementsPage from '@/app/pages/material-movement/movements/material-movements-page';
+import InventoryPage from '@/app/pages/inventory/inventory-page';
 import UtilizationDashboardPage from '@/app/pages/utilization/dashboard/utilization-dashboard-page';
 import UtilizationUploadPage from '@/app/pages/utilization/upload/utilization-upload-page';
 import UtilizationTierSettingsPage from '@/app/pages/utilization/settings/utilization-tier-settings-page';
@@ -99,6 +100,7 @@ function App() {
           <Route path="clients" element={<ClientsPage />} />
           <Route path="vendors" element={<VendorsPage />} />
           <Route path="material-movements" element={<MaterialMovementsPage />} />
+          <Route path="inventory" element={<InventoryPage />} />
           <Route path="office-locations" element={<OfficeLocationsPage />} />
           <Route path="access-management" element={<AccessManagementPage />} />
           <Route path="material-item-categories" element={<MaterialItemCategoriesPage />} />

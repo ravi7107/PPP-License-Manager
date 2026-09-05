@@ -147,6 +147,7 @@ builder.Services.AddScoped<ISoftwareService, SoftwareService>();
 builder.Services.AddScoped<ILicensePurchaseService, LicensePurchaseService>();
 
 builder.Services.AddScoped<IAssetService, AssetService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 
 builder.Services.AddScoped<
     IAssetAssignmentService,

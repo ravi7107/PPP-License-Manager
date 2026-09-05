@@ -122,6 +122,10 @@ import {
 
 import { getVendors, Vendor } from '@/lib/api/vendors.api';
 import { getCompanies, Company } from '@/lib/api/companies.api';
+import {
+  getAvailablePurchaseRequisitionLines,
+  PurchaseRequisitionAvailableLine,
+} from '@/lib/api/purchase-requisitions.api';
 
 import {
   exportAssetsToExcel,
@@ -584,6 +588,20 @@ export default function HardwarePage() {
     getVendors()
       .then((all) => setVendors(all.filter((v) => v.isActive)))
       .catch(() => setVendors([]));
+  }, []);
+
+  // Approved PR lines with remaining unfulfilled quantity, for the Add
+  // Asset form's optional "Link to Purchase Requisition" picker (see
+  // AssetFormDialog) - lets Add Asset carry over PR Number/PO Number/PO
+  // Date/PO Amount automatically instead of re-entering them.
+  const [purchaseRequisitionLines, setPurchaseRequisitionLines] = useState<
+    PurchaseRequisitionAvailableLine[]
+  >([]);
+
+  useEffect(() => {
+    getAvailablePurchaseRequisitionLines()
+      .then(setPurchaseRequisitionLines)
+      .catch(() => setPurchaseRequisitionLines([]));
   }, []);
 
   // Entities for the "complete" Excel import template's per-row
@@ -1483,6 +1501,16 @@ const handleSubmit = async (
 
       dualMonitor:
         Boolean(values.dualMonitor),
+
+      // Optional link to a Purchase Requisition line - see
+      // AssetFormDialog's "Link to Purchase Requisition" section. Only
+      // ever set from that picker (create-only in the UI); toFormValues
+      // round-trips an existing asset's link unchanged on edit so this
+      // never silently clears a link that already exists.
+      purchaseRequisitionLineItemId:
+        values.purchaseRequisitionLineItemId
+          ? Number(values.purchaseRequisitionLineItemId)
+          : null,
     };
 
     if (selectedAsset) {
@@ -2547,6 +2575,7 @@ const handleSubmit = async (
         )}
         departments={departments}
         vendors={vendors}
+        purchaseRequisitionLines={purchaseRequisitionLines}
         saving={saving || updating}
         onSubmit={handleSubmit}
         error={formError}

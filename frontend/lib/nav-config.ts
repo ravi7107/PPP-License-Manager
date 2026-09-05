@@ -14,7 +14,7 @@ import {
   Landmark,
   Briefcase,
   ShieldCheck, MapPinned, ClipboardList, Truck, Tags, Package, Wallet, GitBranch, ArrowLeftRight,
-  Contact, Settings, UploadCloud, PieChart, SlidersHorizontal, Bookmark, History } from 'lucide-react';
+  Contact, Settings, UploadCloud, PieChart, SlidersHorizontal, Bookmark, History, Boxes } from 'lucide-react';
 import { AppRole, ModuleKey, canAccessModule } from '@/lib/auth/roles';
 
 export interface NavItem {
@@ -48,6 +48,7 @@ export const navItems: NavItem[] = [
   { key: 'materialCostCenters', label: 'Material Cost Centers', path: '/material-cost-centers', icon: Wallet },
   { key: 'materialTransporters', label: 'Material Transporters', path: '/material-transporters', icon: Truck },
   { key: 'materialApprovalWorkflows', label: 'Approval Workflows', path: '/material-approval-workflows', icon: GitBranch },
+  { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes },
   // Order matters: app-layout.tsx resolves the "current" nav item via
   // navItems.find(item => pathname.startsWith(item.path)), so the more
   // specific /utilization/... paths must be listed BEFORE the bare
@@ -116,6 +117,7 @@ export const NAV_GROUPS: { label: string; keys: NavItem['key'][] }[] = [
       'materialApprovalWorkflows'
     ],
   },
+  { label: 'Inventory', keys: ['inventory'] },
   { label: 'Reporting', keys: ['reports', 'savedReports', 'reportHistory'] },
   { label: 'Tools', keys: ['search'] },
 ];

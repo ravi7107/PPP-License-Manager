@@ -2256,228 +2256,34 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
     }
 
     /*
-     * Renders the "Approval Workflow" section used only by the
-     * approval-request email: a horizontal 4+ column stepper (every real
-     * ApprovalStep plus the same always-appended Finance PO-issuance row
-     * BuildApprovalStepperHtml uses) for desktop-width clients, and a
-     * vertical one-stage-per-row fallback for narrow screens - toggled via
-     * the .desktop-only/.mobile-only classes declared in
-     * BuildApprovalRequestEmailHtml's own <style> block. This is
-     * deliberately a SEPARATE method from BuildApprovalStepperHtml (which
-     * stays exactly as-is, vertical-only) rather than a shared one,
-     * because the responsive toggle only works inside a document that
-     * actually defines those two CSS classes - BuildOutcomeEmailHtml's
-     * independent HTML document does not, so reusing this here would
-     * silently show both the desktop and mobile renderings stacked on top
-     * of each other there.
-     */
-    private static string BuildApprovalWorkflowHorizontalHtml(
-        Models.PurchaseRequisition record,
-        IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
-        int? highlightStepId)
-    {
-        // CIRCLE_PX must match the actual box drawn by Circle() below -
-        // used only for the connector arrow's vertical-centering math.
-        // Per feedback: a smaller circle than the original 32px.
-        const int circlePx = 24;
-        string Circle(string content, string bg, string textColor, string extraStyle = "") =>
-            "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-            "<td style=\"width:" + circlePx + "px;height:" + circlePx + "px;border-radius:" + (circlePx / 2) + "px;background-color:" + bg + ";" + extraStyle + "text-align:center;\">" +
-            "<span style=\"font-family:" + EmailFontStack + ";font-size:11px;font-weight:700;color:" + textColor + ";line-height:" + circlePx + "px;\">" + content + "</span>" +
-            "</td></tr></table>";
-
-        var ordered = allSteps.OrderBy(s => s.StepOrder).ToList();
-        var stages = new List<(string Circle, string TopLabel, string Name, string Status, string StatusColor, string Sub, bool Done)>();
-
-        foreach (var s in ordered)
-        {
-            string circle, statusLabel, statusColor, sub = "";
-            var approverName = s.AssignedApproverContactId.HasValue
-                ? (s.AssignedApproverContact?.FullName ?? "External contact")
-                : (s.AssignedApproverUser?.FullName ?? "Unassigned");
-
-            if (s.Status == "Approved")
-            {
-                circle = Circle("&#10003;", EmailApproveColor, "#ffffff");
-                statusLabel = "Approved";
-                statusColor = EmailApproveColor;
-                if (s.DecidedAt.HasValue) sub = s.DecidedAt.Value.ToString("dd MMM yyyy");
-            }
-            else if (s.Status == "Rejected")
-            {
-                circle = Circle("&#10005;", EmailRejectColor, "#ffffff");
-                statusLabel = "Rejected";
-                statusColor = EmailRejectColor;
-                if (s.DecidedAt.HasValue) sub = s.DecidedAt.Value.ToString("dd MMM yyyy");
-            }
-            else if (s.Status == "Skipped")
-            {
-                circle = Circle("&#8211;", "#CBD5E1", "#475569");
-                statusLabel = "Skipped";
-                statusColor = EmailFaintText;
-            }
-            else if (s.Id == highlightStepId)
-            {
-                circle = Circle(s.StepOrder.ToString(), EmailAmberColor, "#ffffff");
-                statusLabel = "Awaiting Your Decision";
-                statusColor = EmailAmberColor;
-                sub = "(You are here)";
-            }
-            else
-            {
-                circle = Circle(s.StepOrder.ToString(), "#ffffff", EmailMutedText, "border:2px solid " + EmailBorderColor + ";");
-                statusLabel = "Not Started";
-                statusColor = EmailFaintText;
-            }
-
-            // "done" drives the connector AFTER this stage: green once
-            // this stage has actually been decided (Approved), neutral
-            // gray otherwise - an amber "awaiting decision" stage hasn't
-            // forwarded anything yet, so its outgoing connector stays gray.
-            stages.Add((circle, "Stage " + s.StepOrder, approverName, statusLabel, statusColor, sub, s.Status == "Approved"));
-        }
-
-        string financeCircle, financeStatus, financeColor;
-        if (record.Status == "Rejected")
-        {
-            financeCircle = Circle("&#8211;", "#CBD5E1", "#475569");
-            financeStatus = "Skipped";
-            financeColor = EmailFaintText;
-        }
-        else if (record.Status == "Approved" && !string.IsNullOrWhiteSpace(record.PoNumber))
-        {
-            financeCircle = Circle("&#10003;", EmailApproveColor, "#ffffff");
-            financeStatus = "PO Issued";
-            financeColor = EmailApproveColor;
-        }
-        else if (record.Status == "Approved")
-        {
-            financeCircle = Circle("&#8377;", EmailAmberColor, "#ffffff");
-            financeStatus = "Awaiting Finance";
-            financeColor = EmailAmberColor;
-        }
-        else
-        {
-            financeCircle = Circle("&#8377;", "#ffffff", EmailMutedText, "border:2px dashed " + EmailBorderColor + ";");
-            financeStatus = "Not Started";
-            financeColor = EmailFaintText;
-        }
-        stages.Add((financeCircle, "Finance", "Finance", financeStatus, financeColor, "", false));
-
-        var n = stages.Count;
-        // Content width the stepper table actually renders at: the 640px
-        // email container minus this section's own 28px+28px side padding
-        // (see the "APPROVAL WORKFLOW" <td> below).
-        const int contentPx = 640 - 28 - 28;
-        // Fixed pixel width per connector column. The previous version
-        // gave connector columns NO explicit width while stage columns
-        // claimed 100%/n each - with only 2 stage columns (a single-
-        // approval-stage PR + Finance, e.g. one real production PR) that
-        // leaves nothing for the connector column to render in, and
-        // different email clients resolved the resulting over-100% table
-        // to different (often near-0px) widths for it - real inboxes
-        // collapsed it to an invisible sliver, which is why a live
-        // approval email showed a bare gap between the two stage circles
-        // with no line at all. A small FIXED connector width, with stage
-        // columns sized off the remainder, keeps every column honest
-        // regardless of how many approval stages a PR has.
-        const int connectorPx = 44;
-        var nConnectors = n - 1;
-        var stagePct = (contentPx - connectorPx * nConnectors) / (double)contentPx * 100.0 / n;
-        var stagePctStr = stagePct.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-
-        var circlesRow = new StringBuilder("<tr>");
-        var labelsRow = new StringBuilder("<tr>");
-        for (var i = 0; i < n; i++)
-        {
-            var st = stages[i];
-            circlesRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + stagePctStr + "%;\">" + st.Circle + "</td>");
-            if (i < n - 1)
-            {
-                // Connector = a right-pointing arrow glyph, vertically
-                // centered on the circle row via a fixed-height/matching
-                // line-height cell - the same reliable email-safe
-                // centering technique the circles themselves use. Reads
-                // unambiguously as "forwarding to the next approval stage"
-                // without relying on background-color line rendering
-                // (which real clients collapsed away entirely - see
-                // connectorPx's comment above) or negative-margin tricks,
-                // both unreliable across real email clients. Green once
-                // the stage to its left is actually Approved; neutral gray
-                // otherwise (including the currently-awaiting amber stage,
-                // which hasn't forwarded anything yet).
-                var arrowColor = st.Done ? EmailApproveColor : EmailFaintText;
-                circlesRow.Append("<td align=\"center\" style=\"width:" + connectorPx + "px;height:" + circlePx + "px;line-height:" + circlePx + "px;font-family:" + EmailFontStack + ";font-size:17px;font-weight:700;color:" + arrowColor + ";\" valign=\"middle\">&#8594;</td>");
-            }
-            // Per feedback on the live email: keep the circle/arrow exactly
-            // as they are (green filled + tick once Approved, arrow
-            // forwarding to the next stage) but drop everything under the
-            // circle except the approver's name - no "Stage N" label, no
-            // status text, no "(You are here)"/decided-date sub-line. The
-            // circle's own color/fill already communicates status.
-            labelsRow.Append("<td align=\"center\" valign=\"top\" style=\"width:" + stagePctStr + "%;padding-top:9px;\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "</td>");
-            if (i < n - 1) labelsRow.Append("<td></td>");
-        }
-        circlesRow.Append("</tr>");
-        labelsRow.Append("</tr>");
-
-        var mobileRows = new StringBuilder();
-        for (var i = 0; i < n; i++)
-        {
-            var st = stages[i];
-            var isLast = i == n - 1;
-            var connectorColor = st.Done ? EmailApproveColor : EmailBorderColor;
-            var connector = isLast ? "" :
-                "<div style=\"width:2px;height:22px;background-color:" + connectorColor + ";margin:2px 0 2px " + (circlePx / 2 - 1) + "px;\"></div>";
-            // Same simplification as the desktop labels row above - name
-            // only, no status text/sub-line.
-            mobileRows.Append("<tr><td style=\"padding:0 20px;\">" +
-                "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-                "<td valign=\"top\">" + st.Circle + "</td>" +
-                "<td style=\"padding-left:12px;\" valign=\"middle\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailSlateStrong + ";\">" + System.Net.WebUtility.HtmlEncode(st.Name) + "</div>" +
-                "</td></tr></table>" + connector + "</td></tr>");
-        }
-
-        var sb = new StringBuilder();
-        sb.Append("<tr><td class=\"desktop-only\" style=\"padding:26px 28px 28px;\">");
-        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;margin-bottom:16px;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
-        sb.Append(circlesRow.ToString());
-        sb.Append(labelsRow.ToString());
-        sb.Append("</table>");
-        sb.Append("</td></tr>");
-
-        sb.Append("<tr><td style=\"padding:0;\">");
-        sb.Append("<table role=\"presentation\" class=\"mobile-only\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
-        sb.Append("<tr><td style=\"padding:26px 20px 16px;\">");
-        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.04em;color:" + EmailSlateStrong + ";text-transform:uppercase;border-left:3px solid " + EmailBrandColor + ";padding-left:8px;\">Approval Workflow</div>");
-        sb.Append("</td></tr>");
-        sb.Append(mobileRows.ToString());
-        sb.Append("<tr><td style=\"height:12px;line-height:12px;font-size:1px;\">&nbsp;</td></tr>");
-        sb.Append("</table>");
-        sb.Append("</td></tr>");
-
-        return sb.ToString();
-    }
-
-    /*
-     * Full HTML for the approval-request email - redesigned (per a
-     * management-approved visual reference) to an executive-ready,
-     * O365/Outlook-safe layout: a dark-navy header with a hosted logo, an
-     * icon-led metadata strip (Request ID/Submitted/Status), icon-led
-     * Requested By/Entity rows, an itemized Supporting Documents list with
-     * real per-file links, a full line-item table with GST breakdown and
-     * Grand Total, a single "Review & Approve" CTA, and a responsive
-     * (horizontal desktop / vertical mobile) Approval Workflow stepper.
+     * Full HTML for the approval-request email - a compact, single-glance
+     * O365/Outlook-safe layout (per direct feedback that the previous
+     * version needed too much scrolling and, in Outlook specifically,
+     * rendered its metadata strip and Approval Workflow stepper twice -
+     * see BuildApprovalWorkflowHorizontalHtml's removal below): a
+     * dark-navy header with the hosted PPS logo, a single "Approval
+     * Required" summary row (icon + heading + description, with the
+     * current stage's status as a badge on the right - no separate title/
+     * context rows), one unified 5-column metadata strip (PR Number,
+     * Requested By, Entity, Vendor, Submitted On), Business Justification
+     * / Supporting Documents, a full line-item table with GST breakdown
+     * and Grand Total, and a single two-column CTA (icon/heading/
+     * description on the left, the review button on the right).
      *
-     * Two deliberate departures from the visual reference, both for
-     * correctness rather than fidelity: the revision-context line says
-     * "previously approved" rather than "rejected" (CreateRevisionAsync
-     * only ever allows revising an already-Approved PR, never a rejected
-     * one), and the CTA links to the plain reviewLink rather than a
+     * Deliberately dropped from the previous version: the horizontal/
+     * vertical responsive Approval Workflow stepper. It was the single
+     * biggest contributor to email length, and - like the metadata strip
+     * - relied on a .desktop-only/.mobile-only CSS toggle that Outlook
+     * doesn't honor reliably, so it was also rendering twice there. The
+     * "Awaiting Your Decision · Stage N of M" badge in the summary row
+     * still carries the current-stage context that mattered most; if
+     * per-stage visibility (who approved, when) turns out to still be
+     * needed in this email specifically, it's already available on the
+     * portal via reviewLink and in BuildOutcomeEmailHtml's own stepper
+     * once a final decision is made.
+     *
+     * One deliberate departure from strict fidelity to any reference
+     * layout: the CTA links to the plain reviewLink rather than a
      * pre-filled ?action=approve one - the portal landing page is the only
      * place a decision is ever actually recorded (see the security
      * disclaimer below), so a single neutral link avoids visually biasing
@@ -2485,17 +2291,20 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
      *
      * Images (logo + icon set) are hosted HTTPS URLs under
      * {publicApiBaseUrl}/api/branding/*, not base64 data URIs - see
-     * BrandingAssetUrl's comment for why.
+     * BrandingAssetUrl's comment for why. The logo itself is the real,
+     * checked-in PPS wordmark (wwwroot/branding/logo.jpg), unchanged by
+     * this redesign.
      *
      * Every field rendered here comes from a column or navigation that's
      * already real on `record` - nothing is fabricated. Cost Center,
      * Priority, and Required-By date were deliberately left out rather
      * than invented, matching the same "Not Specified" discipline used
-     * elsewhere in this module. Department and Vendor - present in the
-     * visual reference's earlier iteration but not its final metadata
-     * rows - are kept as a compact line under the title rather than
-     * dropped outright, since they were real, previously-requested
-     * context.
+     * elsewhere in this module. The PR Number card's sub-label is the
+     * PR's own Title (the closest real field to a short "category" line
+     * under the PR number) - PurchaseRequisition has no separate Category
+     * field, only individual line items do. Department, previously shown
+     * as its own line under the old Title heading, is not carried into
+     * this compact layout - it stays available on the portal.
      */
     private static string BuildApprovalRequestEmailHtml(
         Models.PurchaseRequisition record,
@@ -2512,11 +2321,13 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         // defaults below. Keeping this one template for both, rather than
         // a separate simpler one for Finance, is deliberate: per feedback,
         // every recipient (each approver, and Finance) should see the same
-        // header/metadata/justification/documents/line-items+GST/stepper
-        // layout, not a cut-down version for Finance.
-        string ctaBadgeText = "YOUR ACTION IS REQUIRED",
+        // header/metadata strip/justification/documents/line-items+GST
+        // layout, not a cut-down version for Finance. Title case (not the
+        // previous all-caps "YOUR ACTION IS REQUIRED"/"REVIEW & APPROVE")
+        // to read as a normal heading/button, not a shouty badge.
+        string ctaBadgeText = "Your Action is Required",
         string ctaBodyText = "Please review the details and record your decision on the PPS SmartAsset portal.",
-        string ctaButtonLabel = "REVIEW & APPROVE",
+        string ctaButtonLabel = "Review Your Decision",
         string ctaFooterText = "This will redirect you to the PPS SmartAsset portal<br/>to record your decision securely.")
     {
         // step is null only for the Finance recipient - by the time Finance
@@ -2529,7 +2340,6 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         var prLabel = record.PrNumber ?? $"#{record.Id}";
         var requesterName = record.RequestedByUser?.FullName ?? "A colleague";
         var employeeCode = record.RequestedByUser?.EmployeeCode;
-        var departmentName = record.Department?.DepartmentName;
         var companyName = record.Company?.Name;
         var gstin = record.Company?.GSTNumber;
         var vendorName = record.Vendor?.VendorName;
@@ -2563,35 +2373,34 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\" />");
         sb.Append("<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->");
         sb.Append("<title></title>");
-        // Outlook desktop (Word engine) never processes @media, so it only
-        // ever sees the DEFAULT .mobile-only rule below (display:none) -
-        // meaning it always renders the desktop-only blocks and never the
-        // mobile-only ones, which is exactly the layout that host needs. A
-        // real mobile client that DOES support @media (Outlook mobile app,
-        // OWA, Gmail, Apple Mail) gets the query's swap instead. This
-        // progressive-disclosure approach replaced an earlier attempt at
-        // collapsing table cells via display:block, which left the
-        // metadata strip's divider cells stuck mid-row on narrow screens.
+        // No .desktop-only/.mobile-only toggle anywhere in this template
+        // any more (see the method doc comment above) - every section here
+        // is a single rendering shown to every client, so there's nothing
+        // left for Outlook's lack of @media support (or its separate,
+        // unrelated unreliability hiding <table> via display:none) to
+        // duplicate. .stack-col/.stack-col-a/.stack-col-b still do real
+        // work: they collapse a genuinely two-column section (Business
+        // Justification/Supporting Documents, and the CTA) to one column
+        // on an actual narrow screen, which real @media-supporting clients
+        // apply and Outlook desktop simply never sees - Outlook just always
+        // renders the two-column desktop arrangement, which is correct for
+        // it either way.
         sb.Append("<style>");
         sb.Append("body,table,td{font-family:" + EmailFontStack + ";}");
         sb.Append("table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}");
         sb.Append("img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;}");
-        sb.Append(".mobile-only{display:none !important;}");
         sb.Append("@media only screen and (max-width:640px){");
         sb.Append(".email-container{width:100% !important;}");
         sb.Append(".stack-col{display:block !important;width:100% !important;}");
-        // Business Justification / Supporting Documents: side-by-side on
-        // desktop via padding-left/right:14px on each column - once
-        // stacked on mobile that same padding just reads as a stray left
-        // indent on the second column, with no matching visual gap above
-        // it. Reset the horizontal padding and swap in a real vertical
-        // gap instead.
+        // Business Justification / Supporting Documents, and the CTA:
+        // side-by-side on desktop via padding-left/right:14px on each
+        // column - once stacked on mobile that same padding just reads as
+        // a stray left indent on the second column, with no matching
+        // visual gap above it. Reset the horizontal padding and swap in a
+        // real vertical gap instead.
         sb.Append(".stack-col-a{padding-right:0 !important;}");
         sb.Append(".stack-col-b{padding-left:0 !important;padding-top:20px !important;}");
         sb.Append(".px-mobile{padding-left:20px !important;padding-right:20px !important;}");
-        sb.Append(".desktop-only{display:none !important;}");
-        sb.Append("table.mobile-only{display:table !important;}");
-        sb.Append("div.mobile-only,td.mobile-only{display:block !important;}");
         sb.Append("}");
         sb.Append("</style>");
         sb.Append("</head>");
@@ -2622,87 +2431,89 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
         sb.Append("</tr></table>");
         sb.Append("</td>");
         sb.Append("<td align=\"right\" valign=\"middle\" style=\"white-space:nowrap;\">");
-        sb.Append("<img src=\"" + Icon("icon-shield-white.png") + "\" width=\"13\" height=\"13\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:13px;height:13px;margin-right:5px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailHeaderMutedText + ";vertical-align:middle;\">Secure &middot; Confidential &middot; Automated</span>");
+        sb.Append("<img src=\"" + Icon("icon-shield-white.png") + "\" width=\"13\" height=\"13\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:13px;height:13px;margin-right:5px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailHeaderMutedText + ";vertical-align:middle;\">Secure&nbsp;&nbsp;|&nbsp;&nbsp;Confidential&nbsp;&nbsp;|&nbsp;&nbsp;Automated</span>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
-        // ===== METADATA STRIP : Request ID / Submitted / Status, each
-        // with a small icon - desktop as 3 columns side by side, mobile as
-        // stacked rows (see the .mobile-only/.desktop-only style above). =====
+        // ===== APPROVAL REQUIRED SUMMARY : icon + heading + one-line
+        // description on the left, the current stage's status as a single
+        // badge on the right (replaces the old separate metadata "Status"
+        // card and the old standalone Title <h1> + stepper badge - one
+        // compact row instead of three). isFinanceMode gets its own
+        // heading/description, matching this same shape. =====
         var pendingSub = pendingDays >= 1
-            ? "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailRejectColor + ";font-weight:600;margin-top:1px;\">Pending " + pendingDays + (pendingDays == 1 ? " day" : " days") + "</div>"
+            ? "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailRejectColor + ";font-weight:600;margin-top:2px;\">Pending " + pendingDays + (pendingDays == 1 ? " day" : " days") + "</div>"
             : "";
-        // "Awaiting Finance" mirrors the exact wording the workflow
-        // stepper already uses for this same state (see the Finance
-        // circle's status in BuildApprovalWorkflowHorizontalHtml) - same
-        // amber color/icon as an approver's "Awaiting Your Decision", no
-        // new color introduced.
         var statusValueText = isFinanceMode ? "Awaiting Finance" : "Awaiting Your Decision";
         var statusSubText = isFinanceMode ? "" : ("Stage " + step!.StepOrder + " of " + record.RequiredApprovalStageCount);
+        var summaryHeading = isFinanceMode ? "PO Issuance Required" : "Approval Required";
+        var summaryDescription = isFinanceMode
+            ? "This purchase requisition has been fully approved by all reviewers and now requires PO issuance."
+            : "A purchase requisition has been submitted and requires your review and approval.";
 
-        sb.Append("<tr><td class=\"desktop-only\" style=\"background-color:#ffffff;border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<tr><td style=\"padding:22px 28px 0;\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
-        sb.Append(MetaCard(Icon("icon-document-navy.png"), EmailIconBlueBg, "PR Number", Enc(prLabel), "", "", EmailSlateStrong));
-        sb.Append("<td style=\"width:1px;background-color:" + EmailBorderColor + ";font-size:0;line-height:0;\">&nbsp;</td>");
-        sb.Append(MetaCard(Icon("icon-calendar-navy.png"), EmailIconBlueBg, "Submitted On", submittedLabel, "", "", EmailSlateStrong));
-        sb.Append("<td style=\"width:1px;background-color:" + EmailBorderColor + ";font-size:0;line-height:0;\">&nbsp;</td>");
-        sb.Append(MetaCard(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", statusValueText, statusSubText, pendingSub, EmailAmberColor));
+
+        sb.Append("<td class=\"stack-col stack-col-a\" valign=\"top\" style=\"padding-right:14px;\">");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append("<td style=\"width:40px;height:40px;border-radius:20px;background-color:" + EmailIconBlueBg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">");
+        sb.Append("<img src=\"" + Icon("icon-document-navy.png") + "\" width=\"19\" height=\"19\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:19px;height:19px;\" />");
+        sb.Append("</td>");
+        sb.Append("<td style=\"padding-left:12px;\" valign=\"middle\">");
+        sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:16.5px;font-weight:700;color:" + EmailSlateStrong + ";\">" + summaryHeading + "</div>");
+        sb.Append("</td>");
         sb.Append("</tr></table>");
-        sb.Append("</td></tr>");
-
-        sb.Append("<tr><td style=\"background-color:#ffffff;border-bottom:1px solid " + EmailBorderColor + ";padding:0;\">");
-        sb.Append("<table role=\"presentation\" class=\"mobile-only\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
-        sb.Append(MobileMetaRow(Icon("icon-document-navy.png"), EmailIconBlueBg, "PR Number", Enc(prLabel), "", "", EmailSlateStrong, true));
-        sb.Append(MobileMetaRow(Icon("icon-calendar-navy.png"), EmailIconBlueBg, "Submitted On", submittedLabel, "", "", EmailSlateStrong, true));
-        sb.Append(MobileMetaRow(Icon("icon-clock-orange.png"), EmailIconAmberBg, "Status", statusValueText, statusSubText, pendingSub, EmailAmberColor, false));
-        sb.Append("</table>");
-        sb.Append("</td></tr>");
-
-        // ===== TITLE + REVISION + SUBMITTED-BY/DEPARTMENT/VENDOR LINE =====
-        var titleBadgeText = isFinanceMode
-            ? "All Approvals Complete &middot; Finance Action Required"
-            : "Approval Requested &middot; Stage " + step!.StepOrder + " of " + record.RequiredApprovalStageCount;
-        sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
-        sb.Append("<div style=\"font-size:11.5px;font-weight:700;letter-spacing:0.06em;color:" + EmailBrandColor + ";text-transform:uppercase;margin-bottom:8px;\">" + titleBadgeText + "</div>");
-        sb.Append("<h1 style=\"margin:0 0 8px;font-size:23px;line-height:1.35;color:" + EmailSlateStrong + ";font-family:" + EmailFontStack + ";\">");
-        sb.Append(Enc(prLabel) + " &mdash; " + Enc(record.Title));
-        if (isRevision)
-        {
-            sb.Append("<span style=\"display:inline-block;margin-left:6px;padding:2px 8px;font-size:11.5px;font-weight:700;color:" + EmailBrandColor + ";background-color:#EFF6FF;border-radius:20px;vertical-align:middle;\">Rev " + record.RevisionNumber.ToString("00") + "</span>");
-        }
-        sb.Append("</h1>");
-
+        sb.Append("<p style=\"margin:10px 0 0;font-size:13px;line-height:1.55;color:" + EmailMutedText + ";\">" + summaryDescription + "</p>");
+        sb.Append("<p style=\"margin:8px 0 0;font-size:14px;font-weight:700;color:" + EmailSlateStrong + ";\">" + Enc(record.Title) + "</p>");
         // A revision only ever comes from an already-APPROVED PR
         // (CreateRevisionAsync enforces that), never a rejected one - so
         // this deliberately never says "rejected".
         if (isRevision && !string.IsNullOrWhiteSpace(previousPrLabel))
         {
-            sb.Append("<p style=\"margin:0 0 4px;font-size:13px;line-height:1.5;color:" + EmailMutedText + ";\">");
+            sb.Append("<p style=\"margin:8px 0 0;font-size:12.5px;line-height:1.5;color:" + EmailMutedText + ";\">");
             sb.Append("This is a revision of the previously approved <a href=\"" + reviewLink + "\" style=\"color:" + EmailBrandColor + ";text-decoration:none;font-weight:600;\">" + Enc(previousPrLabel) + "</a> &mdash; see what changed in the portal.");
+            sb.Append("<span style=\"display:inline-block;margin-left:6px;padding:2px 8px;font-size:11px;font-weight:700;color:" + EmailBrandColor + ";background-color:#EFF6FF;border-radius:20px;vertical-align:middle;\">Rev " + record.RevisionNumber.ToString("00") + "</span>");
             sb.Append("</p>");
         }
+        sb.Append("</td>");
 
-        var metaLineParts = new List<string>
-        {
-            "Submitted by: <strong style=\"color:" + EmailSlateStrong + ";\">" + Enc(requesterName) + "</strong>" +
-                (string.IsNullOrWhiteSpace(employeeCode) ? "" : " (" + Enc(employeeCode) + ")")
-        };
-        if (!string.IsNullOrWhiteSpace(departmentName))
-            metaLineParts.Add("Department: <strong style=\"color:" + EmailSlateStrong + ";\">" + Enc(departmentName) + "</strong>");
-        if (!string.IsNullOrWhiteSpace(vendorName))
-            metaLineParts.Add("Vendor: <strong style=\"color:" + EmailSlateStrong + ";\">" + Enc(vendorName) + "</strong>");
-        sb.Append("<p style=\"margin:8px 0 0;font-size:13.5px;color:" + EmailMutedText + ";\">" + string.Join(" &middot; ", metaLineParts) + "</p>");
+        sb.Append("<td class=\"stack-col stack-col-b\" valign=\"top\" width=\"210\" style=\"padding-left:14px;\">");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailIconAmberBg + ";border-left:3px solid " + EmailAmberColor + ";\"><tr>");
+        sb.Append("<td style=\"padding:12px 14px;\">");
+        sb.Append("<img src=\"" + Icon("icon-clock-orange.png") + "\" width=\"14\" height=\"14\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:14px;height:14px;margin-right:5px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailAmberColor + ";vertical-align:middle;\">" + statusValueText + "</span>");
+        if (!string.IsNullOrEmpty(statusSubText))
+            sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";margin-top:2px;\">" + statusSubText + "</div>");
+        sb.Append(pendingSub);
+        sb.Append("</td>");
+        sb.Append("</tr></table>");
+        sb.Append("</td>");
+
+        sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
-        // ===== REQUESTED BY / ENTITY (icon rows) =====
-        sb.Append("<tr><td style=\"padding:18px 28px 0;\" class=\"px-mobile\">");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-top:1px solid " + EmailBorderColor + ";padding-top:18px;\"><tr>");
-        sb.Append(ContextRow(Icon("icon-person-navy.png"), EmailIconBlueBg, "Requested By",
-            Enc(requesterName) + (string.IsNullOrWhiteSpace(employeeCode) ? "" : " <span style=\"color:" + EmailFaintText + ";font-weight:400;\">(" + Enc(employeeCode) + ")</span>")));
-        sb.Append(ContextRow(Icon("icon-building-navy.png"), EmailIconBlueBg, "Entity",
-            (string.IsNullOrWhiteSpace(companyName) ? "Not Specified" : Enc(companyName)) +
-            (string.IsNullOrWhiteSpace(gstin) ? "" : "<br/><span style=\"font-size:11px;color:" + EmailFaintText + ";font-weight:400;\">GSTIN: " + Enc(gstin) + "</span>")));
+        // ===== METADATA STRIP : PR Number / Requested By / Entity /
+        // Vendor / Submitted On, each with a small icon - a single
+        // unified rendering (no responsive desktop/mobile duplication -
+        // see the method doc comment above for why that was removed).
+        // The PR Number card's sub-label is the PR's own Title (the
+        // closest thing to a short "what is this" line under the
+        // number); PurchaseRequisition has no separate Category field. ====
+        sb.Append("<tr><td style=\"background-color:#ffffff;border-top:1px solid " + EmailBorderColor + ";border-bottom:1px solid " + EmailBorderColor + ";\">");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+        sb.Append(MetaCard("PR Number", Enc(prLabel), "", "", EmailSlateStrong));
+        sb.Append(Divider());
+        sb.Append(MetaCard("Requested By", Enc(requesterName),
+            string.IsNullOrWhiteSpace(employeeCode) ? "" : "(" + Enc(employeeCode) + ")", "", EmailSlateStrong));
+        sb.Append(Divider());
+        sb.Append(MetaCard("Entity",
+            string.IsNullOrWhiteSpace(companyName) ? "Not Specified" : Enc(companyName),
+            string.IsNullOrWhiteSpace(gstin) ? "" : "GSTIN: " + Enc(gstin), "", EmailSlateStrong));
+        sb.Append(Divider());
+        sb.Append(MetaCard("Vendor",
+            string.IsNullOrWhiteSpace(vendorName) ? "Not Specified" : Enc(vendorName), "", "", EmailSlateStrong));
+        sb.Append(Divider());
+        sb.Append(MetaCard("Submitted On", submittedLabel, "", "", EmailSlateStrong));
         sb.Append("</tr></table>");
         sb.Append("</td></tr>");
 
@@ -2726,12 +2537,10 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             foreach (var a in shownAttachments)
             {
                 var docUrl = publicApiBaseUrl + a.StoredPath;
-                sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-bottom:12px;\"><tr>");
-                sb.Append("<td style=\"width:22px;\" valign=\"top\"><img src=\"" + Icon("icon-document-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:block;margin-top:2px;width:16px;height:16px;\" /></td>");
-                sb.Append("<td valign=\"top\">");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:13px;font-weight:700;color:" + EmailSlateStrong + ";line-height:1.4;\">" + Enc(a.FileName) + "</div>");
-                sb.Append("<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailMutedText + ";margin-top:1px;\">" + Enc(FriendlyAttachmentType(a.AttachmentType)) + " &nbsp;&middot;&nbsp; " + AttachmentFormatLabel(a.FileName) + " &nbsp;&middot;&nbsp; <a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:600;text-decoration:none;\">View</a></div>");
-                sb.Append("</td></tr></table>");
+                sb.Append("<div style=\"margin-bottom:8px;font-family:" + EmailFontStack + ";font-size:12.5px;line-height:1.45;\">");
+                sb.Append("<a href=\"" + docUrl + "\" style=\"color:" + EmailBrandColor + ";font-weight:700;text-decoration:none;\">" + Enc(a.FileName) + "</a>");
+                sb.Append("<span style=\"color:" + EmailMutedText + ";\"> (" + AttachmentFormatLabel(a.FileName) + ")</span>");
+                sb.Append("</div>");
             }
             if (remainingAttachmentCount > 0)
             {
@@ -2796,48 +2605,45 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             sb.Append("</td></tr>");
         }
 
-        // ===== PRIMARY CTA ===== a single "Review & Approve" button
-        // linking to the plain review link (no ?action= bias) - the
-        // decision itself is only ever recorded on the portal landing
-        // page after an explicit confirming click there (see method
-        // comment above), so a neutral link avoids visually steering the
-        // reader toward Approve before they've reviewed anything.
+        // ===== PRIMARY CTA ===== a compact two-column action bar - icon,
+        // heading and description on the left, the button vertically
+        // centered on the right - linking to the plain review link (no
+        // ?action= bias). The decision itself is only ever recorded on
+        // the portal landing page after an explicit confirming click
+        // there (see method comment above), so a neutral link avoids
+        // visually steering the reader toward Approve before they've
+        // reviewed anything.
         sb.Append("<tr><td style=\"padding:26px 28px 0;\" class=\"px-mobile\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:" + EmailIconBlueBg + ";border:1px solid #DCE7FA;\"><tr>");
-        sb.Append("<td align=\"center\" style=\"padding:22px 24px;\">");
-        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;letter-spacing:0.02em;\">" + ctaBadgeText + "</span>");
-        sb.Append("<p style=\"margin:8px 0 18px;font-size:13px;color:" + EmailSlateText + ";\">" + ctaBodyText + "</p>");
 
+        sb.Append("<td class=\"stack-col stack-col-a\" valign=\"middle\" style=\"padding:20px 24px;\">");
+        sb.Append("<img src=\"" + Icon("icon-shield-blue.png") + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;margin-right:6px;\" /><span style=\"font-family:" + EmailFontStack + ";font-size:15px;font-weight:700;color:" + EmailBrandColor + ";vertical-align:middle;\">" + ctaBadgeText + "</span>");
+        sb.Append("<p style=\"margin:6px 0 0;font-size:13px;line-height:1.5;color:" + EmailSlateText + ";\">" + ctaBodyText + "</p>");
+        sb.Append("</td>");
+
+        sb.Append("<td class=\"stack-col stack-col-b\" valign=\"middle\" width=\"220\" style=\"padding:0 24px 20px;\">");
         sb.Append("<!--[if mso]>");
-        sb.Append("<v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" href=\"" + reviewLink + "\" style=\"height:46px;v-text-anchor:middle;width:320px;\" arcsize=\"12%\" stroke=\"f\" fillcolor=\"" + EmailBrandColor + "\">");
-        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:16px;font-weight:bold;\">" + ctaButtonLabel + " &#8594;</center>");
+        sb.Append("<v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" href=\"" + reviewLink + "\" style=\"height:44px;v-text-anchor:middle;width:200px;\" arcsize=\"12%\" stroke=\"f\" fillcolor=\"" + EmailBrandColor + "\">");
+        sb.Append("<center style=\"color:#ffffff;font-family:" + EmailFontStack + ";font-size:14px;font-weight:bold;\">" + ctaButtonLabel + " &#8594;</center>");
         sb.Append("</v:roundrect>");
         sb.Append("<![endif]-->");
         sb.Append("<!--[if !mso]><!-- -->");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
         sb.Append("<td align=\"center\" style=\"border-radius:6px;background-color:" + EmailBrandColor + ";\">");
-        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;max-width:400px;padding:15px 32px;font-family:" + EmailFontStack + ";font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;letter-spacing:0.02em;\">" + ctaButtonLabel + " &#8594;</a>");
+        sb.Append("<a href=\"" + reviewLink + "\" style=\"display:inline-block;width:100%;padding:13px 18px;font-family:" + EmailFontStack + ";font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;box-sizing:border-box;text-align:center;\">" + ctaButtonLabel + " &#8594;</a>");
         sb.Append("</td>");
         sb.Append("</tr></table>");
         sb.Append("<!--<![endif]-->");
-
-        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;line-height:1.6;color:" + EmailMutedText + ";\">" + ctaFooterText + "</p>");
         sb.Append("</td>");
-        sb.Append("</tr></table>");
-        sb.Append("</td></tr>");
 
-        // ===== APPROVAL WORKFLOW ===== responsive horizontal/vertical
-        // stepper (see BuildApprovalWorkflowHorizontalHtml's comment).
-        // step?.Id is null in Finance mode - nothing needs highlighting
-        // there since every approval step is already Approved (green tick)
-        // and the Finance circle itself already renders amber/"current" on
-        // its own, per that method's existing status logic.
-        sb.Append(BuildApprovalWorkflowHorizontalHtml(record, allSteps, step?.Id));
+        sb.Append("</tr></table>");
+        sb.Append("<p style=\"margin:10px 28px 22px;font-size:11.5px;line-height:1.5;color:" + EmailMutedText + ";text-align:center;\" class=\"px-mobile\">" + ctaFooterText + "</p>");
+        sb.Append("</td></tr>");
 
         // ===== FOOTER =====
         sb.Append("<tr><td style=\"padding:14px 28px;background-color:" + EmailPanelBg + ";border-top:1px solid " + EmailBorderColor + ";\" class=\"px-mobile\">");
         sb.Append("<p style=\"margin:0;font-size:11.5px;color:" + EmailMutedText + ";line-height:1.6;text-align:center;font-family:" + EmailFontStack + ";\">");
-        sb.Append("<img src=\"" + Icon("icon-lock-navy.png") + "\" width=\"11\" height=\"11\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:11px;height:11px;margin-right:4px;\" />Secure link expires <strong style=\"color:" + EmailSlateStrong + ";\">" + tokenExpiresAt.ToString("dd MMM yyyy") + "</strong> and can only be used once. &nbsp;|&nbsp; Please do not forward this email.");
+        sb.Append("<img src=\"" + Icon("icon-lock-navy.png") + "\" width=\"11\" height=\"11\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:11px;height:11px;margin-right:4px;\" />Secure link valid until <strong style=\"color:" + EmailSlateStrong + ";\">" + tokenExpiresAt.ToString("dd MMM yyyy") + "</strong> and can only be used once. &nbsp;|&nbsp; Please do not forward this email.");
         sb.Append("</p>");
         sb.Append("</td></tr>");
         sb.Append("<tr><td style=\"padding:14px 28px;background-color:" + EmailHeaderNavy + ";\" class=\"px-mobile\">");
@@ -2855,65 +2661,25 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
 
         return sb.ToString();
 
-        // Local helpers for the two icon-led metadata/context row shapes
-        // used above (desktop metadata card, mobile metadata row, and the
-        // Requested By/Entity context row) - kept local since they close
-        // over EmailFontStack/color constants and aren't needed elsewhere.
-        static string MetaCard(string iconUrl, string bg, string label, string value, string sub, string pendingHtml, string valueColor)
+        // Local helpers for the icon-led metadata card and its divider
+        // cell, used by the single unified metadata strip above - kept
+        // local since they close over EmailFontStack/color constants and
+        // aren't needed elsewhere.
+        static string MetaCard(string label, string value, string sub, string pendingHtml, string valueColor)
         {
             var subHtml = string.IsNullOrEmpty(sub)
                 ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:1px;\">" + sub + "</div>";
+                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailSlateText + ";margin-top:2px;\">" + sub + "</div>";
             return "<td style=\"padding:14px 10px;\" align=\"center\" valign=\"top\">" +
-                "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-                "<td style=\"width:34px;height:34px;border-radius:17px;background-color:" + bg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">" +
-                "<img src=\"" + iconUrl + "\" width=\"17\" height=\"17\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:17px;height:17px;\" />" +
-                "</td>" +
-                "<td style=\"padding-left:8px;\" valign=\"middle\" align=\"left\">" +
                 "<div style=\"font-family:" + EmailFontStack + ";font-size:9.5px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
+                "<div style=\"font-family:" + EmailFontStack + ";font-size:13px;color:" + valueColor + ";font-weight:700;margin-top:3px;\">" + value + "</div>" +
                 subHtml + pendingHtml +
-                "</td></tr></table></td>";
+                "</td>";
         }
 
-        static string MobileMetaRow(string iconUrl, string bg, string label, string value, string sub, string pendingHtml, string valueColor, bool border)
-        {
-            var subHtml = string.IsNullOrEmpty(sub)
-                ? ""
-                : "<div style=\"font-family:" + EmailFontStack + ";font-size:11.5px;color:" + EmailSlateText + ";margin-top:2px;\">" + sub + "</div>";
-            var borderStyle = border ? "border-bottom:1px solid " + EmailBorderColor + ";" : "";
-            return "<tr><td style=\"padding:12px 20px;" + borderStyle + "\">" +
-                "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-                "<td style=\"width:32px;height:32px;border-radius:16px;background-color:" + bg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">" +
-                "<img src=\"" + iconUrl + "\" width=\"16\" height=\"16\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:16px;height:16px;\" />" +
-                "</td>" +
-                "<td style=\"padding-left:10px;\" valign=\"middle\" align=\"left\">" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:10.5px;color:" + EmailFaintText + ";text-transform:uppercase;letter-spacing:0.05em;\">" + label + "</div>" +
-                "<div style=\"font-family:" + EmailFontStack + ";font-size:13.5px;color:" + valueColor + ";font-weight:700;margin-top:1px;\">" + value + "</div>" +
-                subHtml + pendingHtml +
-                "</td></tr></table></td></tr>";
-        }
-
-        static string ContextRow(string iconUrl, string bg, string label, string valueHtml) =>
-            "<td class=\"stack-col\" style=\"padding:14px 18px;\" valign=\"top\" width=\"50%\">" +
-            "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
-            "<td style=\"width:38px;height:38px;border-radius:19px;background-color:" + bg + ";text-align:center;vertical-align:middle;\" valign=\"middle\">" +
-            "<img src=\"" + iconUrl + "\" width=\"18\" height=\"18\" alt=\"\" style=\"display:inline-block;vertical-align:middle;width:18px;height:18px;\" />" +
-            "</td>" +
-            "<td style=\"padding-left:10px;\" valign=\"middle\" align=\"left\">" +
-            "<div style=\"font-family:" + EmailFontStack + ";font-size:11px;color:" + EmailMutedText + ";text-transform:uppercase;letter-spacing:0.04em;\">" + label + "</div>" +
-            "<div style=\"font-family:" + EmailFontStack + ";font-size:13.5px;color:" + EmailSlateStrong + ";font-weight:600;margin-top:2px;\">" + valueHtml + "</div>" +
-            "</td></tr></table></td>";
+        static string Divider() =>
+            "<td style=\"width:1px;background-color:" + EmailBorderColor + ";font-size:0;line-height:0;\">&nbsp;</td>";
     }
-
-    /*
-     * Full HTML for the final-outcome email (sent to the requester once
-     * the requisition is fully approved or rejected at any stage) - same
-     * branded shell as the approval-request email, colored by outcome,
-     * with the same stepper at the bottom (highlightStepId null, since
-     * nothing is "awaiting decision" once there's a final outcome) so the
-     * requester can see the full trail without signing in.
-     */
     private static string BuildOutcomeEmailHtml(
         Models.PurchaseRequisition record,
         IReadOnlyList<PurchaseRequisitionApprovalStep> allSteps,
@@ -3472,9 +3238,9 @@ public class PurchaseRequisitionService : IPurchaseRequisitionService
             reviewLink,
             tokenExpiresAt,
             publicApiBaseUrl,
-            ctaBadgeText: "YOUR ACTION IS REQUIRED",
+            ctaBadgeText: "Your Action is Required",
             ctaBodyText: "Please verify the request and the attached quotation, then issue the PO and upload a copy on the PPS SmartAsset portal.",
-            ctaButtonLabel: "VERIFY & UPLOAD PO COPY",
+            ctaButtonLabel: "Verify & Upload PO Copy",
             ctaFooterText: "This will redirect you to the PPS SmartAsset portal<br/>to verify and upload the PO copy securely.");
     }
 

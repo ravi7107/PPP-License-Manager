@@ -82,6 +82,7 @@ public class AssetService : IAssetService
                 // optional), in which case every field below is correctly
                 // null/0 too.
                 PurchaseRequisitionId = a.PurchaseRequisitionId,
+                PurchaseRequisitionLineItemId = a.PurchaseRequisitionLineItemId,
                 PrNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PrNumber : null,
                 PoNumber = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoNumber : null,
                 PoDate = a.PurchaseRequisition != null ? a.PurchaseRequisition.PoDate : null,
@@ -237,6 +238,7 @@ public async Task<PagedResponse<AssetResponse>> GetPagedAsync(AssetFilterRequest
             CompanyId = asset.Department?.CompanyId,
             CompanyName = asset.Department?.Company?.Name,
             PurchaseRequisitionId = asset.PurchaseRequisitionId,
+            PurchaseRequisitionLineItemId = asset.PurchaseRequisitionLineItemId,
             PrNumber = asset.PurchaseRequisition?.PrNumber,
             PoNumber = asset.PurchaseRequisition?.PoNumber,
             PoDate = asset.PurchaseRequisition?.PoDate,
@@ -837,6 +839,7 @@ private static AssetResponse MapToResponse(Asset asset)
         // access, and the paged list this feeds (GetPagedAsync) isn't what
         // powers the Hardware page's asset view dialog (GetAllAsync is).
         PurchaseRequisitionId = asset.PurchaseRequisitionId,
+        PurchaseRequisitionLineItemId = asset.PurchaseRequisitionLineItemId,
         PrNumber = asset.PurchaseRequisition?.PrNumber,
         PoNumber = asset.PurchaseRequisition?.PoNumber,
         PoDate = asset.PurchaseRequisition?.PoDate,
