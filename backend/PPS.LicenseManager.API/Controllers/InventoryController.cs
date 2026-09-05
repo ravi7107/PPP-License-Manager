@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PPS.LicenseManager.API.DTOs.Inventory;
 using PPS.LicenseManager.API.Services;
 using PPS.LicenseManager.API.Services.Interfaces;
+using QuestPDF.Fluent;
 
 namespace PPS.LicenseManager.API.Controllers;
 
