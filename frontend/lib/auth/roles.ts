@@ -38,7 +38,8 @@ export type ModuleKey =
   | 'materialMovements'
   | 'utilizationUpload'
   | 'utilizationDashboard'
-  | 'utilizationSettings';
+  | 'utilizationSettings'
+  | 'inventory';
 
 /*
  * Default module permissions.
@@ -274,6 +275,21 @@ const MODULE_ACCESS: Record<ModuleKey, AppRole[]> = {
   utilizationSettings: [
     'Super Admin',
     'IT Admin',
+  ],
+
+  // Generic multi-department Inventory register (IT/Facility/HR/Other -
+  // see InventoryCategory) - read access mirrors Material Movements'
+  // broad, non-admin-gated audience since Facility/HR/any department
+  // staff need to view and print QR labels for their own items, not
+  // just Super Admin/IT Admin. Create/Update/Deactivate stay admin-only
+  // at the API layer (see InventoryController's per-action [Authorize]).
+  inventory: [
+    'Super Admin',
+    'IT Admin',
+    'Team Lead',
+    'Manager',
+    'Employee',
+    'Facility',
   ],
 };
 
