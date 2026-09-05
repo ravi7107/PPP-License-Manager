@@ -21,7 +21,7 @@ public class InventoryQrLabelPdfDocument : IDocument
     public InventoryQrLabelPdfDocument(InventoryItemResponse item)
     {
         _item = item;
-        _qrSvg = AssetQrCodeGenerator.GenerateSvg(item.InventoryTag);
+        _qrSvg = AssetQrCodeGenerator.GenerateSvg(item.DisplayTag);
     }
 
     public void Compose(IDocumentContainer container)
@@ -41,7 +41,7 @@ public class InventoryQrLabelPdfDocument : IDocument
 
                 row.RelativeItem().PaddingLeft(10).Column(column =>
                 {
-                    column.Item().Text(_item.InventoryTag).FontSize(16).Bold();
+                    column.Item().Text(_item.DisplayTag).FontSize(16).Bold();
 
                     column.Item().PaddingTop(4).Text(_item.ItemName).FontSize(9);
 

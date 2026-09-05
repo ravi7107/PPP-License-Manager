@@ -6,6 +6,17 @@ public class InventoryItemResponse
 
     public string InventoryTag { get; set; } = string.Empty;
 
+    // What to actually put on a QR/printed label and show as the
+    // primary identifier: when this item IS a tracked IT Asset
+    // (AssetId set), the Asset already has its own sticker/QR from
+    // the Hardware module - so this reuses the Asset's own AssetTag
+    // instead of minting a second, different QR for the same
+    // physical item. Otherwise falls back to this item's own
+    // InventoryTag. Computed in InventoryService's projection;
+    // InventoryTag itself is unchanged and still the row's real
+    // unique DB identifier either way.
+    public string DisplayTag { get; set; } = string.Empty;
+
     public string ItemName { get; set; } = string.Empty;
 
     public string? Description { get; set; }

@@ -52,7 +52,7 @@ public class InventoryQrLabelSheetPdfDocument : IDocument
 
     private void ComposeLabelCell(IContainer container, InventoryItemResponse item)
     {
-        var qrSvg = AssetQrCodeGenerator.GenerateSvg(item.InventoryTag);
+        var qrSvg = AssetQrCodeGenerator.GenerateSvg(item.DisplayTag);
 
         container.Row(row =>
         {
@@ -63,7 +63,7 @@ public class InventoryQrLabelSheetPdfDocument : IDocument
 
             row.RelativeItem().PaddingLeft(8).Column(column =>
             {
-                column.Item().Text(item.InventoryTag).FontSize(11).Bold();
+                column.Item().Text(item.DisplayTag).FontSize(11).Bold();
 
                 column.Item().PaddingTop(2).Text(item.ItemName).FontSize(8);
 

@@ -162,7 +162,7 @@ public class InventoryController : ControllerBase
 
         var pdfBytes = new InventoryQrLabelPdfDocument(item).GeneratePdf();
 
-        return File(pdfBytes, "application/pdf", $"{item.InventoryTag}-label.pdf");
+        return File(pdfBytes, "application/pdf", $"{item.DisplayTag}-label.pdf");
     }
 
     // A sheet of many labels on one page (2 columns x 5 rows per page),

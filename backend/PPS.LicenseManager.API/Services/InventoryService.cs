@@ -430,7 +430,9 @@ public class InventoryService : IInventoryService
     {
         var (isRestricted, restrictedCompanyId) = EntityScopeHelper.Resolve(user);
 
-        var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id);
+        var item = await _context.InventoryItems
+            .Include(i => i.Asset)
+            .FirstOrDefaultAsync(i => i.Id == id);
         if (item == null)
         {
             return null;
@@ -441,7 +443,9 @@ public class InventoryService : IInventoryService
             return null;
         }
 
-        return AssetQrCodeGenerator.GenerateSvg(item.InventoryTag);
+        // Asset-linked items encode the Asset's own AssetTag here too -
+        // see InventoryItemResponse.DisplayTag's own comment for why.
+        return AssetQrCodeGenerator.GenerateSvg(item.Asset?.AssetTag ?? item.InventoryTag);
     }
 
     // --- Private helpers -----------------------------------------------
@@ -556,6 +560,7 @@ public class InventoryService : IInventoryService
         {
             Id = i.Id,
             InventoryTag = i.InventoryTag,
+            DisplayTag = i.Asset?.AssetTag ?? i.InventoryTag,
             ItemName = i.ItemName,
             Description = i.Description,
             SerialNumber = i.SerialNumber,
