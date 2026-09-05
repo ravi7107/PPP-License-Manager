@@ -17,6 +17,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
+    public DbSet<InventoryCategory> InventoryCategories => Set<InventoryCategory>();
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Software> Software => Set<Software>();
     public DbSet<AssetTemporaryPool> AssetTemporaryPools => Set<AssetTemporaryPool>();
@@ -1688,6 +1690,114 @@ public DbSet<AssetPoolRequest> AssetPoolRequests => Set<AssetPoolRequest>();
 
             entity.Property(a => a.PurchaseCost)
                   .HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<InventoryCategory>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            entity.HasIndex(c => c.Code)
+                  .IsUnique();
+
+            entity.Property(c => c.Code)
+                  .HasMaxLength(20)
+                  .IsRequired();
+
+            entity.Property(c => c.Name)
+                  .HasMaxLength(100)
+                  .IsRequired();
+
+            entity.Property(c => c.IsActive)
+                  .HasDefaultValue(true);
+        });
+
+        // New generic, multi-department Inventory register - see
+        // InventoryItem.cs's own class comment for the full design.
+        // Every relationship below is Restrict (not SetNull, unlike some
+        // of Asset's own optional links above) - kept simple and
+        // consistent with this module's own migration, which creates
+        // every one of these foreign keys as Restrict.
+        modelBuilder.Entity<InventoryItem>(entity =>
+        {
+            entity.HasKey(i => i.Id);
+
+            entity.HasIndex(i => i.InventoryTag)
+                  .IsUnique();
+
+            entity.Property(i => i.InventoryTag)
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(i => i.ItemName)
+                  .HasMaxLength(200)
+                  .IsRequired();
+
+            entity.Property(i => i.IsActive)
+                  .HasDefaultValue(true);
+
+            entity.HasOne(i => i.Category)
+                  .WithMany(c => c.InventoryItems)
+                  .HasForeignKey(i => i.CategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Company)
+                  .WithMany()
+                  .HasForeignKey(i => i.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(i => i.LocationId);
+
+            entity.HasOne(i => i.Location)
+                  .WithMany()
+                  .HasForeignKey(i => i.LocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional "assigned role/designation" tag - see
+            // InventoryItem.DepartmentId's own comment. Never used for
+            // IT/Facility/HR grouping - that's CategoryId's job.
+            entity.HasIndex(i => i.DepartmentId);
+
+            entity.HasOne(i => i.Department)
+                  .WithMany()
+                  .HasForeignKey(i => i.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional link to an existing IT Asset - see
+            // InventoryItem.AssetId's own comment.
+            entity.HasIndex(i => i.AssetId);
+
+            entity.HasOne(i => i.Asset)
+                  .WithMany()
+                  .HasForeignKey(i => i.AssetId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional PR/PO traceability - identical reasoning to
+            // Asset.PurchaseRequisitionId's own config above: an
+            // approved PR that inventory items have already been
+            // fulfilled against should never be deletable while those
+            // items still reference it.
+            entity.HasIndex(i => i.PurchaseRequisitionId);
+            entity.HasIndex(i => i.PurchaseRequisitionLineItemId);
+
+            entity.HasOne(i => i.PurchaseRequisition)
+                  .WithMany()
+                  .HasForeignKey(i => i.PurchaseRequisitionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.PurchaseRequisitionLineItem)
+                  .WithMany()
+                  .HasForeignKey(i => i.PurchaseRequisitionLineItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(i => i.PurchaseCost)
+                  .HasPrecision(18, 2);
+
+            entity.HasIndex(i => i.VendorId);
+
+            entity.HasOne(i => i.Vendor)
+                  .WithMany()
+                  .HasForeignKey(i => i.VendorId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // LicensePurchase had no explicit Fluent configuration block before
