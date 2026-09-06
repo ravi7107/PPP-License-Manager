@@ -26,6 +26,16 @@ protected IActionResult BadRequestResponse(string message)
         Data = null
     });
 }
+
+protected IActionResult ForbiddenResponse(string message = "You do not have permission to perform this action.")
+{
+    return StatusCode(403, new ApiResponse<object>
+    {
+        Success = false,
+        Message = message,
+        Data = null
+    });
+}
     protected IActionResult Success<T>(T data, string message = "Success")
     {
         return Ok(new ApiResponse<T>

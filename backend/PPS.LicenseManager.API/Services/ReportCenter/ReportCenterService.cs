@@ -55,6 +55,18 @@ public class ReportCenterService : IReportCenterService
             .ToList();
     }
 
+    public bool IsReportAllowedForRole(string reportId, string role)
+    {
+        if (!_definitions.TryGetValue(reportId, out var definition))
+        {
+            // Unknown report - let RunPreviewAsync/RunExportAsync's own
+            // 404 be the error the caller sees, not a misleading 403.
+            return true;
+        }
+
+        return definition.RequiredRoles == null || definition.RequiredRoles.Contains(role);
+    }
+
     public async Task<ReportPreviewEnvelope?> RunPreviewAsync(
         string reportId,
         ReportQueryRequest request,
@@ -780,4 +792,711 @@ public class ReportCenterService : IReportCenterService
             ByDepartment = byDepartmentRows,
         };
     }
+
+    // ==================== Step 7 Phase A: Warranty Expiry ====================
+
+    private static readonly Expression<Func<Asset, WarrantyExpiryRow>> WarrantyExpiryProjection = a => new WarrantyExpiryRow
+    {
+        AssetTag = a.AssetTag,
+        AssetName = a.AssetName,
+        CompanyName = a.Department != null && a.Department.Company != null ? a.Department.Company.Name : null,
+        DepartmentName = a.Department != null ? a.Department.DepartmentName : string.Empty,
+        CurrentLocationName = a.CurrentLocation != null ? a.CurrentLocation.LocationName : null,
+        WarrantyExpiry = a.WarrantyExpiry,
+        Status = a.Status,
+    };
+
+    private IQueryable<Asset> BuildWarrantyExpiryBaseQuery(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        var effectiveCompanyId = ResolveEffectiveCompanyId(request, isRestricted, companyId);
+
+        var query = _context.Assets
+            .Include(a => a.Department).ThenInclude(d => d!.Company)
+            .Include(a => a.CurrentLocation)
+            .Where(a => a.IsActive && a.WarrantyExpiry != null);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            query = query.Where(a => a.Department != null && a.Department.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            query = query.Where(a => a.DepartmentId == request.DepartmentId.Value);
+        }
+
+        if (request.LocationId.HasValue)
+        {
+            query = query.Where(a => a.CurrentLocationId == request.LocationId.Value);
+        }
+
+        if (request.DateFrom.HasValue)
+        {
+            query = query.Where(a => a.WarrantyExpiry >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo.HasValue)
+        {
+            query = query.Where(a => a.WarrantyExpiry <= request.DateTo.Value);
+        }
+
+        if (!request.DateFrom.HasValue && !request.DateTo.HasValue)
+        {
+            // Default window when no explicit range is given: already
+            // expired, or expiring within the next 90 days.
+            var cutoff = DateTime.UtcNow.Date.AddDays(90);
+            query = query.Where(a => a.WarrantyExpiry <= cutoff);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            query = query.Where(a => a.AssetTag.Contains(term) || a.AssetName.Contains(term));
+        }
+
+        return query;
+    }
+
+    // Date-difference/bucketing math runs here, after the rows are
+    // materialized, rather than inside the SQL projection above - date
+    // arithmetic inside an EF Core projection expression is a common
+    // source of provider-translation failures, and there is no compiler
+    // available in this workflow to catch one before it reaches the
+    // server.
+    private static void EnrichWarrantyExpiryRows(List<WarrantyExpiryRow> rows)
+    {
+        var today = DateTime.UtcNow.Date;
+
+        foreach (var row in rows)
+        {
+            if (row.WarrantyExpiry == null)
+            {
+                continue;
+            }
+
+            var days = (row.WarrantyExpiry.Value.Date - today).Days;
+            row.DaysUntilExpiry = days;
+            row.WarrantyStatus = days < 0 ? "Expired" : "Expiring Soon";
+        }
+    }
+
+    private static List<ExcelColumn<WarrantyExpiryRow>> WarrantyExpiryColumns() => new()
+    {
+        new() { Header = "Asset Tag", ValueSelector = r => r.AssetTag },
+        new() { Header = "Asset Name", ValueSelector = r => r.AssetName },
+        new() { Header = "Entity", ValueSelector = r => r.CompanyName },
+        new() { Header = "Department", ValueSelector = r => r.DepartmentName },
+        new() { Header = "Current Location", ValueSelector = r => r.CurrentLocationName },
+        new() { Header = "Warranty Expiry", ValueSelector = r => r.WarrantyExpiry, Format = ExcelNumberFormat.Date },
+        new() { Header = "Days Until Expiry", ValueSelector = r => r.DaysUntilExpiry, Format = ExcelNumberFormat.Number },
+        new() { Header = "Warranty Status", ValueSelector = r => r.WarrantyStatus },
+        new() { Header = "Asset Status", ValueSelector = r => r.Status },
+    };
+
+    public async Task<object> GetWarrantyExpiryPreviewAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        if (isRestricted && companyId == null)
+        {
+            return new PagedResponse<WarrantyExpiryRow>
+            {
+                Items = new List<WarrantyExpiryRow>(),
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalRecords = 0,
+            };
+        }
+
+        var query = BuildWarrantyExpiryBaseQuery(request, isRestricted, companyId)
+            .OrderBy(a => a.WarrantyExpiry)
+            .Select(WarrantyExpiryProjection);
+
+        var paged = await PaginateAndBuildAsync(query, request.Page, request.PageSize);
+        EnrichWarrantyExpiryRows(paged.Items);
+
+        return paged;
+    }
+
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> GetWarrantyExpiryExportAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId, ClaimsPrincipal user)
+    {
+        var meta = new ExcelWorkbookMeta
+        {
+            ReportTitle = "Warranty Expiry",
+            GeneratedByUserName = ResolveUserName(user),
+            GeneratedAtUtc = DateTime.UtcNow,
+            AppliedFilters = await BuildAppliedFiltersAsync(request),
+        };
+
+        if (isRestricted && companyId == null)
+        {
+            var emptyBytes = _excelExportService.BuildWorkbook(meta, new List<WarrantyExpiryRow>(), WarrantyExpiryColumns());
+            return (emptyBytes, XlsxContentType, BuildFileName("Warranty_Expiry"));
+        }
+
+        var baseQuery = BuildWarrantyExpiryBaseQuery(request, isRestricted, companyId);
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount > MaxExportRows)
+        {
+            throw new ReportExportTooLargeException(totalCount);
+        }
+
+        var rows = await baseQuery.OrderBy(a => a.WarrantyExpiry).Select(WarrantyExpiryProjection).ToListAsync();
+        EnrichWarrantyExpiryRows(rows);
+        meta.RecordCount = rows.Count;
+
+        var bytes = _excelExportService.BuildWorkbook(meta, rows, WarrantyExpiryColumns());
+        return (bytes, XlsxContentType, BuildFileName("Warranty_Expiry"));
+    }
+
+    // ==================== Step 7 Phase A: Asset Allocation ====================
+
+    private static readonly Expression<Func<AssetAssignment, AssetAllocationRow>> AssetAllocationProjection = aa => new AssetAllocationRow
+    {
+        AssetTag = aa.Asset.AssetTag,
+        AssetName = aa.Asset.AssetName,
+        CompanyName = aa.Asset.Department != null && aa.Asset.Department.Company != null ? aa.Asset.Department.Company.Name : null,
+        DepartmentName = aa.Asset.Department != null ? aa.Asset.Department.DepartmentName : string.Empty,
+        AssignedToUserName = aa.User.FullName,
+        AssignedToEmail = aa.User.Email,
+        AssignmentType = aa.AssignmentType,
+        WorkMode = aa.WorkMode,
+        AssignedOn = aa.AssignedOn,
+        ExpectedReturnDate = aa.ExpectedReturnDate,
+        ReturnedOn = aa.ReturnedOn,
+        Status = aa.Status,
+        IsActive = aa.IsActive,
+    };
+
+    // No Location filter/column here - Asset.CurrentLocationId is only
+    // populated once a Material Movement has completed for that asset
+    // (see BuildAssetRegisterBaseQuery's own Location handling above),
+    // which has no particular relationship to an assignment's start/end,
+    // so a Location filter on this report would silently under-match
+    // rather than mean anything reliable - documented omission, not a
+    // missed field.
+    private IQueryable<AssetAssignment> BuildAssetAllocationBaseQuery(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        var effectiveCompanyId = ResolveEffectiveCompanyId(request, isRestricted, companyId);
+
+        var query = _context.AssetAssignments
+            .Include(aa => aa.Asset).ThenInclude(a => a.Department).ThenInclude(d => d!.Company)
+            .Include(aa => aa.User)
+            .AsQueryable();
+
+        if (effectiveCompanyId.HasValue)
+        {
+            query = query.Where(aa => aa.Asset.Department != null && aa.Asset.Department.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            query = query.Where(aa => aa.Asset.DepartmentId == request.DepartmentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            // "Active" is a synthetic status meaning "currently assigned"
+            // (IsActive == true) - every other value matches
+            // AssetAssignment.Status literally (e.g. "Assigned", "Returned").
+            query = request.Status == "Active"
+                ? query.Where(aa => aa.IsActive)
+                : query.Where(aa => aa.Status == request.Status);
+        }
+
+        if (request.DateFrom.HasValue)
+        {
+            query = query.Where(aa => aa.AssignedOn >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo.HasValue)
+        {
+            query = query.Where(aa => aa.AssignedOn <= request.DateTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            query = query.Where(aa =>
+                aa.Asset.AssetTag.Contains(term) ||
+                aa.Asset.AssetName.Contains(term) ||
+                aa.User.FullName.Contains(term));
+        }
+
+        return query;
+    }
+
+    private static List<ExcelColumn<AssetAllocationRow>> AssetAllocationColumns() => new()
+    {
+        new() { Header = "Asset Tag", ValueSelector = r => r.AssetTag },
+        new() { Header = "Asset Name", ValueSelector = r => r.AssetName },
+        new() { Header = "Entity", ValueSelector = r => r.CompanyName },
+        new() { Header = "Department", ValueSelector = r => r.DepartmentName },
+        new() { Header = "Assigned To", ValueSelector = r => r.AssignedToUserName },
+        new() { Header = "Assigned To Email", ValueSelector = r => r.AssignedToEmail },
+        new() { Header = "Assignment Type", ValueSelector = r => r.AssignmentType.ToString() },
+        new() { Header = "Work Mode", ValueSelector = r => r.WorkMode },
+        new() { Header = "Assigned On", ValueSelector = r => r.AssignedOn, Format = ExcelNumberFormat.Date },
+        new() { Header = "Expected Return", ValueSelector = r => r.ExpectedReturnDate, Format = ExcelNumberFormat.Date },
+        new() { Header = "Returned On", ValueSelector = r => r.ReturnedOn, Format = ExcelNumberFormat.Date },
+        new() { Header = "Status", ValueSelector = r => r.Status },
+    };
+
+    public async Task<object> GetAssetAllocationPreviewAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        if (isRestricted && companyId == null)
+        {
+            return new PagedResponse<AssetAllocationRow>
+            {
+                Items = new List<AssetAllocationRow>(),
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalRecords = 0,
+            };
+        }
+
+        var query = BuildAssetAllocationBaseQuery(request, isRestricted, companyId)
+            .OrderByDescending(aa => aa.AssignedOn)
+            .Select(AssetAllocationProjection);
+
+        return await PaginateAndBuildAsync(query, request.Page, request.PageSize);
+    }
+
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> GetAssetAllocationExportAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId, ClaimsPrincipal user)
+    {
+        var meta = new ExcelWorkbookMeta
+        {
+            ReportTitle = "Asset Allocation",
+            GeneratedByUserName = ResolveUserName(user),
+            GeneratedAtUtc = DateTime.UtcNow,
+            AppliedFilters = await BuildAppliedFiltersAsync(request),
+        };
+
+        if (isRestricted && companyId == null)
+        {
+            var emptyBytes = _excelExportService.BuildWorkbook(meta, new List<AssetAllocationRow>(), AssetAllocationColumns());
+            return (emptyBytes, XlsxContentType, BuildFileName("Asset_Allocation"));
+        }
+
+        var baseQuery = BuildAssetAllocationBaseQuery(request, isRestricted, companyId);
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount > MaxExportRows)
+        {
+            throw new ReportExportTooLargeException(totalCount);
+        }
+
+        var rows = await baseQuery.OrderByDescending(aa => aa.AssignedOn).Select(AssetAllocationProjection).ToListAsync();
+        meta.RecordCount = rows.Count;
+
+        var bytes = _excelExportService.BuildWorkbook(meta, rows, AssetAllocationColumns());
+        return (bytes, XlsxContentType, BuildFileName("Asset_Allocation"));
+    }
+
+    // ==================== Step 7 Phase A: Asset Ageing ====================
+
+    private static readonly Expression<Func<Asset, AssetAgeingRow>> AssetAgeingProjection = a => new AssetAgeingRow
+    {
+        AssetTag = a.AssetTag,
+        AssetName = a.AssetName,
+        CompanyName = a.Department != null && a.Department.Company != null ? a.Department.Company.Name : null,
+        DepartmentName = a.Department != null ? a.Department.DepartmentName : string.Empty,
+        PurchaseDate = a.PurchaseDate,
+        Status = a.Status,
+    };
+
+    private IQueryable<Asset> BuildAssetAgeingBaseQuery(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        var effectiveCompanyId = ResolveEffectiveCompanyId(request, isRestricted, companyId);
+
+        var query = _context.Assets
+            .Include(a => a.Department).ThenInclude(d => d!.Company)
+            .Where(a => a.IsActive);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            query = query.Where(a => a.Department != null && a.Department.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            query = query.Where(a => a.DepartmentId == request.DepartmentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            query = query.Where(a => a.Status == request.Status);
+        }
+
+        if (request.DateFrom.HasValue)
+        {
+            query = query.Where(a => a.PurchaseDate != null && a.PurchaseDate >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo.HasValue)
+        {
+            query = query.Where(a => a.PurchaseDate != null && a.PurchaseDate <= request.DateTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            query = query.Where(a => a.AssetTag.Contains(term) || a.AssetName.Contains(term));
+        }
+
+        return query;
+    }
+
+    private static void EnrichAssetAgeingRows(List<AssetAgeingRow> rows)
+    {
+        var today = DateTime.UtcNow.Date;
+
+        foreach (var row in rows)
+        {
+            if (row.PurchaseDate == null)
+            {
+                row.AgeBucket = "Unknown";
+                continue;
+            }
+
+            var years = (today - row.PurchaseDate.Value.Date).TotalDays / 365.25;
+            row.AgeInYears = Math.Round(years, 1);
+            row.AgeBucket = years switch
+            {
+                < 1 => "0-1 yr",
+                < 3 => "1-3 yrs",
+                < 5 => "3-5 yrs",
+                _ => "5+ yrs",
+            };
+        }
+    }
+
+    private static List<ExcelColumn<AssetAgeingRow>> AssetAgeingColumns() => new()
+    {
+        new() { Header = "Asset Tag", ValueSelector = r => r.AssetTag },
+        new() { Header = "Asset Name", ValueSelector = r => r.AssetName },
+        new() { Header = "Entity", ValueSelector = r => r.CompanyName },
+        new() { Header = "Department", ValueSelector = r => r.DepartmentName },
+        new() { Header = "Purchase Date", ValueSelector = r => r.PurchaseDate, Format = ExcelNumberFormat.Date },
+        new() { Header = "Age (Years)", ValueSelector = r => r.AgeInYears, Format = ExcelNumberFormat.Number },
+        new() { Header = "Age Bucket", ValueSelector = r => r.AgeBucket },
+        new() { Header = "Status", ValueSelector = r => r.Status },
+    };
+
+    public async Task<object> GetAssetAgeingPreviewAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        if (isRestricted && companyId == null)
+        {
+            return new PagedResponse<AssetAgeingRow>
+            {
+                Items = new List<AssetAgeingRow>(),
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalRecords = 0,
+            };
+        }
+
+        var query = BuildAssetAgeingBaseQuery(request, isRestricted, companyId)
+            .OrderBy(a => a.PurchaseDate)
+            .Select(AssetAgeingProjection);
+
+        var paged = await PaginateAndBuildAsync(query, request.Page, request.PageSize);
+        EnrichAssetAgeingRows(paged.Items);
+
+        return paged;
+    }
+
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> GetAssetAgeingExportAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId, ClaimsPrincipal user)
+    {
+        var meta = new ExcelWorkbookMeta
+        {
+            ReportTitle = "Asset Ageing",
+            GeneratedByUserName = ResolveUserName(user),
+            GeneratedAtUtc = DateTime.UtcNow,
+            AppliedFilters = await BuildAppliedFiltersAsync(request),
+        };
+
+        if (isRestricted && companyId == null)
+        {
+            var emptyBytes = _excelExportService.BuildWorkbook(meta, new List<AssetAgeingRow>(), AssetAgeingColumns());
+            return (emptyBytes, XlsxContentType, BuildFileName("Asset_Ageing"));
+        }
+
+        var baseQuery = BuildAssetAgeingBaseQuery(request, isRestricted, companyId);
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount > MaxExportRows)
+        {
+            throw new ReportExportTooLargeException(totalCount);
+        }
+
+        var rows = await baseQuery.OrderBy(a => a.PurchaseDate).Select(AssetAgeingProjection).ToListAsync();
+        EnrichAssetAgeingRows(rows);
+        meta.RecordCount = rows.Count;
+
+        var bytes = _excelExportService.BuildWorkbook(meta, rows, AssetAgeingColumns());
+        return (bytes, XlsxContentType, BuildFileName("Asset_Ageing"));
+    }
+
+    // ==================== Step 7 Phase A: Data Quality ====================
+    // Restricted to Super Admin/IT Admin only via ReportDefinition.RequiredRoles
+    // (see ReportCatalog.cs) - checked in ReportCenterController before either
+    // method below is ever called.
+
+    public async Task<object> GetDataQualityPreviewAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        if (isRestricted && companyId == null)
+        {
+            return new PagedResponse<DataQualityIssueRow>
+            {
+                Items = new List<DataQualityIssueRow>(),
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalRecords = 0,
+            };
+        }
+
+        var issues = await BuildDataQualityIssuesAsync(request, isRestricted, companyId);
+
+        var pageItems = issues
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+
+        return new PagedResponse<DataQualityIssueRow>
+        {
+            Items = pageItems,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            TotalRecords = issues.Count,
+        };
+    }
+
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> GetDataQualityExportAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId, ClaimsPrincipal user)
+    {
+        var meta = new ExcelWorkbookMeta
+        {
+            ReportTitle = "Data Quality",
+            GeneratedByUserName = ResolveUserName(user),
+            GeneratedAtUtc = DateTime.UtcNow,
+            AppliedFilters = await BuildAppliedFiltersAsync(request),
+        };
+
+        if (isRestricted && companyId == null)
+        {
+            var emptyBytes = _excelExportService.BuildWorkbook(meta, new List<DataQualityIssueRow>(), DataQualityColumns());
+            return (emptyBytes, XlsxContentType, BuildFileName("Data_Quality"));
+        }
+
+        var issues = await BuildDataQualityIssuesAsync(request, isRestricted, companyId);
+        if (issues.Count > MaxExportRows)
+        {
+            throw new ReportExportTooLargeException(issues.Count);
+        }
+
+        meta.RecordCount = issues.Count;
+
+        var bytes = _excelExportService.BuildWorkbook(meta, issues, DataQualityColumns());
+        return (bytes, XlsxContentType, BuildFileName("Data_Quality"));
+    }
+
+    // Scans Assets, Licenses, and LicensePurchases for a handful of
+    // concrete, objectively-checkable integrity problems - never a
+    // subjective/invented rule. Each candidate set is filtered by
+    // Entity/Department at the SQL level before being pulled into memory,
+    // so only the (small) set of already-flagged rows is ever
+    // materialized client-side. Results are paginated in memory (see
+    // GetDataQualityPreviewAsync) rather than via PaginateAndBuildAsync's
+    // IQueryable pattern, since the candidates come from three
+    // differently-shaped queries merged in C# - matching the one other
+    // intentional in-memory-pagination exception already used in this
+    // catalog (the Purchase-to-Asset & License Mapping report).
+    private async Task<List<DataQualityIssueRow>> BuildDataQualityIssuesAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        var effectiveCompanyId = ResolveEffectiveCompanyId(request, isRestricted, companyId);
+        var issues = new List<DataQualityIssueRow>();
+
+        var assetQuery = _context.Assets
+            .Include(a => a.Department).ThenInclude(d => d!.Company)
+            .Where(a => a.IsActive);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            assetQuery = assetQuery.Where(a => a.Department != null && a.Department.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            assetQuery = assetQuery.Where(a => a.DepartmentId == request.DepartmentId.Value);
+        }
+
+        var assetsMissingSerial = await assetQuery
+            .Where(a => string.IsNullOrEmpty(a.SerialNumber))
+            .Select(a => new
+            {
+                a.AssetTag,
+                CompanyName = a.Department != null && a.Department.Company != null ? a.Department.Company.Name : null,
+                DepartmentName = a.Department != null ? a.Department.DepartmentName : null,
+            })
+            .ToListAsync();
+
+        issues.AddRange(assetsMissingSerial.Select(a => new DataQualityIssueRow
+        {
+            EntityType = "Asset",
+            RecordIdentifier = a.AssetTag,
+            CompanyName = a.CompanyName,
+            DepartmentName = a.DepartmentName,
+            IssueDescription = "Missing serial number.",
+            Severity = "Medium",
+        }));
+
+        var assetsAssignedWithoutActiveAssignment = await assetQuery
+            .Where(a => a.Status == "Assigned" && !_context.AssetAssignments.Any(aa => aa.AssetId == a.Id && aa.IsActive))
+            .Select(a => new
+            {
+                a.AssetTag,
+                CompanyName = a.Department != null && a.Department.Company != null ? a.Department.Company.Name : null,
+                DepartmentName = a.Department != null ? a.Department.DepartmentName : null,
+            })
+            .ToListAsync();
+
+        issues.AddRange(assetsAssignedWithoutActiveAssignment.Select(a => new DataQualityIssueRow
+        {
+            EntityType = "Asset",
+            RecordIdentifier = a.AssetTag,
+            CompanyName = a.CompanyName,
+            DepartmentName = a.DepartmentName,
+            IssueDescription = "Status is 'Assigned' but no active assignment record exists.",
+            Severity = "High",
+        }));
+
+        var licenseQuery = _context.Licenses
+            .Include(l => l.LicensePurchase).ThenInclude(lp => lp!.Company)
+            .Include(l => l.LicensePurchase).ThenInclude(lp => lp!.Department)
+            .Where(l => l.IsActive);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            licenseQuery = licenseQuery.Where(l => l.LicensePurchase != null && l.LicensePurchase.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            licenseQuery = licenseQuery.Where(l => l.LicensePurchase != null && l.LicensePurchase.DepartmentId == request.DepartmentId.Value);
+        }
+
+        var licensesMissingEmail = await licenseQuery
+            .Where(l => string.IsNullOrEmpty(l.LicensedEmail))
+            .Select(l => new
+            {
+                l.AliasCode,
+                CompanyName = l.LicensePurchase != null && l.LicensePurchase.Company != null ? l.LicensePurchase.Company.Name : null,
+                DepartmentName = l.LicensePurchase != null && l.LicensePurchase.Department != null ? l.LicensePurchase.Department.DepartmentName : null,
+            })
+            .ToListAsync();
+
+        issues.AddRange(licensesMissingEmail.Select(l => new DataQualityIssueRow
+        {
+            EntityType = "License",
+            RecordIdentifier = l.AliasCode,
+            CompanyName = l.CompanyName,
+            DepartmentName = l.DepartmentName,
+            IssueDescription = "Missing licensed email.",
+            Severity = "Medium",
+        }));
+
+        var today = DateTime.UtcNow.Date;
+        var licensesExpiredButNotFlagged = await licenseQuery
+            .Where(l => l.ExpiryDate < today && l.Status != "Expired")
+            .Select(l => new
+            {
+                l.AliasCode,
+                CompanyName = l.LicensePurchase != null && l.LicensePurchase.Company != null ? l.LicensePurchase.Company.Name : null,
+                DepartmentName = l.LicensePurchase != null && l.LicensePurchase.Department != null ? l.LicensePurchase.Department.DepartmentName : null,
+            })
+            .ToListAsync();
+
+        issues.AddRange(licensesExpiredButNotFlagged.Select(l => new DataQualityIssueRow
+        {
+            EntityType = "License",
+            RecordIdentifier = l.AliasCode,
+            CompanyName = l.CompanyName,
+            DepartmentName = l.DepartmentName,
+            IssueDescription = "Expiry date has passed but Status is not 'Expired'.",
+            Severity = "High",
+        }));
+
+        var licensePurchaseQuery = _context.LicensePurchases
+            .Include(lp => lp.Company)
+            .Include(lp => lp.Department)
+            .Where(lp => lp.IsActive);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            licensePurchaseQuery = licensePurchaseQuery.Where(lp => lp.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            licensePurchaseQuery = licensePurchaseQuery.Where(lp => lp.DepartmentId == request.DepartmentId.Value);
+        }
+
+        // PONumber/Id are projected as raw fields and combined into
+        // RecordIdentifier afterward in C#, not via string concatenation
+        // inside the SQL projection - int-to-text concatenation inside an
+        // EF Core Select is a plausible provider-translation failure
+        // point, and there is no compiler available here to catch one.
+        var purchasesMissingVendor = await licensePurchaseQuery
+            .Where(lp => string.IsNullOrEmpty(lp.Vendor))
+            .Select(lp => new
+            {
+                lp.Id,
+                lp.PONumber,
+                CompanyName = lp.Company != null ? lp.Company.Name : null,
+                DepartmentName = lp.Department != null ? lp.Department.DepartmentName : null,
+            })
+            .ToListAsync();
+
+        issues.AddRange(purchasesMissingVendor.Select(lp => new DataQualityIssueRow
+        {
+            EntityType = "License Purchase",
+            RecordIdentifier = lp.PONumber ?? $"#{lp.Id}",
+            CompanyName = lp.CompanyName,
+            DepartmentName = lp.DepartmentName,
+            IssueDescription = "Missing vendor.",
+            Severity = "Medium",
+        }));
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            issues = issues
+                .Where(i => i.RecordIdentifier.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return issues
+            .OrderBy(i => i.EntityType)
+            .ThenByDescending(i => i.Severity == "High")
+            .ThenBy(i => i.RecordIdentifier)
+            .ToList();
+    }
+
+    private static List<ExcelColumn<DataQualityIssueRow>> DataQualityColumns() => new()
+    {
+        new() { Header = "Entity Type", ValueSelector = r => r.EntityType },
+        new() { Header = "Record", ValueSelector = r => r.RecordIdentifier },
+        new() { Header = "Entity", ValueSelector = r => r.CompanyName },
+        new() { Header = "Department", ValueSelector = r => r.DepartmentName },
+        new() { Header = "Issue", ValueSelector = r => r.IssueDescription },
+        new() { Header = "Severity", ValueSelector = r => r.Severity },
+    };
 }

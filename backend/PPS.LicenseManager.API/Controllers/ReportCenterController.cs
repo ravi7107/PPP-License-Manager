@@ -34,6 +34,11 @@ public class ReportCenterController : BaseController
     {
         var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
 
+        if (!_service.IsReportAllowedForRole(reportId, EntityScopeHelper.GetRole(User)))
+        {
+            return ForbiddenResponse("You do not have permission to access this report.");
+        }
+
         var envelope = await _service.RunPreviewAsync(reportId, request ?? new ReportQueryRequest(), isEntityRestricted, companyId);
 
         if (envelope == null)
@@ -48,6 +53,11 @@ public class ReportCenterController : BaseController
     public async Task<IActionResult> Export(string reportId, [FromBody] ReportQueryRequest request)
     {
         var (isEntityRestricted, companyId) = EntityScopeHelper.Resolve(User);
+
+        if (!_service.IsReportAllowedForRole(reportId, EntityScopeHelper.GetRole(User)))
+        {
+            return ForbiddenResponse("You do not have permission to access this report.");
+        }
 
         try
         {

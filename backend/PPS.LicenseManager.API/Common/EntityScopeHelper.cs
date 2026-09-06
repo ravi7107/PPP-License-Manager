@@ -42,4 +42,13 @@ public static class EntityScopeHelper
 
         return (isRestricted, companyId);
     }
+
+    // Raw role claim, for callers that need to check a specific role
+    // rather than the broad Team-Lead/Manager restriction above - e.g.
+    // Report Center's per-report RequiredRoles gate (see
+    // Services/ReportCenter/ReportDefinition.cs).
+    public static string GetRole(ClaimsPrincipal user)
+    {
+        return user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+    }
 }

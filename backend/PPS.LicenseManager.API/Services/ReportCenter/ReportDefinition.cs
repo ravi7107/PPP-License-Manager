@@ -15,6 +15,14 @@ public class ReportDefinition
 
     public List<ReportFilterFieldDefinition> Filters { get; init; } = new();
 
+    // Null (the default) means "any role the controller's own
+    // [Authorize(Roles=...)] already admits." Set this to narrow a
+    // specific report further - e.g. Data Quality to Super Admin/IT
+    // Admin only - without touching the shared Preview/Export actions.
+    // Checked by ReportCenterService.IsReportAllowedForRole, called from
+    // ReportCenterController before RunPreview/RunExport.
+    public string[]? RequiredRoles { get; init; }
+
     public Func<ReportQueryRequest, bool, int?, Task<object>> RunPreview { get; init; }
         = (_, _, _) => Task.FromResult<object>(new object());
 
