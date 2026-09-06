@@ -189,6 +189,27 @@ internal static class ReportCatalog
                 RunExport = (req, restricted, companyId, user) =>
                     service.GetDataQualityExportAsync(req, restricted, companyId, user),
             },
+            new()
+            {
+                Id = "license-purchases-by-client",
+                Title = "License Purchases by Client",
+                Category = "Licensing",
+                Description = "License purchase cost attributed to a client project - both purchases PPS makes on a client's behalf and licenses a client provides/holds themselves (tracked here so their cost is still visible). Only License Purchases with a Client set appear. The \"client\" filter type is not yet wired into a frontend picker (Report Center's UI has not shipped) - call the report via the API with a numeric Client id until then.",
+                Filters = new List<ReportFilterFieldDefinition>
+                {
+                    new() { Key = "clientId", Label = "Client", Type = "client" },
+                    new() { Key = "companyId", Label = "Entity", Type = "company" },
+                    new() { Key = "departmentId", Label = "Department", Type = "department" },
+                    new() { Key = "softwareId", Label = "Software", Type = "software" },
+                    new() { Key = "status", Label = "Purchased By", Type = "status", Options = new[] { "Entity", "Client" } },
+                    new() { Key = "dateRange", Label = "Purchase Date", Type = "dateRange" },
+                    new() { Key = "search", Label = "Search", Type = "text" },
+                },
+                RunPreview = (req, restricted, companyId) =>
+                    service.GetClientLicensePurchasePreviewAsync(req, restricted, companyId),
+                RunExport = (req, restricted, companyId, user) =>
+                    service.GetClientLicensePurchaseExportAsync(req, restricted, companyId, user),
+            },
         };
     }
 }

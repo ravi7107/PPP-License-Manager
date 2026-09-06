@@ -137,6 +137,7 @@ public class ReportCenterService : IReportCenterService
         {
             CompanyId = request.CompanyId,
             DepartmentId = request.DepartmentId,
+            ClientId = request.ClientId,
             LocationId = request.LocationId,
             DateFrom = request.DateFrom,
             DateTo = request.DateTo,
@@ -197,6 +198,15 @@ public class ReportCenterService : IReportCenterService
                 .Select(l => l.LocationName)
                 .FirstOrDefaultAsync();
             entries.Add(new AppliedFilterEntry { Label = "Location", Value = name ?? $"#{request.LocationId}" });
+        }
+
+        if (request.ClientId.HasValue)
+        {
+            var name = await _context.Clients
+                .Where(c => c.Id == request.ClientId.Value)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync();
+            entries.Add(new AppliedFilterEntry { Label = "Client", Value = name ?? $"#{request.ClientId}" });
         }
 
         if (request.VendorId.HasValue)
@@ -1499,4 +1509,218 @@ public class ReportCenterService : IReportCenterService
         new() { Header = "Issue", ValueSelector = r => r.IssueDescription },
         new() { Header = "Severity", ValueSelector = r => r.Severity },
     };
+
+    // ==================== License Purchases by Client ====================
+    //
+    // Grain: LicensePurchase rows with a Client set (ClientId != null).
+    // Covers both scenarios the business described: PurchasedByType ==
+    // "Entity" (PPS purchased the license itself, but it's scoped to this
+    // client's project - an internal Company is also set) and
+    // PurchasedByType == "Client" (the client supplies/holds the license
+    // themselves; this row exists purely to track its cost against that
+    // client's project). PurchasedByLabel is a display-only enrichment
+    // computed in C# after materialization, not in the LINQ projection -
+    // it's a plain string-equality ternary either way, but this keeps the
+    // same "no derived logic inside .Select()" discipline used everywhere
+    // else in this file.
+
+    private static readonly Expression<Func<LicensePurchase, ClientLicensePurchaseRow>> ClientLicensePurchaseProjection = lp => new ClientLicensePurchaseRow
+    {
+        Id = lp.Id,
+        ClientName = lp.Client != null ? lp.Client.Name : string.Empty,
+        PurchasedByType = lp.PurchasedByType,
+        CompanyName = lp.Company != null ? lp.Company.Name : null,
+        DepartmentName = lp.Department != null ? lp.Department.DepartmentName : null,
+        SoftwareName = lp.Software.Name,
+        Vendor = lp.Vendor,
+        LicenseType = lp.LicenseType,
+        TotalLicenses = lp.TotalLicenses,
+        PurchaseDate = lp.PurchaseDate,
+        ExpiryDate = lp.ExpiryDate,
+        Cost = lp.Cost,
+        Currency = lp.Currency,
+        PONumber = lp.PONumber,
+        InvoiceNumber = lp.InvoiceNumber,
+        Remarks = lp.Remarks,
+    };
+
+    private IQueryable<LicensePurchase> BuildClientLicensePurchaseBaseQuery(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        var effectiveCompanyId = ResolveEffectiveCompanyId(request, isRestricted, companyId);
+
+        var query = _context.LicensePurchases
+            .Include(lp => lp.Client)
+            .Include(lp => lp.Company)
+            .Include(lp => lp.Department)
+            .Include(lp => lp.Software)
+            .Where(lp => lp.IsActive && lp.ClientId != null);
+
+        if (effectiveCompanyId.HasValue)
+        {
+            query = query.Where(lp => lp.CompanyId == effectiveCompanyId.Value);
+        }
+
+        if (request.ClientId.HasValue)
+        {
+            query = query.Where(lp => lp.ClientId == request.ClientId.Value);
+        }
+
+        if (request.DepartmentId.HasValue)
+        {
+            query = query.Where(lp => lp.DepartmentId == request.DepartmentId.Value);
+        }
+
+        if (request.SoftwareId.HasValue)
+        {
+            query = query.Where(lp => lp.SoftwareId == request.SoftwareId.Value);
+        }
+
+        // Status is reused here for PurchasedByType ("Entity" | "Client")
+        // rather than a free-text status, matching how other reports on
+        // this shared request repurpose the Status field for their own
+        // domain (see Services/ReportCenter/ReportQueryRequest.cs's own
+        // comment on that field).
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            query = query.Where(lp => lp.PurchasedByType == request.Status);
+        }
+
+        // LicensePurchase.PurchaseDate is DateOnly, not DateTime like
+        // Asset.PurchaseDate/License.PurchaseDate elsewhere in this file -
+        // convert once here rather than comparing mismatched types.
+        if (request.DateFrom.HasValue)
+        {
+            var from = DateOnly.FromDateTime(request.DateFrom.Value);
+            query = query.Where(lp => lp.PurchaseDate >= from);
+        }
+
+        if (request.DateTo.HasValue)
+        {
+            var to = DateOnly.FromDateTime(request.DateTo.Value);
+            query = query.Where(lp => lp.PurchaseDate <= to);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            query = query.Where(lp =>
+                (lp.Client != null && lp.Client.Name.Contains(term)) ||
+                lp.Software.Name.Contains(term) ||
+                lp.Vendor.Contains(term) ||
+                (lp.PONumber != null && lp.PONumber.Contains(term)) ||
+                (lp.InvoiceNumber != null && lp.InvoiceNumber.Contains(term)));
+        }
+
+        return query;
+    }
+
+    private static void EnrichClientLicensePurchaseRows(List<ClientLicensePurchaseRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            row.PurchasedByLabel = row.PurchasedByType == "Client"
+                ? "Client-Provided"
+                : "Purchased by PPS";
+        }
+    }
+
+    private static List<ExcelColumn<ClientLicensePurchaseRow>> ClientLicensePurchaseColumns() => new()
+    {
+        new() { Header = "Client", ValueSelector = r => r.ClientName },
+        new() { Header = "Purchased By", ValueSelector = r => r.PurchasedByLabel },
+        new() { Header = "Entity", ValueSelector = r => r.CompanyName },
+        new() { Header = "Department", ValueSelector = r => r.DepartmentName },
+        new() { Header = "Software", ValueSelector = r => r.SoftwareName },
+        new() { Header = "Vendor", ValueSelector = r => r.Vendor },
+        new() { Header = "License Type", ValueSelector = r => r.LicenseType },
+        new() { Header = "Total Licenses", ValueSelector = r => r.TotalLicenses, Format = ExcelNumberFormat.Number },
+        new() { Header = "Purchase Date", ValueSelector = r => r.PurchaseDate, Format = ExcelNumberFormat.Date },
+        new() { Header = "Expiry Date", ValueSelector = r => r.ExpiryDate, Format = ExcelNumberFormat.Date },
+        new() { Header = "Cost", ValueSelector = r => r.Cost, Format = ExcelNumberFormat.Currency },
+        new() { Header = "Currency", ValueSelector = r => r.Currency },
+        new() { Header = "PO Number", ValueSelector = r => r.PONumber },
+        new() { Header = "Invoice Number", ValueSelector = r => r.InvoiceNumber },
+        new() { Header = "Remarks", ValueSelector = r => r.Remarks },
+    };
+
+    public async Task<object> GetClientLicensePurchasePreviewAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId)
+    {
+        if (isRestricted && companyId == null)
+        {
+            return new PagedResponse<ClientLicensePurchaseRow>
+            {
+                Items = new List<ClientLicensePurchaseRow>(),
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalRecords = 0,
+            };
+        }
+
+        var query = BuildClientLicensePurchaseBaseQuery(request, isRestricted, companyId)
+            .OrderBy(lp => lp.Client!.Name).ThenByDescending(lp => lp.PurchaseDate)
+            .Select(ClientLicensePurchaseProjection);
+
+        var paged = await PaginateAndBuildAsync(query, request.Page, request.PageSize);
+        EnrichClientLicensePurchaseRows(paged.Items);
+
+        return paged;
+    }
+
+    public async Task<(byte[] Bytes, string ContentType, string FileName)> GetClientLicensePurchaseExportAsync(
+        ReportQueryRequest request, bool isRestricted, int? companyId, ClaimsPrincipal user)
+    {
+        var meta = new ExcelWorkbookMeta
+        {
+            ReportTitle = "License Purchases by Client",
+            GeneratedByUserName = ResolveUserName(user),
+            GeneratedAtUtc = DateTime.UtcNow,
+            AppliedFilters = await BuildAppliedFiltersAsync(request),
+        };
+
+        if (isRestricted && companyId == null)
+        {
+            var emptyBytes = _excelExportService.BuildWorkbook(meta, new List<ClientLicensePurchaseRow>(), ClientLicensePurchaseColumns());
+            return (emptyBytes, XlsxContentType, BuildFileName("License_Purchases_By_Client"));
+        }
+
+        var baseQuery = BuildClientLicensePurchaseBaseQuery(request, isRestricted, companyId);
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount > MaxExportRows)
+        {
+            throw new ReportExportTooLargeException(totalCount);
+        }
+
+        var rows = await baseQuery
+            .OrderBy(lp => lp.Client!.Name).ThenByDescending(lp => lp.PurchaseDate)
+            .Select(ClientLicensePurchaseProjection)
+            .ToListAsync();
+        EnrichClientLicensePurchaseRows(rows);
+        meta.RecordCount = rows.Count;
+
+        var breakdownSheets = new List<ExcelBreakdownSheet>
+        {
+            new()
+            {
+                SheetName = "By Client",
+                Headers = new List<string> { "Client", "Purchases", "Purchased by PPS (Cost)", "Client-Provided (Cost)", "Total Cost" },
+                Rows = rows
+                    .GroupBy(r => r.ClientName)
+                    .Select(g => new object?[]
+                    {
+                        g.Key,
+                        g.Count(),
+                        g.Where(r => r.PurchasedByType != "Client").Sum(r => r.Cost ?? 0m),
+                        g.Where(r => r.PurchasedByType == "Client").Sum(r => r.Cost ?? 0m),
+                        g.Sum(r => r.Cost ?? 0m),
+                    })
+                    .OrderByDescending(r => (decimal)r[4]!)
+                    .ToList(),
+            },
+        };
+
+        var bytes = _excelExportService.BuildWorkbook(meta, rows, ClientLicensePurchaseColumns(), breakdownSheets);
+        return (bytes, XlsxContentType, BuildFileName("License_Purchases_By_Client"));
+    }
 }

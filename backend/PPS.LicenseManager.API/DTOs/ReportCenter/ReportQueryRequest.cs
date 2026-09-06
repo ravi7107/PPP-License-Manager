@@ -6,6 +6,11 @@ public class ReportQueryRequest
 
     public int? DepartmentId { get; set; }
 
+    // Client Master (Models/Client.cs) - only meaningful to reports that
+    // declare a "client" filter field. Every existing report ignores this,
+    // same as every other field on this shared request.
+    public int? ClientId { get; set; }
+
     public int? LocationId { get; set; }
 
     public DateTime? DateFrom { get; set; }
