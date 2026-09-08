@@ -27,6 +27,10 @@ interface LookupComboboxProps {
   disabled?: boolean;
   onCreate?: (name: string) => Promise<void> | void;
   creating?: boolean;
+  // Hide the "None"/emptyLabel row entirely - for a required field (e.g.
+  // picking a user to allocate an asset to) where clearing to "no
+  // selection" isn't a meaningful choice, not just an unselected default.
+  hideEmptyOption?: boolean;
 }
 
 // Searchable select that supports inline creation of a new lookup value (department/entity/client),
@@ -40,6 +44,7 @@ export function LookupCombobox({
   disabled,
   onCreate,
   creating,
+  hideEmptyOption,
 }: LookupComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -73,17 +78,19 @@ export function LookupCombobox({
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value="__none__"
-                onSelect={() => {
-                  onChange('');
-                  setOpen(false);
-                  setSearch('');
-                }}
-              >
-                <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
-                {emptyLabel}
-              </CommandItem>
+              {!hideEmptyOption && (
+                <CommandItem
+                  value="__none__"
+                  onSelect={() => {
+                    onChange('');
+                    setOpen(false);
+                    setSearch('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+                  {emptyLabel}
+                </CommandItem>
+              )}
               {options
                 .filter((o) => o.name.toLowerCase().includes(search.trim().toLowerCase()))
                 .map((option) => (

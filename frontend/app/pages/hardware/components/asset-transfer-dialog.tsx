@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LookupCombobox } from '@/components/shared/lookup-combobox';
 import { AssetRecord, LookupOption } from '@/app/pages/hardware/types';
 import { OfficeSeat } from '@/lib/api/office-locations.api';
 
@@ -101,6 +102,15 @@ export function AssetTransferDialog({
     ? safeUsers.filter((u) => u.id !== currentUserId)
     : safeUsers;
 
+  // LookupCombobox (the searchable-instead-of-dropdown picker already used
+  // elsewhere in this app - see software-form-dialog.tsx's Entity/
+  // Department/Client fields) takes {id, name}; hardware's own
+  // LookupOption carries full_name/name instead, so map it over.
+  const userOptions = selectableUsers.map((u) => ({
+    id: u.id,
+    name: u.full_name ?? u.name ?? 'Unnamed User',
+  }));
+
   // The asset's current seat always stays selectable/visible, even if it
   // wouldn't pass the compatibility checks below (it's already assigned
   // there - reassignment defaults to keeping it, so it can't just vanish
@@ -150,26 +160,14 @@ export function AssetTransferDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>User</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {selectableUsers.length === 0 ? (
-                        <div className="px-2 py-3 text-sm text-muted-foreground">
-                          No users available
-                        </div>
-                      ) : (
-                        selectableUsers.map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.full_name ?? u.name ?? 'Unnamed User'}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <LookupCombobox
+                    options={userOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Search users…"
+                    hideEmptyOption
+                    disabled={userOptions.length === 0}
+                  />
                   <FormMessage />
                 </FormItem>
               )}

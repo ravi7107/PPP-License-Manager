@@ -96,16 +96,33 @@ function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Several IMPORT_HEADER_MAP entries are alternate spellings for the same
+// field (e.g. "Software" / "Software Name", or "Purchase Batch (PO
+// Number)" / "PO Number" / "Purchase Batch") - a sheet normally only uses
+// one spelling. Group the normalized header aliases by the field they
+// resolve to, so every alias for a field gets a chance to supply a value
+// instead of the last-processed alias unconditionally overwriting
+// whatever an earlier one already found.
+const NORMALIZED_HEADERS_BY_FIELD = (() => {
+  const map = new Map<keyof ImportedLicenseRow, string[]>();
+  Object.entries(IMPORT_HEADER_MAP).forEach(([header, field]) => {
+    const normalized = normalizeHeader(header);
+    const existing = map.get(field);
+    if (existing) {
+      existing.push(normalized);
+    } else {
+      map.set(field, [normalized]);
+    }
+  });
+  return map;
+})();
+
 export async function parseLicensesExcelFile(file: File): Promise<ImportedLicenseRow[]> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[firstSheetName];
   const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-  const fieldByNormalizedHeader = new Map(
-    Object.entries(IMPORT_HEADER_MAP).map(([header, field]) => [normalizeHeader(header), field]),
-  );
 
   return rawRows.map((raw) => {
     const row: Partial<ImportedLicenseRow> = {};
@@ -114,9 +131,21 @@ export async function parseLicensesExcelFile(file: File): Promise<ImportedLicens
       Object.entries(raw).map(([header, value]) => [normalizeHeader(header), value]),
     );
 
-    fieldByNormalizedHeader.forEach((field, normalizedHeader) => {
-      const value = valueByNormalizedHeader.get(normalizedHeader);
-      row[field] = value === undefined || value === null ? '' : String(value).trim();
+    NORMALIZED_HEADERS_BY_FIELD.forEach((normalizedHeaders, field) => {
+      // First alias with an actual non-blank value wins; if none of this
+      // field's alias headers are present (or all are blank), the field
+      // is blank - same end result as before for a sheet that only ever
+      // uses one spelling, but no longer clobbered by a spelling the
+      // sheet doesn't use at all.
+      let resolved = '';
+      for (const normalizedHeader of normalizedHeaders) {
+        const value = valueByNormalizedHeader.get(normalizedHeader);
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          resolved = String(value).trim();
+          break;
+        }
+      }
+      row[field] = resolved;
     });
 
     return row as ImportedLicenseRow;

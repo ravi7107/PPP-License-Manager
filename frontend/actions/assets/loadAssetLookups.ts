@@ -1,7 +1,16 @@
 import api from "@/lib/api/client";
 
 export async function loadUsers() {
-  const response = await api.get("/Users");
+  // GET /Users is paginated server-side (UserSearchRequest.PageSize
+  // defaults to 10 - see UsersController.GetAll) - this call needs the
+  // complete active-user directory for pickers like the Hardware
+  // Allocate/Reassign dialog's user search, not just the first page.
+  // 1000 comfortably covers this app's scale, matching the same
+  // large-pageSize pattern loadUsersForRequests.ts already uses (500)
+  // for the same endpoint.
+  const response = await api.get("/Users", {
+    params: { pageSize: 1000 },
+  });
 
   const items = response.data?.data?.items;
 
