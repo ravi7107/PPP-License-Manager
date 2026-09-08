@@ -71,6 +71,19 @@ import {
 } from "@/lib/utils/license-excel";
 
 import {
+  LicensePurchaseImportDialog,
+  LicensePurchaseImportResult,
+} from "@/app/pages/licenses/components/license-purchase-import-dialog";
+import {
+  exportLicensePurchasesToExcel,
+  ImportedLicensePurchaseRow,
+  resolveImportedDate,
+  resolveImportedTotalLicenses,
+  resolveImportedCost,
+  resolveImportedPurchaseOwnership,
+} from "@/lib/utils/license-purchase-excel";
+
+import {
   Client,
   getClients,
 } from "@/lib/api/clients.api";
@@ -266,6 +279,9 @@ export default function LicensesPage() {
 
   const [licenseImportOpen, setLicenseImportOpen] = useState(false);
   const [importingLicenses, setImportingLicenses] = useState(false);
+
+  const [purchaseImportOpen, setPurchaseImportOpen] = useState(false);
+  const [importingPurchases, setImportingPurchases] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -875,6 +891,175 @@ export default function LicensesPage() {
     return { succeeded, failed };
   }
 
+  function handleExportLicensePurchases() {
+    exportLicensePurchasesToExcel(licensePurchases, "license-purchases.xlsx");
+  }
+
+  async function handleImportLicensePurchases(
+    rows: ImportedLicensePurchaseRow[]
+  ): Promise<LicensePurchaseImportResult> {
+    setImportingPurchases(true);
+
+    const failed: LicensePurchaseImportResult["failed"] = [];
+    let succeeded = 0;
+
+    try {
+      for (const row of rows) {
+        try {
+          const softwareInput = row.software.trim();
+
+          if (!softwareInput) {
+            throw new Error("Software is required.");
+          }
+
+          const matchedSoftware = software.find(
+            (s) =>
+              s.name.trim().toLowerCase() ===
+              softwareInput.toLowerCase()
+          );
+
+          if (!matchedSoftware) {
+            throw new Error(
+              `Software "${softwareInput}" was not found. Add it under Software Catalog first.`
+            );
+          }
+
+          if (!row.vendor.trim()) {
+            throw new Error("Vendor is required.");
+          }
+
+          if (!row.licenseType.trim()) {
+            throw new Error("License Type is required.");
+          }
+
+          const totalLicenses = resolveImportedTotalLicenses(row.totalLicenses);
+
+          if (totalLicenses === null) {
+            throw new Error(
+              `Total Licenses "${row.totalLicenses}" is not a valid whole number of at least 1.`
+            );
+          }
+
+          const purchaseDate = resolveImportedDate(row.purchaseDate);
+
+          if (!purchaseDate) {
+            throw new Error(
+              `Purchase Date "${row.purchaseDate}" could not be understood as a date.`
+            );
+          }
+
+          const expiryDate = resolveImportedDate(row.expiryDate);
+          const supportExpiryDate = resolveImportedDate(row.supportExpiryDate);
+
+          // Entity/Department/Client are optional and best-effort matched
+          // by name - a typo or a name that isn't set up yet doesn't fail
+          // the row (unlike Software, which is required for the license
+          // count to mean anything), it just leaves that link blank, same
+          // as leaving it unset in the manual Add Purchase form.
+          const entityInput = row.entity.trim();
+          const matchedCompany = entityInput
+            ? companies.find(
+                (c) => c.name.trim().toLowerCase() === entityInput.toLowerCase()
+              )
+            : undefined;
+
+          const departmentInput = row.department.trim();
+          const matchedDepartment = departmentInput
+            ? departments.find(
+                (d) =>
+                  d.departmentName.trim().toLowerCase() ===
+                    departmentInput.toLowerCase() &&
+                  (!matchedCompany || d.companyId === matchedCompany.id)
+              )
+            : undefined;
+
+          const clientInput = row.client.trim();
+          const matchedClient = clientInput
+            ? clients.find(
+                (c) => c.name.trim().toLowerCase() === clientInput.toLowerCase()
+              )
+            : undefined;
+
+          // A matched Department is the authoritative source of its own
+          // Company (mirrors the manual form's own company-before-
+          // department constraint) - it wins over a separately-typed
+          // Entity column if the two ever disagree.
+          const companyId = matchedDepartment
+            ? matchedDepartment.companyId
+            : matchedCompany?.id ?? null;
+
+          const departmentId = matchedDepartment?.id ?? null;
+          const clientId = matchedClient?.id ?? null;
+
+          const ownership = resolveImportedPurchaseOwnership(
+            companyId,
+            departmentId,
+            clientId
+          );
+
+          const cost = resolveImportedCost(row.cost);
+
+          const payload: CreateLicensePurchaseRequest = {
+            softwareId: matchedSoftware.id,
+            vendor: row.vendor.trim(),
+            licenseType: row.licenseType.trim(),
+            licenseKey: row.licenseKey.trim() || null,
+
+            totalLicenses,
+
+            purchaseDate,
+            expiryDate,
+            supportExpiryDate,
+
+            companyId,
+            departmentId,
+            clientId,
+
+            purchasedByType: ownership.purchasedByType,
+            purchaseScope: ownership.purchaseScope,
+
+            poNumber: row.poNumber.trim() || null,
+            invoiceNumber: row.invoiceNumber.trim() || null,
+            contractNumber: row.contractNumber.trim() || null,
+
+            cost,
+            currency: row.currency.trim() || "INR",
+
+            purchaseSource: row.purchaseSource.trim() || null,
+            remarks: row.remarks.trim() || null,
+          };
+
+          await createLicensePurchase(payload);
+          succeeded += 1;
+        } catch (rowError: any) {
+          // Same real-error-surfacing as the License importer above -
+          // the backend's generic "Validation failed." wrapper isn't
+          // useful on its own, the per-field reason in `errors` is.
+          const fieldErrors: string[] | undefined =
+            rowError?.response?.data?.errors;
+
+          failed.push({
+            row,
+            message:
+              (fieldErrors && fieldErrors.length > 0
+                ? fieldErrors.join(" ")
+                : rowError?.response?.data?.message) ||
+              rowError?.message ||
+              "Failed to create this license purchase.",
+          });
+        }
+      }
+
+      if (succeeded > 0) {
+        await loadData();
+      }
+    } finally {
+      setImportingPurchases(false);
+    }
+
+    return { succeeded, failed };
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -1043,6 +1228,27 @@ export default function LicensesPage() {
             <span className="nova-dot" />
             {licensePurchases.length} purchase(s)
           </span>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportLicensePurchases}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPurchaseImportOpen(true)}
+              disabled={software.length === 0}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import Excel
+            </Button>
+          ) : null}
 
           {canEdit ? (
             <Button onClick={openAddPurchase}>
@@ -2447,6 +2653,13 @@ export default function LicensesPage() {
         onOpenChange={setLicenseImportOpen}
         importing={importingLicenses}
         onImport={handleImportLicenses}
+      />
+
+      <LicensePurchaseImportDialog
+        open={purchaseImportOpen}
+        onOpenChange={setPurchaseImportOpen}
+        importing={importingPurchases}
+        onImport={handleImportLicensePurchases}
       />
     </div>
   );

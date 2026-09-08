@@ -119,7 +119,14 @@ const NORMALIZED_HEADERS_BY_FIELD = (() => {
 
 export async function parseLicensesExcelFile(file: File): Promise<ImportedLicenseRow[]> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  // cellDates: true - a genuine Excel date-formatted cell (Purchase Date /
+  // Expiry Date, when the sheet actually typed those as dates rather than
+  // plain text) comes through as a real JS Date instead of a raw serial
+  // number like 46165 - without this option, that serial number gets
+  // stringified as-is below and sent to the backend's DateTime field,
+  // which correctly rejects it ("could not be converted to
+  // System.DateTime"). Plain text cells are unaffected by this option.
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const firstSheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[firstSheetName];
   const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
@@ -140,9 +147,23 @@ export async function parseLicensesExcelFile(file: File): Promise<ImportedLicens
       let resolved = '';
       for (const normalizedHeader of normalizedHeaders) {
         const value = valueByNormalizedHeader.get(normalizedHeader);
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-          resolved = String(value).trim();
-          break;
+        if (value !== undefined && value !== null) {
+          // SheetJS's cellDates option anchors a real Excel date cell's
+          // JS Date using UTC field values - reading it back with
+          // .toISOString() + later local getters would silently shift
+          // the day for any viewer west of UTC. Read the calendar date
+          // with UTC getters right here, while we still know this came
+          // from a real date cell, converting straight to plain
+          // "YYYY-MM-DD" text (same fix already used in
+          // license-purchase-excel.ts's own importer).
+          const text =
+            value instanceof Date
+              ? `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`
+              : String(value).trim();
+          if (text !== '') {
+            resolved = text;
+            break;
+          }
         }
       }
       row[field] = resolved;
