@@ -1,29 +1,45 @@
+import { useEffect, useState } from 'react';
 import { Bell, CheckCheck } from 'lucide-react';
-import { useUser, useLoadAction, useMutateAction } from '@/lib/uibakery';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import loadMyNotifications from '@/actions/requests/loadMyNotifications';
-import loadUnreadNotificationCount from '@/actions/requests/loadUnreadNotificationCount';
-import markNotificationRead from '@/actions/requests/markNotificationRead';
-import markAllNotificationsRead from '@/actions/requests/markAllNotificationsRead';
-import { NotificationRecord } from '@/app/pages/requests/types';
+import {
+  NotificationRecord,
+  getMyNotifications,
+  getUnreadNotificationCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '@/lib/api/notifications.api';
 
 export function NotificationsBell() {
-  const user = useUser();
-  const actorName = user?.name ?? '';
-  const params = { actorName };
-// Temporary until backend API is implemented
-const notifications: NotificationRecord[] = [];
-const unread: { unread_count: number }[] = [];
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-const refetchNotifications = async () => {};
-const refetchUnread = async () => {};
+  const refetchUnread = async () => {
+    try {
+      setUnreadCount(await getUnreadNotificationCount());
+    } catch {
+      // Non-critical - badge just stays at its last known value.
+    }
+  };
 
-const markRead = async (_: any) => {};
-const markAllRead = async (_: any) => {};
-  const unreadCount = unread?.[0]?.unread_count ?? 0;
+  const refetchNotifications = async () => {
+    try {
+      setNotifications(await getMyNotifications());
+    } catch {
+      // Non-critical - list just stays at its last known value.
+    }
+  };
+
+  // Fetch the unread count once on mount so the badge is correct as
+  // soon as the app loads, not only after the bell is first opened.
+  // This is also what generates any newly-due "License expiring soon"
+  // notifications (see NotificationService - there's no background job
+  // in this app, so that check runs inline on this same request).
+  useEffect(() => {
+    refetchUnread();
+  }, []);
 
   const handleOpenChange = async (open: boolean) => {
     if (open) {
@@ -33,13 +49,13 @@ const markAllRead = async (_: any) => {};
   };
 
   const handleMarkRead = async (id: number) => {
-    await markRead({ notificationId: id });
+    await markNotificationRead(id);
     await refetchNotifications();
     await refetchUnread();
   };
 
   const handleMarkAllRead = async () => {
-    await markAllRead({ actorName });
+    await markAllNotificationsRead();
     await refetchNotifications();
     await refetchUnread();
   };
@@ -73,15 +89,15 @@ const markAllRead = async (_: any) => {};
               {notifications.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => !n.is_read && handleMarkRead(n.id)}
-                  className={`flex flex-col items-start gap-0.5 p-3 text-left text-sm hover:bg-accent ${n.is_read ? 'opacity-60' : ''}`}
+                  onClick={() => !n.isRead && handleMarkRead(n.id)}
+                  className={`flex flex-col items-start gap-0.5 p-3 text-left text-sm hover:bg-accent ${n.isRead ? 'opacity-60' : ''}`}
                 >
                   <div className="flex w-full items-center justify-between">
                     <span className="font-medium">{n.title}</span>
-                    {!n.is_read ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
+                    {!n.isRead ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
                   </div>
                   {n.message ? <p className="text-xs text-muted-foreground">{n.message}</p> : null}
-                  <span className="text-[11px] text-muted-foreground">{n.created_at?.slice(0, 19).replace('T', ' ')}</span>
+                  <span className="text-[11px] text-muted-foreground">{n.createdAt?.slice(0, 19).replace('T', ' ')}</span>
                 </button>
               ))}
             </div>
