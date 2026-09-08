@@ -13,6 +13,8 @@ import {
   RefreshCw,
   Download,
   Upload,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -283,6 +285,21 @@ export default function LicensesPage() {
   const [purchaseImportOpen, setPurchaseImportOpen] = useState(false);
   const [importingPurchases, setImportingPurchases] = useState(false);
 
+  // Client-side pagination for the three tables on this page - each list
+  // is already fully loaded, so this just slices for display, same
+  // approach as hardware-page.tsx's own "Rows per page" pattern. Defaults
+  // differ per table since Software Titles is normally a short list
+  // (4 rows fits without scrolling) while Purchases/Inventory are
+  // typically much longer (25 matches the rest of the app's convention).
+  const [softwarePageSize, setSoftwarePageSize] = useState<number>(4);
+  const [softwareCurrentPage, setSoftwareCurrentPage] = useState<number>(1);
+
+  const [purchasesPageSize, setPurchasesPageSize] = useState<number>(25);
+  const [purchasesCurrentPage, setPurchasesCurrentPage] = useState<number>(1);
+
+  const [licensesPageSize, setLicensesPageSize] = useState<number>(25);
+  const [licensesCurrentPage, setLicensesCurrentPage] = useState<number>(1);
+
   async function loadData() {
     setLoading(true);
     setError("");
@@ -387,6 +404,75 @@ export default function LicensesPage() {
 
     return result;
   }, [licenses, search, statusFilter]);
+
+  const softwareTotalPages = Math.max(
+    1,
+    Math.ceil(software.length / softwarePageSize)
+  );
+
+  const paginatedSoftware = useMemo(
+    () =>
+      software.slice(
+        (softwareCurrentPage - 1) * softwarePageSize,
+        (softwareCurrentPage - 1) * softwarePageSize + softwarePageSize
+      ),
+    [software, softwareCurrentPage, softwarePageSize]
+  );
+
+  const purchasesTotalPages = Math.max(
+    1,
+    Math.ceil(licensePurchases.length / purchasesPageSize)
+  );
+
+  const paginatedPurchases = useMemo(
+    () =>
+      licensePurchases.slice(
+        (purchasesCurrentPage - 1) * purchasesPageSize,
+        (purchasesCurrentPage - 1) * purchasesPageSize + purchasesPageSize
+      ),
+    [licensePurchases, purchasesCurrentPage, purchasesPageSize]
+  );
+
+  const licensesTotalPages = Math.max(
+    1,
+    Math.ceil(filteredLicenses.length / licensesPageSize)
+  );
+
+  const paginatedLicenses = useMemo(
+    () =>
+      filteredLicenses.slice(
+        (licensesCurrentPage - 1) * licensesPageSize,
+        (licensesCurrentPage - 1) * licensesPageSize + licensesPageSize
+      ),
+    [filteredLicenses, licensesCurrentPage, licensesPageSize]
+  );
+
+  // Jump back to page 1 whenever the underlying set/filter/page size
+  // changes shape, so the user never lands on a page that no longer
+  // makes sense - same convention as hardware-page.tsx.
+  useEffect(() => {
+    setSoftwareCurrentPage(1);
+  }, [software.length, softwarePageSize]);
+
+  useEffect(() => {
+    setSoftwareCurrentPage((page) => Math.min(page, softwareTotalPages));
+  }, [softwareTotalPages]);
+
+  useEffect(() => {
+    setPurchasesCurrentPage(1);
+  }, [licensePurchases.length, purchasesPageSize]);
+
+  useEffect(() => {
+    setPurchasesCurrentPage((page) => Math.min(page, purchasesTotalPages));
+  }, [purchasesTotalPages]);
+
+  useEffect(() => {
+    setLicensesCurrentPage(1);
+  }, [search, statusFilter, licensesPageSize]);
+
+  useEffect(() => {
+    setLicensesCurrentPage((page) => Math.min(page, licensesTotalPages));
+  }, [licensesTotalPages]);
 
   function openAddPurchase() {
     setEditingPurchase(null);
@@ -1184,7 +1270,7 @@ export default function LicensesPage() {
                     </td>
                   </tr>
                 ) : (
-                  software.map((item) => (
+                  paginatedSoftware.map((item) => (
                     <tr key={item.id}>
                       <td className="font-medium">
                         {item.name}
@@ -1222,6 +1308,62 @@ export default function LicensesPage() {
                 )}
               </tbody>
             </table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+
+            <Select
+              value={String(softwarePageSize)}
+              onValueChange={(value) => setSoftwarePageSize(Number(value))}
+            >
+              <SelectTrigger className="h-8 w-[72px]">
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span>
+              {software.length === 0
+                ? "0 of 0"
+                : `${(softwareCurrentPage - 1) * softwarePageSize + 1}–${Math.min(softwareCurrentPage * softwarePageSize, software.length)} of ${software.length}`}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={softwareCurrentPage <= 1}
+                onClick={() => setSoftwareCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={softwareCurrentPage >= softwareTotalPages}
+                onClick={() =>
+                  setSoftwareCurrentPage((p) => Math.min(softwareTotalPages, p + 1))
+                }
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1321,7 +1463,7 @@ export default function LicensesPage() {
                     </td>
                   </tr>
                 ) : (
-                  licensePurchases.map((purchase) => (
+                  paginatedPurchases.map((purchase) => (
                     <tr key={purchase.id}>
                       <td className="font-medium">
                         {purchase.softwareName}
@@ -1413,6 +1555,62 @@ export default function LicensesPage() {
                 )}
               </tbody>
             </table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+
+            <Select
+              value={String(purchasesPageSize)}
+              onValueChange={(value) => setPurchasesPageSize(Number(value))}
+            >
+              <SelectTrigger className="h-8 w-[72px]">
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span>
+              {licensePurchases.length === 0
+                ? "0 of 0"
+                : `${(purchasesCurrentPage - 1) * purchasesPageSize + 1}–${Math.min(purchasesCurrentPage * purchasesPageSize, licensePurchases.length)} of ${licensePurchases.length}`}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={purchasesCurrentPage <= 1}
+                onClick={() => setPurchasesCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={purchasesCurrentPage >= purchasesTotalPages}
+                onClick={() =>
+                  setPurchasesCurrentPage((p) => Math.min(purchasesTotalPages, p + 1))
+                }
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1542,7 +1740,7 @@ export default function LicensesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredLicenses.map((item) => (
+                  paginatedLicenses.map((item) => (
                     <tr key={item.id}>
                       <td className="font-medium">
                         {item.aliasCode}
@@ -1597,6 +1795,62 @@ export default function LicensesPage() {
                 )}
               </tbody>
             </table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+
+            <Select
+              value={String(licensesPageSize)}
+              onValueChange={(value) => setLicensesPageSize(Number(value))}
+            >
+              <SelectTrigger className="h-8 w-[72px]">
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span>
+              {filteredLicenses.length === 0
+                ? "0 of 0"
+                : `${(licensesCurrentPage - 1) * licensesPageSize + 1}–${Math.min(licensesCurrentPage * licensesPageSize, filteredLicenses.length)} of ${filteredLicenses.length}`}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={licensesCurrentPage <= 1}
+                onClick={() => setLicensesCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={licensesCurrentPage >= licensesTotalPages}
+                onClick={() =>
+                  setLicensesCurrentPage((p) => Math.min(licensesTotalPages, p + 1))
+                }
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
