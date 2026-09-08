@@ -843,10 +843,22 @@ export default function LicensesPage() {
           await createLicense(payload);
           succeeded += 1;
         } catch (rowError: any) {
+          // The backend's generic "Validation failed." message (see
+          // Program.cs's InvalidModelStateResponseFactory) is a wrapper -
+          // the actual per-field reason (e.g. which field wasn't a valid
+          // date, or wasn't a valid email) is in the accompanying
+          // `errors` array. Surface that instead of the generic wrapper
+          // whenever it's present, so a failed import row is actually
+          // actionable instead of just saying "Validation failed."
+          const fieldErrors: string[] | undefined =
+            rowError?.response?.data?.errors;
+
           failed.push({
             row,
             message:
-              rowError?.response?.data?.message ||
+              (fieldErrors && fieldErrors.length > 0
+                ? fieldErrors.join(" ")
+                : rowError?.response?.data?.message) ||
               rowError?.message ||
               "Failed to create this license.",
           });
@@ -2221,8 +2233,14 @@ export default function LicensesPage() {
               <label className="text-sm font-medium">
                 Licensed Email
               </label>
+              {/* Plain text, not type="email" - not every license is
+                  tied to a person's email; a hardware/serial-locked
+                  license (e.g. a per-machine product key) goes here too,
+                  and the browser's built-in email-format check would
+                  block submitting one. Matches the backend DTOs, which
+                  no longer require this to look like an email address. */}
               <Input
-                type="email"
+                type="text"
                 value={licenseForm.licensedEmail}
                 onChange={(e) =>
                   setLicenseForm({

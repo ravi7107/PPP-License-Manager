@@ -14,8 +14,13 @@ public class CreateLicenseRequest
     // Commercial purchase/batch this license belongs to.
     public int? LicensePurchaseId { get; set; }
 
+    // Not every license is tied to a person's email - a hardware/serial-
+    // locked license (e.g. a per-machine product key) has no email at
+    // all here, so this deliberately isn't constrained to look like an
+    // email address (no [EmailAddress]) - just required and length-
+    // capped, matching UpdateLicenseRequest's own relaxation of the same
+    // field.
     [Required]
-    [EmailAddress]
     [MaxLength(100)]
     public string LicensedEmail { get; set; } = string.Empty;
 
