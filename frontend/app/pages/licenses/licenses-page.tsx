@@ -832,7 +832,21 @@ export default function LicensesPage() {
           let licensePurchaseId: number | null = null;
           const poInput = row.purchasePoNumber.trim();
 
-          if (poInput) {
+          // A real spreadsheet commonly uses placeholder text like "NA"
+          // in an optional column to mean "not applicable," not a
+          // literal value to look up - same convention already used for
+          // date placeholders in license-purchase-excel.ts. Without this
+          // check, "NA" gets searched for as a real PO Number, and if
+          // any actual purchase batch in the system happens to have "NA"
+          // as its own PO Number, EVERY imported row with a blank/"NA"
+          // batch column would incorrectly link to that one batch -
+          // then fail for every row whose software doesn't match it.
+          const isPoPlaceholder =
+            /^(na|n\/a|none|nil|not applicable|unknown|tbd|-|—)$/i.test(
+              poInput
+            );
+
+          if (poInput && !isPoPlaceholder) {
             const matchedPurchase = licensePurchases.find(
               (p) =>
                 (p.poNumber || "").trim().toLowerCase() ===
