@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PPS.LicenseManager.API.Data;
 using PPS.LicenseManager.API.DTOs.Availability;
 using PPS.LicenseManager.API.DTOs.ResourceAllocation;
+using PPS.LicenseManager.API.Models;
 using PPS.LicenseManager.API.Services.Interfaces;
 using PPS.LicenseManager.API.DTOs.AssetPool;
 
@@ -569,6 +570,16 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
 
             await _context.SaveChangesAsync();
 
+            await NotifyReallocationRequesterAsync(
+                record,
+                "ReallocationRejected",
+                "Reallocation request rejected",
+                $"Your reallocation request to give {record.TargetUser.FullName} " +
+                $"access to {record.ResourceAllocation.License.Software.Name} was rejected by {decidedBy.FullName}." +
+                (string.IsNullOrWhiteSpace(record.DecisionRemarks)
+                    ? string.Empty
+                    : $" Reason: {record.DecisionRemarks}"));
+
             return await LoadReallocationResponseAsync(id);
         }
 
@@ -720,7 +731,36 @@ public async Task<AssetPoolRequestResponse?> ReturnAssetToOriginalUserAsync(
 
         await _context.SaveChangesAsync();
 
+        await NotifyReallocationRequesterAsync(
+            record,
+            "ReallocationApproved",
+            "Reallocation request approved",
+            $"Your reallocation request to give {record.TargetUser.FullName} " +
+            $"access to {record.ResourceAllocation.License.Software.Name} was approved by {decidedBy.FullName}.");
+
         return await LoadReallocationResponseAsync(id);
+    }
+
+    private async Task NotifyReallocationRequesterAsync(
+        ResourceReallocationRequest record,
+        string type,
+        string title,
+        string message)
+    {
+        _context.Notifications.Add(
+            new Notification
+            {
+                UserId = record.RequestedByUserId,
+                Type = type,
+                Title = title,
+                Message = message,
+                RelatedEntityType = "ResourceReallocationRequest",
+                RelatedEntityId = record.Id,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            });
+
+        await _context.SaveChangesAsync();
     }
 
     public async Task<ResourceReallocationResponse?>
