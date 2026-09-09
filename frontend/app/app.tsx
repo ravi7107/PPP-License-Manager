@@ -25,6 +25,7 @@ import PurchaseRequisitionSettingsPage from '@/app/pages/settings/purchase-requi
 import AvailabilityPage from '@/app/pages/availability/availability-page';
 import ApprovalsPage from '@/app/pages/requests/approvals-page';
 import MyRequestsPage from '@/app/pages/requests/my-requests-page';
+import NotificationsPage from '@/app/pages/notifications/notifications-page';
 import SearchPage from '@/app/pages/search/search-page';
 import ExecutiveDashboardPage from '@/app/pages/executive/executive-dashboard-page';
 import UsersPage from '@/app/pages/directory/users-page';
@@ -86,6 +87,7 @@ function App() {
           <Route path="availability" element={<AvailabilityPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="my-requests" element={<MyRequestsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="executive" element={<ExecutiveDashboardPage />} />
           <Route path="reports" element={<Navigate to="/report-center" replace />} />

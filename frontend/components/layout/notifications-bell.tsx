@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Bell, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,10 +12,18 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from '@/lib/api/notifications.api';
+import {
+  formatRelativeTime,
+  getNotificationRoute,
+  getNotificationSeverity,
+  severityDotClass,
+} from '@/lib/utils/notification-display';
 
 export function NotificationsBell() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
 
   const refetchUnread = async () => {
     try {
@@ -41,8 +50,9 @@ export function NotificationsBell() {
     refetchUnread();
   }, []);
 
-  const handleOpenChange = async (open: boolean) => {
-    if (open) {
+  const handleOpenChange = async (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) {
       await refetchNotifications();
       await refetchUnread();
     }
@@ -60,8 +70,25 @@ export function NotificationsBell() {
     await refetchUnread();
   };
 
+  const handleNotificationClick = async (n: NotificationRecord) => {
+    if (!n.isRead) {
+      await handleMarkRead(n.id);
+    }
+
+    const route = getNotificationRoute(n.relatedEntityType);
+    if (route) {
+      setOpen(false);
+      navigate(route);
+    }
+  };
+
+  const handleViewAll = () => {
+    setOpen(false);
+    navigate('/notifications');
+  };
+
   return (
-    <Popover onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-8 w-8">
           <Bell className="h-4 w-4 text-muted-foreground" />
@@ -86,23 +113,41 @@ export function NotificationsBell() {
             <p className="p-4 text-center text-sm text-muted-foreground">No notifications yet.</p>
           ) : (
             <div className="flex flex-col divide-y">
-              {notifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => !n.isRead && handleMarkRead(n.id)}
-                  className={`flex flex-col items-start gap-0.5 p-3 text-left text-sm hover:bg-accent ${n.isRead ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <span className="font-medium">{n.title}</span>
-                    {!n.isRead ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
-                  </div>
-                  {n.message ? <p className="text-xs text-muted-foreground">{n.message}</p> : null}
-                  <span className="text-[11px] text-muted-foreground">{n.createdAt?.slice(0, 19).replace('T', ' ')}</span>
-                </button>
-              ))}
+              {notifications.map((n) => {
+                const severity = getNotificationSeverity(n.type);
+                const hasRoute = !!getNotificationRoute(n.relatedEntityType);
+
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => handleNotificationClick(n)}
+                    className={`flex items-start gap-2 p-3 text-left text-sm hover:bg-accent ${n.isRead ? 'opacity-60' : ''}`}
+                  >
+                    <span
+                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${severityDotClass(severity)} ${n.isRead ? 'opacity-50' : ''}`}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="font-medium">{n.title}</span>
+                        {hasRoute ? (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ) : null}
+                      </div>
+                      {n.message ? <p className="text-xs text-muted-foreground">{n.message}</p> : null}
+                      <span className="text-[11px] text-muted-foreground">{formatRelativeTime(n.createdAt)}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </ScrollArea>
+        <div className="border-t p-2">
+          <Button variant="ghost" size="sm" className="h-7 w-full justify-center text-xs" onClick={handleViewAll}>
+            View all notifications
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );
