@@ -22,6 +22,7 @@ function updateSoftwareInventory() {
         entity_id = {{params.entityId}}::bigint,
         department_id = {{params.departmentId}}::bigint,
         client_id = {{params.clientId}}::bigint,
+        purchased_by = NULLIF({{params.purchasedBy}}, ''),
         updated_by = {{params.actorName}},
         updated_at = NOW()
       WHERE id = {{params.id}}::bigint

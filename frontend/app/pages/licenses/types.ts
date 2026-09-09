@@ -1,5 +1,6 @@
 export type LicenseStatus = 'Active' | 'Expired' | 'Retired';
 export type LicenseType = 'Perpetual' | 'Subscription' | 'Floating' | 'Node-locked';
+export type PurchasedBy = 'Entity' | 'Client';
 
 export interface SoftwareInventoryRecord {
   id: number;
@@ -24,6 +25,7 @@ export interface SoftwareInventoryRecord {
   department_name: string | null;
   client_id: number | null;
   client_name: string | null;
+  purchased_by: PurchasedBy | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -56,10 +58,12 @@ export interface SoftwareFormValues {
   entityId: string;
   departmentId: string;
   clientId: string;
+  purchasedBy: PurchasedBy;
 }
 
 export const LICENSE_TYPES: LicenseType[] = ['Perpetual', 'Subscription', 'Floating', 'Node-locked'];
 export const LICENSE_STATUSES: LicenseStatus[] = ['Active', 'Expired', 'Retired'];
+export const PURCHASED_BY_OPTIONS: PurchasedBy[] = ['Entity', 'Client'];
 
 export const EMPTY_SOFTWARE_FORM: SoftwareFormValues = {
   softwareName: '',
@@ -74,4 +78,5 @@ export const EMPTY_SOFTWARE_FORM: SoftwareFormValues = {
   entityId: '',
   departmentId: '',
   clientId: '',
+  purchasedBy: 'Entity',
 };

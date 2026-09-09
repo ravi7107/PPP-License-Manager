@@ -45,4 +45,7 @@ public class UpdateLicenseRequest
 
     [MaxLength(500)]
     public string? Remarks { get; set; }
+
+    [MaxLength(20)]
+    public string PurchasedBy { get; set; } = "Entity";
 }

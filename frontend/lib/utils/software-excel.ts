@@ -13,6 +13,7 @@ const EXPORT_COLUMNS: { key: keyof SoftwareInventoryRecord; header: string }[] =
   { key: 'total_cost', header: 'Total Cost' },
   { key: 'expiry_date', header: 'Expiry Date' },
   { key: 'maintenance_expiry', header: 'Maintenance Expiry' },
+  { key: 'purchased_by', header: 'Purchased By' },
   { key: 'entity_name', header: 'Entity' },
   { key: 'department_name', header: 'Department' },
   { key: 'client_name', header: 'Client' },
@@ -73,4 +74,21 @@ export async function parseSoftwareExcelFile(file: File): Promise<ImportedSoftwa
     });
     return row as ImportedSoftwareRow;
   });
+}
+
+export function resolvePurchasedBy(raw?: string | null, entityName = '', clientName = ''): 'Entity' | 'Client' | '' {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (['entity', 'organisation', 'organization', 'company'].includes(value)) return 'Entity';
+  if (value === 'client') return 'Client';
+  if (entityName.trim() && !clientName.trim()) return 'Entity';
+  if (clientName.trim() && !entityName.trim()) return 'Client';
+  return '';
+}
+export function matchLookupId(name: string | undefined | null, options: { id: number; name: string; code?: string | null }[]): string | null {
+  const query = String(name ?? '').trim().toLowerCase();
+  if (!query) return null;
+  const exactName = options.find((option) => option.name.trim().toLowerCase() === query);
+  if (exactName) return String(exactName.id);
+  const exactCode = options.find((option) => (option.code ?? '').trim().toLowerCase() === query);
+  return exactCode ? String(exactCode.id) : null;
 }

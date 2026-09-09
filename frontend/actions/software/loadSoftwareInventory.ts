@@ -23,6 +23,7 @@ function loadSoftwareInventory() {
         d.name AS department_name,
         li.client_id,
         c.name AS client_name,
+        li.purchased_by,
         li.created_at,
         li.updated_at,
         li.created_by,

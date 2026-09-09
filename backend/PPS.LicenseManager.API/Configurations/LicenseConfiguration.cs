@@ -33,6 +33,10 @@ public class LicenseConfiguration : IEntityTypeConfiguration<License>
         builder.Property(x => x.Remarks)
                .HasMaxLength(500);
 
+        builder.Property(x => x.PurchasedBy)
+               .HasMaxLength(20)
+               .HasDefaultValue("Entity");
+
         builder.HasOne(x => x.Software)
                .WithMany(x => x.Licenses)
                .HasForeignKey(x => x.SoftwareId)

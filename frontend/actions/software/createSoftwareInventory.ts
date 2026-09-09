@@ -14,7 +14,7 @@ function createSoftwareInventory() {
         RETURNING id
       )
       INSERT INTO license_inventory (
-        software_id, entity_id, department_id, client_id, total_seats, cost, cost_per_license,
+        software_id, entity_id, department_id, client_id, purchased_by, total_seats, cost, cost_per_license,
         expiry_date, maintenance_expiry, status, created_by, updated_by
       )
       SELECT
@@ -22,6 +22,7 @@ function createSoftwareInventory() {
         {{params.entityId}}::bigint,
         {{params.departmentId}}::bigint,
         {{params.clientId}}::bigint,
+        NULLIF({{params.purchasedBy}}, ''),
         {{params.licenseCount}}::integer,
         {{params.licenseCount}}::numeric * {{params.costPerLicense}}::numeric,
         {{params.costPerLicense}}::numeric,

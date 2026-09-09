@@ -45,6 +45,7 @@ export function SoftwareViewDialog({ open, onOpenChange, record }: SoftwareViewD
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="License Type" value={record.license_type} />
+          <Field label="Purchased By" value={record.purchased_by} />
           <Field label="Entity" value={record.entity_name} />
           <Field label="Department" value={record.department_name} />
           <Field label="Client" value={record.client_name} />

@@ -33,6 +33,7 @@ public class LicenseResponse
     public bool IsActive { get; set; }
 
     public string? Remarks { get; set; }
+    public string PurchasedBy { get; set; } = "Entity";
 
     // Phase 13 - "effective" department for Software Inventory display:
     // follows the currently-allocated user's department when this license

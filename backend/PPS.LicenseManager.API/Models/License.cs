@@ -44,6 +44,9 @@ public class License
     [MaxLength(500)]
     public string? Remarks { get; set; }
 
+    [MaxLength(20)]
+    public string PurchasedBy { get; set; } = "Entity";
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

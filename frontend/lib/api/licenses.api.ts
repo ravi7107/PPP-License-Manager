@@ -36,6 +36,7 @@ export interface CreateLicenseRequest {
   expiryDate: string;
   purchaseCost: number;
   remarks?: string | null;
+  purchasedBy: "Entity" | "Client";
 }
 
 export interface UpdateLicenseRequest {
@@ -52,6 +53,7 @@ export interface UpdateLicenseRequest {
   purchaseCost: number;
   isActive: boolean;
   remarks?: string | null;
+  purchasedBy: "Entity" | "Client";
 }
 
 export async function getLicenses(): Promise<License[]> {

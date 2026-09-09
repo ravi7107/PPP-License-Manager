@@ -158,6 +158,8 @@ const emptyPurchaseForm: PurchaseFormState = {
   isActive: true,
 };
 
+type PurchasedBy = "Entity" | "Client";
+
 type LicenseFormState = {
   aliasCode: string;
   softwareId: string;
@@ -172,6 +174,7 @@ type LicenseFormState = {
   purchaseCost: string;
   isActive: boolean;
   remarks: string;
+  purchasedBy: PurchasedBy;
 };
 
 const EMPTY_SOFTWARE: SoftwareFormState = {
@@ -198,7 +201,13 @@ const EMPTY_LICENSE: LicenseFormState = {
   purchaseCost: "0",
   isActive: true,
   remarks: "",
+  purchasedBy: "Entity",
 };
+
+function normalizePurchasedBy(value?: string | null): PurchasedBy {
+  return String(value ?? "").trim().toLowerCase() === "client" ? "Client" : "Entity";
+}
+
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
@@ -398,6 +407,7 @@ export default function LicensesPage() {
           x.licensedEmail,
           x.subscriptionId || "",
           x.status,
+          x.purchasedBy || "",
         ].some((value) => value.toLowerCase().includes(q))
       );
     }
@@ -753,6 +763,7 @@ export default function LicensesPage() {
       purchaseCost: String(item.purchaseCost),
       isActive: item.isActive,
       remarks: item.remarks || "",
+      purchasedBy: normalizePurchasedBy(item.purchasedBy),
     });
 
     setLicenseDialogOpen(true);
@@ -826,6 +837,7 @@ export default function LicensesPage() {
         expiryDate: licenseForm.expiryDate,
         purchaseCost: Number(licenseForm.purchaseCost),
         remarks: licenseForm.remarks.trim() || null,
+        purchasedBy: licenseForm.purchasedBy,
       };
 
       if (editingLicense) {
@@ -2809,6 +2821,30 @@ export default function LicensesPage() {
                 
                   readOnly/>
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Purchased By</label>
+              <Select
+                value={licenseForm.purchasedBy}
+                onValueChange={(value) =>
+                  setLicenseForm({
+                    ...licenseForm,
+                    purchasedBy: value as PurchasedBy,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Who purchased this license?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Entity">Entity</SelectItem>
+                  <SelectItem value="Client">Client</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose Entity if your company paid, or Client if the client paid.
+              </p>
             </div>
 
             <div>

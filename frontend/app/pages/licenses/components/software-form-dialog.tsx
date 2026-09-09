@@ -25,6 +25,7 @@ import {
   SoftwareInventoryRecord,
   LICENSE_TYPES,
   LICENSE_STATUSES,
+  PURCHASED_BY_OPTIONS,
   EMPTY_SOFTWARE_FORM,
 } from '@/app/pages/licenses/types';
 
@@ -41,6 +42,7 @@ const softwareFormSchema = z.object({
   entityId: z.string(),
   departmentId: z.string(),
   clientId: z.string(),
+  purchasedBy: z.enum(['Entity', 'Client']),
 }) satisfies z.ZodType<Omit<SoftwareFormValues, 'softwareId'>>;
 
 interface SoftwareFormDialogProps {
@@ -67,6 +69,7 @@ function toFormValues(record: SoftwareInventoryRecord | null): SoftwareFormValue
     entityId: record.entity_id ? String(record.entity_id) : '',
     departmentId: record.department_id ? String(record.department_id) : '',
     clientId: record.client_id ? String(record.client_id) : '',
+    purchasedBy: record.purchased_by === 'Client' ? 'Client' : 'Entity',
   };
 }
 
@@ -272,6 +275,28 @@ export function SoftwareFormDialog({ open, onOpenChange, record, saving, onSubmi
             />
             <FormField
               control={form.control}
+            <FormField
+              control={form.control}
+              name="purchasedBy"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Purchased By</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Who purchased this license?" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {PURCHASED_BY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
               name="entityId"
               render={({ field }) => (
                 <FormItem>

@@ -64,6 +64,7 @@ public class LicenseService : ILicenseService
                 ExpiryDate = l.ExpiryDate,
                 PurchaseCost = l.PurchaseCost,
                 Remarks = l.Remarks,
+                PurchasedBy = l.PurchasedBy,
                 IsActive = l.IsActive,
                 // Phase 13 - follow the active allocation's user
                 // department first, fall back to the purchase-time
@@ -124,6 +125,7 @@ public class LicenseService : ILicenseService
             ExpiryDate = license.ExpiryDate,
             PurchaseCost = license.PurchaseCost,
             Remarks = license.Remarks,
+            PurchasedBy = license.PurchasedBy,
             IsActive = license.IsActive,
             EffectiveDepartmentId = await _context.ResourceAllocations
                 .Where(r => r.LicenseId == license.Id && r.IsActive)
@@ -194,6 +196,7 @@ public class LicenseService : ILicenseService
                 DateTimeKind.Utc),
             PurchaseCost = request.PurchaseCost,
             Remarks = request.Remarks,
+            PurchasedBy = string.IsNullOrWhiteSpace(request.PurchasedBy) ? "Entity" : request.PurchasedBy,
             IsActive = true
         };
 
@@ -268,6 +271,7 @@ public class LicenseService : ILicenseService
             DateTimeKind.Utc);
         license.PurchaseCost = request.PurchaseCost;
         license.Remarks = request.Remarks;
+        license.PurchasedBy = string.IsNullOrWhiteSpace(request.PurchasedBy) ? "Entity" : request.PurchasedBy;
         license.IsActive = request.IsActive;
 
         await _context.SaveChangesAsync();
